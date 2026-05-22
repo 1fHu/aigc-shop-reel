@@ -48,7 +48,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.backend
     env_file:
-      - ../.env.production
+      - ../.env
     depends_on:
       postgres:
         condition: service_healthy
@@ -61,7 +61,7 @@ services:
       context: ..
       dockerfile: docker/Dockerfile.worker
     env_file:
-      - ../.env.production
+      - ../.env
     depends_on:
       - minio
     restart: unless-stopped
