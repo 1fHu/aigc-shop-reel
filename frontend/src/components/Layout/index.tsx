@@ -31,7 +31,7 @@ export default function AppLayout() {
       <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed}>
         <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ color: token.colorWhite, fontSize: collapsed ? 16 : 20, fontWeight: 'bold' }}>
-            {collapsed ? 'VC' : 'VidCraft'}
+            {collapsed ? 'VC' : 'VidCraft v0.1'}
           </span>
         </div>
         <Menu
