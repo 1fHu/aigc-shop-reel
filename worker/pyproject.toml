@@ -1,0 +1,9 @@
+[project]
+name = "vidcraft-worker"
+version = "0.1.0"
+description = "VidCraft FFmpeg video composition worker"
+requires-python = ">=3.12"
+
+[build-system]
+requires = ["setuptools>=69.0"]
+build-backend = "setuptools.build_meta"
