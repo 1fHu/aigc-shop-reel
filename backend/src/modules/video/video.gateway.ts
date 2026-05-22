@@ -10,7 +10,7 @@ export class VideoGateway {
   private readonly logger = new Logger(VideoGateway.name);
 
   @SubscribeMessage('video-progress')
-  handleProgress(client: Socket, payload: any): void {
+  handleProgress(client: Socket, _payload: any): void {
     // TODO: implement video generation progress updates
     this.logger.log(`Video progress update from client ${client.id}`);
   }
