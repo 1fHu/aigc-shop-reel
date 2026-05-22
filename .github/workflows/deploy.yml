@@ -17,13 +17,8 @@ jobs:
           GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
           HOST: ${{ secrets.SERVER_HOST }}
         run: |
-          echo "$SSH_KEY" > key
+          echo "$SSH_KEY" | base64 -d > key
           chmod 600 key
-
-          # debug: check key format (hide content, just show first line)
-          head -1 key
-          wc -l key
-
           ssh -i key -o StrictHostKeyChecking=no ubuntu@$HOST "
             export GIT_TOKEN='$GIT_TOKEN'
             bash ~/deploy.sh
