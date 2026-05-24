@@ -44,3 +44,11 @@ generated/
 
 # TypeScript
 *.tsbuildinfo
+
+# Personal notes / design briefs (not part of project deliverables)
+STITCH_DESIGN_BRIEF.md
+STITCH_DESIGN_SYSTEM.md
+
+# Claude Code session files
+.claude/
+
