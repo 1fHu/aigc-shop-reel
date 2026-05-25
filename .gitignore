@@ -44,3 +44,6 @@ generated/
 
 # TypeScript
 *.tsbuildinfo
+
+# documents
+*.docx

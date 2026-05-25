@@ -4,6 +4,7 @@ import path from 'path';
 import configuration from './config/configuration';
 import { DatabaseModule } from './database/database.module';
 import { QueueModule } from './queue/queue.module';
+import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { ProjectModule } from './modules/project/project.module';
@@ -20,6 +21,7 @@ import { VolcanoModule } from './modules/volcano/volcano.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: path.resolve(__dirname, '../../.env'), load: [configuration] }),
     DatabaseModule,
+    RedisModule,
     QueueModule,
     AuthModule,
     UserModule,
