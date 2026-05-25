@@ -1,7 +1,50 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { MockStoreService } from '../../common/mock-store.service';
 
 @Injectable()
 export class ProjectService {
   private readonly logger = new Logger(ProjectService.name);
-  // TODO: implement business logic
+
+  constructor(private readonly store: MockStoreService) {}
+
+  create(userId: string, input: { name: string; description?: string }) {
+    return this.store.createProject(userId, input);
+  }
+
+  list(userId: string, keyword = '') {
+    return this.store.listProjects(userId, keyword);
+  }
+
+  getById(id: string) {
+    const project = this.store.getProject(id);
+    if (!project) {
+      throw new NotFoundException('项目不存在');
+    }
+    return {
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      status: project.status,
+      product_info: project.product_info,
+      material_count: project.material_count,
+      script_count: project.script_count,
+      video_count: project.video_count,
+    };
+  }
+
+  update(id: string, input: { name?: string; description?: string }) {
+    const project = this.store.updateProject(id, input);
+    if (!project) {
+      throw new NotFoundException('项目不存在');
+    }
+    return { id: project.id, name: project.name, updated_at: project.updated_at };
+  }
+
+  delete(id: string) {
+    const removed = this.store.deleteProject(id);
+    if (!removed) {
+      throw new NotFoundException('项目不存在');
+    }
+    return null;
+  }
 }
