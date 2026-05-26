@@ -1,34 +1,50 @@
 import api from './api';
-import type { LoginPayload, LoginResponse, User } from '@/types';
+import type { AuthTokens, LoginPayload, RegisterPayload, User } from '@/types';
 
 /**
  * Auth 模块 API
+ * 端点严格按《VidCraft API 接口规范文档 v1.0》第 1-2 章
  *
  * 设计约定（所有 service 都应遵循）：
  * 1. 一个文件 = 一个业务模块
- * 2. 导出一个 *Service 对象，方法名用动词（login / fetchProfile / logout）
+ * 2. 导出一个 *Service 对象，方法名用动词
  * 3. 接受简单参数，返回 Promise<DTO>，axios 拦截器已自动解包 response.data
  * 4. 不在 service 里调 message/toast（拦截器已统一处理错误）
  * 5. 不持有 state（state 放 store 里）
  */
 export const authService = {
-  /** 登录 */
-  login(payload: LoginPayload): Promise<LoginResponse> {
+  /** 游客一键登录 */
+  guestLogin(): Promise<AuthTokens> {
+    return api.post('/auth/guest-login');
+  },
+
+  /** 用户注册 */
+  register(payload: RegisterPayload): Promise<AuthTokens> {
+    return api.post('/auth/register', payload);
+  },
+
+  /** 用户登录 */
+  login(payload: LoginPayload): Promise<AuthTokens> {
     return api.post('/auth/login', payload);
   },
 
-  /** 游客一键体验 */
-  guestLogin(): Promise<LoginResponse> {
-    return api.post('/auth/guest');
+  /** 刷新 Access Token */
+  refresh(refreshToken: string): Promise<AuthTokens> {
+    return api.post('/auth/refresh', { refreshToken });
   },
 
-  /** 拉取当前用户 */
-  fetchProfile(): Promise<User> {
-    return api.get('/auth/me');
-  },
-
-  /** 登出 */
+  /** 安全登出（吊销 refresh token） */
   logout(): Promise<void> {
     return api.post('/auth/logout');
+  },
+
+  /** 获取当前用户信息与配额 */
+  getProfile(): Promise<User> {
+    return api.get('/auth/profile');
+  },
+
+  /** 更新昵称 / 头像 */
+  updateProfile(payload: { nickname?: string; avatar?: string }): Promise<User> {
+    return api.put('/auth/profile', payload);
   },
 };

@@ -52,3 +52,6 @@ STITCH_DESIGN_SYSTEM.md
 # Claude Code session files
 .claude/
 
+# 静态原型参考（仅供前端实现期间对照使用，不进生产）
+prototype.html
+
