@@ -49,7 +49,7 @@ export class AuthController {
 
   @UseGuards(AuthGuard('jwt'))
   @Put('profile')
-  async updateProfile(@Req() request: { user: { id: string } }, @Body() body: { nickname?: string; avatar?: string }) {
-    return this.authService.updateProfile(request.user.id, body.nickname, body.avatar);
+  async updateProfile(@Req() request: { user: { id: string } }, @Body() body: { nickname?: string; avatar_url?: string }) {
+    return this.authService.updateProfile(request.user.id, body.nickname, body.avatar_url);
   }
 }

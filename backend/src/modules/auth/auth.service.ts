@@ -138,6 +138,8 @@ export class AuthService {
       is_guest: isGuest,
     };
   }
+
+  async guestLogin(): Promise<AuthTokensDto> {
     const guest = await this.ensureGuestUser();
     const sessionId = randomBytes(16).toString('hex');
 
@@ -257,17 +259,17 @@ export class AuthService {
   async getGuestQuotaRemaining(sessionId: string): Promise<number> {
     const raw = await this.redis.get(this.guestSessionQuotaKey(sessionId));
     if (raw === null) return 0;
-  const n = Number(raw);
-  return Number.isFinite(n) ? Math.max(n, 0) : 0;
-}
-
-/**
- * Guest accounts are blocked from sensitive actions:
- * ① 修改密码  ② 删除预置演示数据  ③ 修改邮箱
- */
-assertNotGuest(userId: string, action = '该操作'): void {
-  if (isGuestId(userId)) {
-    throw new ForbiddenException(`游客账号不支持${action}，请注册正式账号`);
+    const n = Number(raw);
+    return Number.isFinite(n) ? Math.max(n, 0) : 0;
   }
-}
+
+  /**
+   * Guest accounts are blocked from sensitive actions:
+   * ① 修改密码  ② 删除预置演示数据  ③ 修改邮箱
+   */
+  assertNotGuest(userId: string, action = '该操作'): void {
+    if (isGuestId(userId)) {
+      throw new ForbiddenException(`游客账号不支持${action}，请注册正式账号`);
+    }
+  }
 }
