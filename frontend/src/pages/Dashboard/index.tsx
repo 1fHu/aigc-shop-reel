@@ -23,6 +23,7 @@ import {
 
 import StatCard from '@/components/StatCard';
 import ProjectCard from '@/components/ProjectCard';
+import NewProjectModal from '@/components/NewProjectModal';
 import { dashboardService } from '@/services/dashboardService';
 import { useAuthStore, selectUser } from '@/stores/authStore';
 import type { DashboardOverview, StatCardData } from '@/types';
@@ -56,6 +57,7 @@ export default function Dashboard() {
 
   const [data, setData] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
+  const [newProjectOpen, setNewProjectOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -104,7 +106,7 @@ export default function Dashboard() {
           <p className={styles.headerSubtitle}>准备好为您的 TikTok 商店创作下一个爆款视频了吗？</p>
         </div>
         <div className={styles.headerActions}>
-          <Button icon={<PlusOutlined />} onClick={() => navigate('/projects')}>新建项目</Button>
+          <Button icon={<PlusOutlined />} onClick={() => setNewProjectOpen(true)}>新建项目</Button>
           <Button icon={<CloudUploadOutlined />} onClick={() => navigate('/product-parse')}>上传商品</Button>
         </div>
       </div>
@@ -222,6 +224,8 @@ export default function Dashboard() {
           <a href="#">联系我们</a>
         </div>
       </footer>
+
+      <NewProjectModal open={newProjectOpen} onClose={() => setNewProjectOpen(false)} />
     </div>
   );
 }
