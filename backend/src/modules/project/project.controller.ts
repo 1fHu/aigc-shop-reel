@@ -29,8 +29,8 @@ export class ProjectController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get(':id')
-  getById(@Param('id') id: string) {
-    return ok(this.projectService.getById(id));
+  getById(@Req() request: { user: { id: string } }, @Param('id') id: string) {
+    return ok(this.projectService.getById(id, request.user.id));
   }
 
   @UseGuards(AuthGuard('jwt'))
