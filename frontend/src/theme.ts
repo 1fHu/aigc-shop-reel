@@ -6,9 +6,9 @@ import type { ThemeConfig } from 'antd';
  */
 export const theme: ThemeConfig = {
   token: {
-    // Brand
-    colorPrimary: '#7C3AED',           // 主色（紫）
-    colorInfo: '#4F46E5',              // 次主色（深紫蓝，banner / 链接强调）
+    // Brand（与 DESIGN.md / prototype.html 对齐）
+    colorPrimary: '#4648D4',           // 主色（Indigo）
+    colorInfo: '#6366F1',              // 次主色（浅 Indigo，链接强调）
     colorSuccess: '#10B981',           // 成功 / Completed pill
     colorWarning: '#F59E0B',           // 警告 / Generating pill
     colorError: '#EF4444',             // 错误 / Failed pill
@@ -63,9 +63,9 @@ export const theme: ThemeConfig = {
     Menu: {
       itemBg: '#FFFFFF',
       itemSelectedBg: '#EEF2FF',
-      itemSelectedColor: '#7C3AED',
+      itemSelectedColor: '#4648D4',
       itemHoverBg: '#F5F3FF',
-      itemHoverColor: '#7C3AED',
+      itemHoverColor: '#4648D4',
       itemBorderRadius: 8,
       itemMarginInline: 8,
     },
