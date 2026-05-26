@@ -22,6 +22,7 @@ import {
 } from '@ant-design/icons';
 
 import { useAuthStore, selectUser, selectIsGuest } from '@/stores/authStore';
+import NewProjectModal from '@/components/NewProjectModal';
 import styles from './Layout.module.css';
 
 interface NavItem {
@@ -66,6 +67,7 @@ export default function AppLayout() {
   const logout = useAuthStore((s) => s.logout);
 
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
 
   const showGuestBanner = isGuest && !bannerDismissed;
   const showProjectTabs = ['/', '/projects'].includes(location.pathname);
@@ -136,7 +138,7 @@ export default function AppLayout() {
           </button>
         </nav>
 
-        <button type="button" className={styles.createBtn} onClick={() => navigate('/product-parse')}>
+        <button type="button" className={styles.createBtn} onClick={() => setCreateOpen(true)}>
           <PlusOutlined /> Create New Video
         </button>
       </aside>
@@ -195,6 +197,9 @@ export default function AppLayout() {
           <Outlet />
         </main>
       </div>
+
+      {/* 全局：新建项目 Modal（被侧栏 "Create New Video" 触发） */}
+      <NewProjectModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );
 }

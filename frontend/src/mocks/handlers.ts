@@ -3,8 +3,8 @@ import type { RequestHandler } from 'msw';
 import { authHandlers } from './handlers/auth';
 import { projectHandlers } from './handlers/projects';
 import { dashboardHandlers } from './handlers/dashboard';
+import { productHandlers } from './handlers/products';
 // 后续每个模块的 handlers 在这里聚合
-// import { productHandlers } from './handlers/products';
 // import { materialHandlers } from './handlers/materials';
 // import { scriptHandlers } from './handlers/scripts';
 // import { videoHandlers } from './handlers/videos';
@@ -28,4 +28,5 @@ export const handlers: RequestHandler[] = [
   ...authHandlers,
   ...projectHandlers,
   ...dashboardHandlers,
+  ...productHandlers,
 ];
