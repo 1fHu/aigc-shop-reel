@@ -1,5 +1,8 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
+
 import Layout from './components/Layout';
+import RequireAuth from './components/RequireAuth';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
 import ProductParse from './pages/ProductParse';
@@ -14,7 +17,11 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route element={<Layout />}>
+        {/* 公共路由 */}
+        <Route path="/login" element={<Login />} />
+
+        {/* 受保护路由 */}
+        <Route element={<RequireAuth><Layout /></RequireAuth>}>
           <Route path="/" element={<Dashboard />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/projects/:id/product-parse" element={<ProductParse />} />
