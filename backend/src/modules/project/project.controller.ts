@@ -3,6 +3,7 @@ import { AuthGuard } from '@nestjs/passport';
 import { ProjectService } from './project.service';
 import { ok } from '../../common/api-response';
 import { CreateProjectDto } from './dto/create-project.dto';
+import { ListProjectsDto } from './dto/list-projects.dto';
 
 @Controller('api/projects')
 export class ProjectController {
@@ -16,9 +17,14 @@ export class ProjectController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get()
-  list(@Req() request: { user: { id: string } }, @Query('keyword') keyword = '') {
-    const projects = this.projectService.list(request.user.id, keyword);
-    return ok(projects, projects.length);
+  list(@Req() request: { user: { id: string } }, @Query() query: ListProjectsDto) {
+    const { items, total } = this.projectService.list(
+      request.user.id,
+      query.keyword ?? '',
+      query.page ?? 1,
+      query.limit ?? 20,
+    );
+    return ok(items, total);
   }
 
   @UseGuards(AuthGuard('jwt'))
