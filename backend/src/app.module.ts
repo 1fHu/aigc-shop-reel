@@ -3,6 +3,8 @@ import { ConfigModule } from '@nestjs/config';
 import path from 'path';
 import configuration from './config/configuration';
 import { DatabaseModule } from './database/database.module';
+import { MockStoreModule } from './common/mock-store.module';
+import { AppController } from './app.controller';
 import { QueueModule } from './queue/queue.module';
 import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -18,8 +20,10 @@ import { GeneBankModule } from './modules/gene-bank/gene-bank.module';
 import { VolcanoModule } from './modules/volcano/volcano.module';
 
 @Module({
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: path.resolve(__dirname, '../../.env'), load: [configuration] }),
+    MockStoreModule,
     DatabaseModule,
     RedisModule,
     QueueModule,
