@@ -37,32 +37,32 @@ cp .env.example .env
 ### 2. 启动基础设施
 
 ```bash
-pnpm docker:up
+npm run docker:up
 # 启动 PostgreSQL + Redis + MinIO + Jaeger
 ```
 
 ### 3. 安装依赖
 
 ```bash
-pnpm install
+npm install
 cd worker && pip install -r requirements.txt
 ```
 
 ### 4. 初始化数据库
 
 ```bash
-pnpm db:init
-pnpm db:seed
+npm run db:init
+npm run db:seed
 ```
 
 ### 5. 启动开发服务
 
 ```bash
-pnpm dev          # 全栈启动
+npm run dev          # 全栈启动
 # 或单独启动
-pnpm dev:frontend # http://localhost:5173
-pnpm dev:backend  # http://localhost:3000
-pnpm dev:worker   # http://localhost:8000
+npm run dev:frontend # http://localhost:5173
+npm run dev:backend  # http://localhost:3000
+npm run dev:worker   # http://localhost:8000
 ```
 
 ### 6. 访问
