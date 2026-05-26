@@ -18,6 +18,14 @@ export const RawResponse = () => Reflect.metadata(RAW_RESPONSE, true);
 @Injectable()
 export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<T>> {
   intercept(context: ExecutionContext, next: CallHandler): Observable<ApiResponse<T>> {
+    const isRawResponse =
+      Reflect.getMetadata(RAW_RESPONSE, context.getHandler()) === true ||
+      Reflect.getMetadata(RAW_RESPONSE, context.getClass()) === true;
+
+    if (isRawResponse) {
+      return next.handle() as Observable<ApiResponse<T>>;
+    }
+
     const req = context.switchToHttp().getRequest();
     const traceId: string = req?.headers?.['x-trace-id'] || req?.traceId || randomUUID();
     return next.handle().pipe(
