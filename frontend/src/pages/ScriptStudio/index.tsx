@@ -47,9 +47,10 @@ export default function ScriptStudio() {
   const [loading, setLoading] = useState(true);
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [mode, setMode] = useState<ScriptMode>('reference');
-  // Step 2 会用到（因子替换中态）
-  // const [factorChanging, setFactorChanging] = useState(false);
-  const factorChanging = false;
+  /** 因子替换中（mock 模拟 LLM 重生 ~1.5s）—— 用于禁用 chips + 显示模糊蒙层 + pill */
+  const [factorChanging, setFactorChanging] = useState(false);
+  /** 受当前重生影响的分镜 id 集合（让"模糊态"只作用于这些分镜） */
+  const [affectedSceneIds, setAffectedSceneIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     let cancelled = false;
@@ -85,6 +86,59 @@ export default function ScriptStudio() {
       await scriptService.saveStoryboard(script.id, { scenes: script.scenes });
       message.success('已保存');
     } catch { /* toast by interceptor */ }
+  };
+
+  /**
+   * 因子替换核心交互
+   *
+   * 流程：
+   *   1) 立即更新 factors[key] = value（让 chip 视觉立刻变）
+   *   2) 标记 factorChanging + 受影响分镜，触发模糊蒙层 + pill
+   *   3) 调 POST /scripts/:id/replace-factor（mock 延迟 1.5s）
+   *   4) 用返回的 updated_scenes 合并回 script.scenes
+   *   5) 把 history_entry 添加到 script.history 顶部
+   *   6) 清除中间态
+   */
+  const handleReplaceFactor = async (key: FactorKey, value: string) => {
+    if (!script || factorChanging) return;
+    if (script.factors[key] === value) return; // 已是当前值，无需操作
+
+    // 1) 乐观更新 chip 选中态
+    const prevFactors = script.factors;
+    setScript({ ...script, factors: { ...prevFactors, [key]: value } });
+
+    // 2) 预估受影响分镜（与 mock 中 FACTOR_IMPACT 规则一致，前端用于即时蒙层）
+    const impactMap: Record<FactorKey, (scenes: Scene[]) => string[]> = {
+      visual_style: (sc) => sc.slice(0, 2).map((s) => s.id),
+      opener:       (sc) => sc.slice(0, 1).map((s) => s.id),
+      narration:    (sc) => sc.map((s) => s.id),
+      pacing:       (sc) => sc.map((s) => s.id),
+      cta:          (sc) => sc.slice(-1).map((s) => s.id),
+    };
+    setAffectedSceneIds(new Set(impactMap[key](script.scenes)));
+    setFactorChanging(true);
+
+    try {
+      const result = await scriptService.replaceFactor(script.id, { factor: key, value });
+
+      // 4) 合并 updated_scenes
+      setScript((cur) => {
+        if (!cur) return cur;
+        const idMap = new Map(result.updated_scenes.map((s) => [s.id, s]));
+        return {
+          ...cur,
+          scenes: cur.scenes.map((s) => idMap.get(s.id) || s),
+          history: [result.history_entry, ...cur.history],
+          factors: { ...cur.factors, [key]: value },
+        };
+      });
+    } catch {
+      // 失败回滚 chip 选中态
+      setScript((cur) => cur ? { ...cur, factors: prevFactors } : cur);
+    } finally {
+      setFactorChanging(false);
+      setAffectedSceneIds(new Set());
+    }
   };
 
   const handleGenerateVideo = () => {
@@ -173,7 +227,7 @@ export default function ScriptStudio() {
                 <Tag color="processing" style={{ borderRadius: 999, fontFamily: 'JetBrains Mono, monospace' }}>
                   #0{selectedIdx + 1}
                 </Tag>
-                {factorChanging && (
+                {factorChanging && selectedScene && affectedSceneIds.has(selectedScene.id) && (
                   <Tag color="warning" style={{ borderRadius: 999 }}>
                     <PlayCircleFilled /> 智能重生中
                   </Tag>
@@ -186,18 +240,23 @@ export default function ScriptStudio() {
 
             {selectedScene && (
               <>
-                {/* Preview */}
-                <div className={`${styles.previewWrap} ${factorChanging ? styles.regenerating : ''}`}>
-                  <img src={selectedScene.thumb_url} alt={`Scene ${selectedIdx + 1}`} />
-                  {factorChanging && (
-                    <div className={styles.regenOverlay}>
-                      <div className={styles.regenPill}>
-                        <span className={styles.regenDot} />
-                        正在按新因子重新生成画面...
-                      </div>
+                {/* Preview —— 仅当本分镜被本次重生影响时才模糊 */}
+                {(() => {
+                  const sceneAffected = factorChanging && affectedSceneIds.has(selectedScene.id);
+                  return (
+                    <div className={`${styles.previewWrap} ${sceneAffected ? styles.regenerating : ''}`}>
+                      <img src={selectedScene.thumb_url} alt={`Scene ${selectedIdx + 1}`} />
+                      {sceneAffected && (
+                        <div className={styles.regenOverlay}>
+                          <div className={styles.regenPill}>
+                            <span className={styles.regenDot} />
+                            正在按新因子重新生成画面...
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
 
                 {/* Fields */}
                 <div className={styles.fieldGroup}>
@@ -265,9 +324,15 @@ export default function ScriptStudio() {
             <div className={styles.colTitle}>
               <ControlOutlined /> 创作因子
             </div>
-            <Tag color="success" style={{ margin: 0, borderRadius: 999 }}>
-              <CheckCircleFilled /> 已应用
-            </Tag>
+            {factorChanging ? (
+              <Tag color="warning" style={{ margin: 0, borderRadius: 999 }}>
+                <PlayCircleFilled /> 应用中
+              </Tag>
+            ) : (
+              <Tag color="success" style={{ margin: 0, borderRadius: 999 }}>
+                <CheckCircleFilled /> 已应用
+              </Tag>
+            )}
           </div>
           <div className={styles.factorsBody}>
             {factorLib.map((g) => (
@@ -281,7 +346,7 @@ export default function ScriptStudio() {
                         key={opt}
                         type="button"
                         className={`${styles.chip} ${isActive ? styles.chipActive : ''}`}
-                        // Step 2 会启用此 onClick
+                        onClick={() => handleReplaceFactor(g.key as FactorKey, opt)}
                         disabled={factorChanging}
                       >
                         {opt}
