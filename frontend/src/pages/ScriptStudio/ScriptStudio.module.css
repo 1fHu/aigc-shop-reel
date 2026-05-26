@@ -181,6 +181,49 @@
   color: #9CA3AF;
 }
 
+.sceneCardActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sceneCardIcon {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  background: transparent;
+  border: none;
+  color: #9CA3AF;
+  cursor: pointer;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  padding: 0;
+}
+
+.sceneCard:hover .sceneCardIcon {
+  display: inline-flex;
+}
+
+.sceneCardIcon:hover {
+  background: #F1F5F9;
+  color: #111827;
+}
+
+.sceneCardIconDanger:hover {
+  background: #FEF2F2 !important;
+  color: #DC2626 !important;
+}
+
+/* Drag handle 鼠标指针 */
+.sceneCardIcon[aria-label="拖拽排序"] {
+  cursor: grab;
+}
+.sceneCardIcon[aria-label="拖拽排序"]:active {
+  cursor: grabbing;
+}
+
 .sceneCardThumb {
   width: 100%;
   aspect-ratio: 16/9;
