@@ -18,8 +18,19 @@ export class ProjectService {
     };
   }
 
-  list(userId: string, keyword = '') {
-    return this.store.listProjects(userId, keyword);
+  list(userId: string, keyword = '', page = 1, limit = 20) {
+    const all = this.store.listProjects(userId, keyword);
+    const total = all.length;
+    const offset = (page - 1) * limit;
+    const items = all.slice(offset, offset + limit).map((project) => ({
+      id: project.id,
+      name: project.name,
+      cover_url: project.cover_url,
+      video_count: project.video_count,
+      status: project.status,
+      updated_at: project.updated_at,
+    }));
+    return { items, total };
   }
 
   getById(id: string) {
