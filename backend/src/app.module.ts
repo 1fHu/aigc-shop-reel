@@ -6,6 +6,7 @@ import { DatabaseModule } from './database/database.module';
 import { MockStoreModule } from './common/mock-store.module';
 import { AppController } from './app.controller';
 import { QueueModule } from './queue/queue.module';
+import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { ProjectModule } from './modules/project/project.module';
@@ -24,6 +25,7 @@ import { VolcanoModule } from './modules/volcano/volcano.module';
     ConfigModule.forRoot({ isGlobal: true, envFilePath: path.resolve(__dirname, '../../.env'), load: [configuration] }),
     MockStoreModule,
     DatabaseModule,
+    RedisModule,
     QueueModule,
     AuthModule,
     UserModule,
