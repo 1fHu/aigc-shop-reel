@@ -4,6 +4,8 @@ import { ProjectService } from './project.service';
 import { ok } from '../../common/api-response';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { ListProjectsDto } from './dto/list-projects.dto';
+import { UpdateProjectDto } from './dto/update-project.dto';
+import { DeleteProjectDto } from './dto/delete-project.dto';
 
 @Controller('api/projects')
 export class ProjectController {
@@ -35,13 +37,13 @@ export class ProjectController {
 
   @UseGuards(AuthGuard('jwt'))
   @Put(':id')
-  update(@Param('id') id: string, @Body() body: { name?: string; description?: string }) {
-    return ok(this.projectService.update(id, body));
+  update(@Req() request: { user: { id: string } }, @Param('id') id: string, @Body() body: UpdateProjectDto) {
+    return ok(this.projectService.update(id, request.user.id, body));
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return ok(this.projectService.delete(id));
+  delete(@Req() request: { user: { id: string } }, @Param('id') id: string, @Body() body: DeleteProjectDto) {
+    return ok(this.projectService.delete(id, request.user.id, body.confirm_name));
   }
 }
