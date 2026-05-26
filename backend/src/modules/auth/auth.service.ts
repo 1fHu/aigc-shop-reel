@@ -129,9 +129,27 @@ export class AuthService {
    */
   async consumeGuestQuota(sessionId: string): Promise<number> {
     const key = this.guestSessionQuotaKey(sessionId);
-    const remaining = await this.redis.getClient().decr(key);
+    const remaining = Number(
+      await this.redis.getClient().eval(
+        `
+          local current = redis.call('GET', KEYS[1])
+          if not current then
+            return -1
+          end
+
+          local quota = tonumber(current)
+          if not quota or quota <= 0 then
+            return -1
+          end
+
+          return redis.call('DECR', KEYS[1])
+        `,
+        1,
+        key,
+      ),
+    );
+
     if (remaining < 0) {
-      await this.redis.getClient().incr(key);
       throw new ForbiddenException('游客会话视频生成配额已耗尽（每会话 2 条）');
     }
     return remaining;
