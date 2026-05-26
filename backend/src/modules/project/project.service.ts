@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { MockStoreService } from '../../common/mock-store.service';
 
 @Injectable()
@@ -33,10 +33,13 @@ export class ProjectService {
     return { items, total };
   }
 
-  getById(id: string) {
+  getById(id: string, userId: string) {
     const project = this.store.getProject(id);
     if (!project) {
       throw new NotFoundException('项目不存在');
+    }
+    if (project.user_id !== userId) {
+      throw new ForbiddenException('无权访问该项目');
     }
     return {
       id: project.id,
