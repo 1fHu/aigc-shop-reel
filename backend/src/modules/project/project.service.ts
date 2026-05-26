@@ -8,7 +8,14 @@ export class ProjectService {
   constructor(private readonly store: MockStoreService) {}
 
   create(userId: string, input: { name: string; description?: string }) {
-    return this.store.createProject(userId, input);
+    const project = this.store.createProject(userId, input);
+    return {
+      id: project.id,
+      name: project.name,
+      description: project.description,
+      status: project.status,
+      created_at: project.created_at,
+    };
   }
 
   list(userId: string, keyword = '') {
