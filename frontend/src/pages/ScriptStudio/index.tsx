@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Input, Select, Skeleton, Tag, App } from 'antd';
+import { Input, Select, Skeleton, Tag, App, Popconfirm } from 'antd';
 import {
   VideoCameraOutlined,
   EditOutlined,
@@ -15,7 +15,24 @@ import {
   MobileOutlined,
   RocketOutlined,
   HistoryOutlined,
+  HolderOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons';
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 import { scriptService } from '@/services/scriptService';
 import type {
@@ -32,6 +49,91 @@ const MODE_KEYS: ScriptMode[] = ['reference', 'template', 'auto'];
 
 function formatTime(iso: string): string {
   return new Date(iso).toTimeString().slice(0, 5);
+}
+
+/** 创建一个空白分镜（"+ 添加分镜" 用） */
+function makeNewScene(index: number): Scene {
+  const id = `scene-${Date.now()}`;
+  return {
+    id,
+    index,
+    duration: 3.0,
+    thumb_url: `https://picsum.photos/seed/${id}/400/240`,
+    description: '新分镜：请输入画面描述...',
+    camera_motion: '固定镜（Static）',
+    bgm: 'Modern Beat',
+    voiceover: '',
+    subtitle: '',
+  };
+}
+
+/**
+ * 单条分镜卡片 —— useSortable 让它能被拖拽
+ * 注意：drag handle 只是 grip 图标，不是整张卡，避免点击选中和拖拽冲突
+ */
+interface SceneCardProps {
+  scene: Scene;
+  index: number;
+  active: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+}
+function SortableSceneCard({ scene, index, active, onSelect, onDelete }: SceneCardProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: scene.id,
+  });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : 1,
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`${styles.sceneCard} ${active ? styles.sceneCardActive : ''}`}
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+    >
+      <div className={styles.sceneCardHead}>
+        <span className={styles.sceneCardLabel}>#0{index + 1} SCENE</span>
+        <div className={styles.sceneCardActions}>
+          <button
+            type="button"
+            className={styles.sceneCardIcon}
+            aria-label="拖拽排序"
+            {...attributes}
+            {...listeners}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <HolderOutlined />
+          </button>
+          <Popconfirm
+            title="确定删除此分镜？"
+            okText="删除"
+            cancelText="取消"
+            okButtonProps={{ danger: true }}
+            onConfirm={(e) => { e?.stopPropagation(); onDelete(); }}
+            onCancel={(e) => e?.stopPropagation()}
+          >
+            <button
+              type="button"
+              className={`${styles.sceneCardIcon} ${styles.sceneCardIconDanger}`}
+              aria-label="删除分镜"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <DeleteOutlined />
+            </button>
+          </Popconfirm>
+          <span className={styles.sceneCardDuration}>{scene.duration.toFixed(1)}s</span>
+        </div>
+      </div>
+      <img src={scene.thumb_url} alt={`Scene ${index + 1}`} className={styles.sceneCardThumb} />
+      <p className={styles.sceneCardDesc}>{scene.description}</p>
+    </div>
+  );
 }
 
 export default function ScriptStudio() {
@@ -146,6 +248,68 @@ export default function ScriptStudio() {
     navigate(target);
   };
 
+  // ============ DnD sensors ============
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+  );
+
+  /** 持久化当前 scenes 到后端（拖拽 / 增删后调用） */
+  const persistScenes = async (next: Scene[]) => {
+    if (!script) return;
+    try {
+      await scriptService.saveStoryboard(script.id, { scenes: next });
+    } catch { /* 拦截器已 toast */ }
+  };
+
+  /** 拖拽结束 → 重新排序 */
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!script || !over || active.id === over.id) return;
+    const oldIdx = script.scenes.findIndex((s) => s.id === active.id);
+    const newIdx = script.scenes.findIndex((s) => s.id === over.id);
+    if (oldIdx < 0 || newIdx < 0) return;
+    const next = arrayMove(script.scenes, oldIdx, newIdx).map((s, i) => ({ ...s, index: i }));
+    setScript({ ...script, scenes: next });
+    // 调整选中索引：被拖的分镜跟着移动
+    if (selectedIdx === oldIdx) setSelectedIdx(newIdx);
+    else if (oldIdx < selectedIdx && newIdx >= selectedIdx) setSelectedIdx(selectedIdx - 1);
+    else if (oldIdx > selectedIdx && newIdx <= selectedIdx) setSelectedIdx(selectedIdx + 1);
+    persistScenes(next);
+  };
+
+  /** 在末尾添加新分镜 */
+  const handleAddScene = () => {
+    if (!script) return;
+    const newScene = makeNewScene(script.scenes.length);
+    const next = [...script.scenes, newScene];
+    setScript({ ...script, scenes: next });
+    setSelectedIdx(next.length - 1); // 自动选中新分镜
+    message.success('已添加新分镜');
+    persistScenes(next);
+  };
+
+  /** 删除分镜 */
+  const handleDeleteScene = (sceneId: string) => {
+    if (!script) return;
+    if (script.scenes.length <= 1) {
+      message.warning('至少保留一个分镜');
+      return;
+    }
+    const removedIdx = script.scenes.findIndex((s) => s.id === sceneId);
+    const next = script.scenes
+      .filter((s) => s.id !== sceneId)
+      .map((s, i) => ({ ...s, index: i }));
+    setScript({ ...script, scenes: next });
+    // 调整选中索引
+    if (selectedIdx === removedIdx) {
+      setSelectedIdx(Math.max(0, removedIdx - 1));
+    } else if (removedIdx < selectedIdx) {
+      setSelectedIdx(selectedIdx - 1);
+    }
+    message.success('已删除分镜');
+    persistScenes(next);
+  };
+
   if (loading || !script) {
     return (
       <div className={styles.skelShell}>
@@ -189,28 +353,38 @@ export default function ScriptStudio() {
             <div className={styles.colTitle}>
               <VideoCameraOutlined /> 分镜时间轴
             </div>
-            <button type="button" className={styles.toolIconBtn} aria-label="添加分镜">
+            <button
+              type="button"
+              className={styles.toolIconBtn}
+              aria-label="添加分镜"
+              onClick={handleAddScene}
+            >
               <PlusOutlined style={{ fontSize: 14 }} />
             </button>
           </div>
           <div className={styles.timelineList}>
-            {script.scenes.map((s, i) => (
-              <div
-                key={s.id}
-                className={`${styles.sceneCard} ${selectedIdx === i ? styles.sceneCardActive : ''}`}
-                onClick={() => setSelectedIdx(i)}
-                role="button"
-                tabIndex={0}
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={script.scenes.map((s) => s.id)}
+                strategy={verticalListSortingStrategy}
               >
-                <div className={styles.sceneCardHead}>
-                  <span className={styles.sceneCardLabel}>#0{i + 1} SCENE</span>
-                  <span className={styles.sceneCardDuration}>{s.duration.toFixed(1)}s</span>
-                </div>
-                <img src={s.thumb_url} alt={`Scene ${i + 1}`} className={styles.sceneCardThumb} />
-                <p className={styles.sceneCardDesc}>{s.description}</p>
-              </div>
-            ))}
-            <button type="button" className={styles.addSceneBtn}>
+                {script.scenes.map((s, i) => (
+                  <SortableSceneCard
+                    key={s.id}
+                    scene={s}
+                    index={i}
+                    active={selectedIdx === i}
+                    onSelect={() => setSelectedIdx(i)}
+                    onDelete={() => handleDeleteScene(s.id)}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+            <button type="button" className={styles.addSceneBtn} onClick={handleAddScene}>
               <PlusOutlined /> 添加分镜
             </button>
           </div>
