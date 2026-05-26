@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Param, Post, Put, Query, Req, UseGuards 
 import { AuthGuard } from '@nestjs/passport';
 import { ProjectService } from './project.service';
 import { ok } from '../../common/api-response';
+import { CreateProjectDto } from './dto/create-project.dto';
 
 @Controller('api/projects')
 export class ProjectController {
@@ -9,7 +10,7 @@ export class ProjectController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post()
-  create(@Req() request: { user: { id: string } }, @Body() body: { name: string; description?: string }) {
+  create(@Req() request: { user: { id: string } }, @Body() body: CreateProjectDto) {
     return ok(this.projectService.create(request.user.id, body));
   }
 
