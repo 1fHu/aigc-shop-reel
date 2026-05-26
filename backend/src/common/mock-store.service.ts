@@ -194,6 +194,7 @@ export class MockStoreService {
   private readonly viralLibrary = new Map<string, ViralLibraryRecord>();
   private readonly factors = new Map<string, FactorDefinitionRecord>();
   private readonly refreshTokenBlacklist = new Set<string>();
+  private readonly refreshTokenStore = new Map<string, string>(); // token → userId
 
   constructor() {
     const now = new Date().toISOString();
@@ -623,12 +624,19 @@ export class MockStoreService {
     return demoUser;
   }
 
-  issueRefreshToken(): string {
-    return `rt-${randomUUID()}`;
+  issueRefreshToken(userId: string): string {
+    const token = `rt-${randomUUID()}`;
+    this.refreshTokenStore.set(token, userId);
+    return token;
+  }
+
+  getUserIdByRefreshToken(token: string): string | undefined {
+    return this.refreshTokenStore.get(token);
   }
 
   blacklistRefreshToken(token: string): void {
     this.refreshTokenBlacklist.add(token);
+    this.refreshTokenStore.delete(token);
   }
 
   isRefreshTokenBlacklisted(token: string): boolean {
