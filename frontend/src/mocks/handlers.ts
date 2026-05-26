@@ -4,9 +4,9 @@ import { authHandlers } from './handlers/auth';
 import { projectHandlers } from './handlers/projects';
 import { dashboardHandlers } from './handlers/dashboard';
 import { productHandlers } from './handlers/products';
+import { scriptHandlers } from './handlers/scripts';
 // 后续每个模块的 handlers 在这里聚合
 // import { materialHandlers } from './handlers/materials';
-// import { scriptHandlers } from './handlers/scripts';
 // import { videoHandlers } from './handlers/videos';
 // import { analyticsHandlers } from './handlers/analytics';
 // import { viralHandlers } from './handlers/viral';
@@ -29,4 +29,5 @@ export const handlers: RequestHandler[] = [
   ...projectHandlers,
   ...dashboardHandlers,
   ...productHandlers,
+  ...scriptHandlers,
 ];
