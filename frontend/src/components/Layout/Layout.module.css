@@ -1,0 +1,317 @@
+/* ============================================================
+   Layout 样式
+   匹配 prototype.html 的白色侧栏 + 浅灰背景 + 顶部 guest banner
+============================================================ */
+
+.shell {
+  min-height: 100vh;
+  display: flex;
+  background: #F8FAFC;
+}
+
+/* ============ Sidebar ============ */
+.sider {
+  width: 240px;
+  flex-shrink: 0;
+  background: #ffffff;
+  border-right: 1px solid #E5E7EB;
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.brand {
+  padding: 20px 20px 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.brandLogo {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #8B5CF6 0%, #4648D4 50%, #0EA5E9 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 16px;
+  box-shadow: 0 0 16px rgba(70, 72, 212, 0.3);
+}
+
+.brandText {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 1;
+  color: #111827;
+}
+
+.brandTagline {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #9CA3AF;
+  margin-top: 4px;
+}
+
+.nav {
+  flex: 1;
+  padding: 0 12px;
+  overflow-y: auto;
+}
+
+.navItem {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6B7280;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: background 0.15s, color 0.15s;
+  text-align: left;
+}
+
+.navItem:hover {
+  background: #F8FAFC;
+  color: #111827;
+}
+
+.navItemActive {
+  background: #EEF2FF;
+  color: #4648D4;
+}
+
+.navItemActive:hover {
+  background: #EEF2FF;
+  color: #4648D4;
+}
+
+.navIcon {
+  font-size: 18px;
+  display: inline-flex;
+}
+
+.navDivider {
+  height: 1px;
+  background: #F1F5F9;
+  margin: 16px 8px;
+}
+
+.createBtn {
+  margin: 12px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #8B5CF6 0%, #4648D4 50%, #0EA5E9 100%);
+  border: none;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 0 28px rgba(70, 72, 212, 0.35);
+  transition: opacity 0.15s, transform 0.15s;
+}
+
+.createBtn:hover {
+  opacity: 0.94;
+  transform: translateY(-1px);
+}
+
+/* ============ Main column ============ */
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* ============ Guest banner ============ */
+.guestBanner {
+  background: #4648D4;
+  color: #ffffff;
+  height: 36px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+}
+
+.guestBannerLeft {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.guestBannerRight {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.guestBannerLink {
+  color: #ffffff;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.guestBannerLink:hover {
+  text-decoration: underline;
+}
+
+.guestBannerClose {
+  background: none;
+  border: none;
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 14px;
+  display: inline-flex;
+}
+
+.guestBannerClose:hover {
+  color: #ffffff;
+}
+
+/* ============ Top bar ============ */
+.topbar {
+  height: 64px;
+  background: #ffffff;
+  border-bottom: 1px solid #E5E7EB;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.search {
+  width: 320px;
+}
+
+.search :global(.ant-input-affix-wrapper) {
+  background: #F8FAFC;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  height: 36px;
+}
+
+.search :global(.ant-input-affix-wrapper:focus-within) {
+  background: #ffffff;
+  border-color: #4648D4;
+  box-shadow: 0 0 0 3px rgba(70, 72, 212, 0.15);
+}
+
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  font-size: 14px;
+}
+
+.tab {
+  background: none;
+  border: none;
+  color: #6B7280;
+  cursor: pointer;
+  padding: 4px 0;
+  border-bottom: 2px solid transparent;
+  font-weight: 400;
+}
+
+.tab:hover {
+  color: #111827;
+}
+
+.tabActive {
+  color: #4648D4;
+  font-weight: 500;
+  border-bottom-color: #4648D4;
+}
+
+.upgrade {
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #8B5CF6 0%, #4648D4 50%, #0EA5E9 100%);
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  font-size: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: opacity 0.15s;
+}
+
+.upgrade:hover {
+  opacity: 0.94;
+}
+
+.iconBtn {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #6B7280;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  font-size: 18px;
+}
+
+.iconBtn:hover {
+  background: #F8FAFC;
+  color: #111827;
+}
+
+.iconBtnDot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #EF4444;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8B5CF6 0%, #4648D4 50%, #0EA5E9 100%);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-family: 'Geist', system-ui, sans-serif;
+}
+
+/* ============ Content ============ */
+.content {
+  flex: 1;
+  overflow: auto;
+}
