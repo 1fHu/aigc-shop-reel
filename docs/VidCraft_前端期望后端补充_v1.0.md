@@ -2,7 +2,7 @@
 
 > **文档目的**：前端实现 Login / Dashboard / Projects / ProductParse / ScriptStudio / VideoCreation 6 个页面期间，累积出的「API 规范 v1.0 没有明示，需要后端确认或补充」的字段 / 端点清单。
 >
-> **基线版本**：[`docs/VidCraft_API接口规范文档_v1.0.md`](VidCraft_API接口规范文档_v1.0.md)
+> **基线版本**：[`docs/API接口规范文档.md`](API接口规范文档.md)
 >
 > **前端代码位置**：`feat/frontend-infrastructure` 分支
 > - 类型定义：[`frontend/src/types/`](../frontend/src/types/)

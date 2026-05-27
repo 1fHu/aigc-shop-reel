@@ -1,7 +1,7 @@
 # 前端 API 对接约定速查表
 
 > **每次写 service / store / mock 之前先扫一眼这里**，避免字段名/路径/格式漂移。
-> 权威来源：[`docs/VidCraft_API接口规范文档_v1.0.md`](../../docs/VidCraft_API接口规范文档_v1.0.md)
+> 权威来源：[`docs/API接口规范文档.md`](../../docs/API接口规范文档.md)
 > 本表只覆盖前端实践，规范变动以原始文档为准。
 
 ---
@@ -98,7 +98,7 @@ src/
 | Project 内字段 | snake_case | `cover_url`、`video_count`、`updated_at` |
 | Product 内字段 | snake_case | `selling_points`、`target_audience`、`price_anchor` |
 
-**判断方法**：写之前去 [`docs/VidCraft_API接口规范文档_v1.0.md`](../../docs/VidCraft_API接口规范文档_v1.0.md) 搜对应端点，**照抄字段名**。
+**判断方法**：写之前去 [`docs/API接口规范文档.md`](../../docs/API接口规范文档.md) 搜对应端点，**照抄字段名**。
 
 ---
 
@@ -259,7 +259,7 @@ VITE_USE_MOCK=true   # 前端 mock，后端没起也能跑
 
 ## 📚 端点清单（v1.0 速查）
 
-完整文档见 [`docs/VidCraft_API接口规范文档_v1.0.md`](../../docs/VidCraft_API接口规范文档_v1.0.md)，这里只列前端常用：
+完整文档见 [`docs/API接口规范文档.md`](../../docs/API接口规范文档.md)，这里只列前端常用：
 
 ### Auth（M0/M1）
 - `POST /api/auth/guest-login` — 游客一键登录
@@ -328,7 +328,7 @@ VITE_USE_MOCK=true   # 前端 mock，后端没起也能跑
 
 每次开始一个新业务模块（如 materials），按这个顺序：
 
-1. 翻 [`docs/VidCraft_API接口规范文档_v1.0.md`](../../docs/VidCraft_API接口规范文档_v1.0.md) 对应章节，把所有相关字段抄进 `types/<module>.ts`
+1. 翻 [`docs/API接口规范文档.md`](../../docs/API接口规范文档.md) 对应章节，把所有相关字段抄进 `types/<module>.ts`
 2. 在 `services/<module>Service.ts` 按本表模板写出 CRUD 方法
 3. 在 `mocks/handlers/<module>.ts` 配置 mock，每个 handler 返回完整 envelope
 4. 在 `mocks/handlers.ts` 聚合入口加上新 handlers
