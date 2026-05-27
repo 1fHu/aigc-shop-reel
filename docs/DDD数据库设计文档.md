@@ -219,6 +219,9 @@ RETURNING video_quota;
 | `product_url` | `VARCHAR(500)` | ✅ | NULL | — | 商品页 URL，M3 解析来源 |
 | `product_info` | `JSONB` | ✅ | NULL | 见 3.1 | 解析或手填的结构化商品信息 |
 | `status` | `VARCHAR(20)` | ❌ | `'draft'` | 枚举：见 6.2 | 工作流状态 |
+| `views` | `INTEGER` | ❌ | `0` | — | 该项目下视频累计播放量 |
+| `render_progress` | `INTEGER` | ❌ | `0` | 0–100 | 渲染进度百分比，状态为 in\_progress 时进度条用 |
+| `tiktok_ready` | `BOOLEAN` | ❌ | `FALSE` | — | 是否达到 TikTok 发布标准 |
 | `created_at` / `updated_at` | `TIMESTAMPTZ` | ❌ | `NOW()` | — | — |
 
 **索引**
@@ -238,7 +241,7 @@ RETURNING video_quota;
 
 ```sql
 -- 项目列表 + 视频计数（卡片展示）
-SELECT p.id, p.name, p.status, p.updated_at,
+SELECT p.id, p.name, p.status, p.views, p.tiktok_ready, p.updated_at,
        (SELECT COUNT(*) FROM videos v WHERE v.project_id = p.id) AS video_count
 FROM projects p
 WHERE p.user_id = $1

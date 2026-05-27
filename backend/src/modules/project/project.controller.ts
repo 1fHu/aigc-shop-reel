@@ -25,6 +25,7 @@ export class ProjectController {
       query.keyword ?? '',
       query.page ?? 1,
       query.limit ?? 20,
+      query.status ?? 'all',
     );
     return ok(items, total);
   }

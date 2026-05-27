@@ -28,6 +28,15 @@ export class Project {
   @Column({ type: 'varchar', default: 'draft' })
   status: string;
 
+  @Column({ type: 'int', default: 0 })
+  views: number;
+
+  @Column({ type: 'int', default: 0, name: 'render_progress' })
+  renderProgress: number;
+
+  @Column({ type: 'boolean', default: false, name: 'tiktok_ready' })
+  tiktokReady: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

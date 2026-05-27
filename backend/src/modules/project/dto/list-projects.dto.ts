@@ -1,4 +1,4 @@
-import { IsOptional, IsString, IsInt, Min, Max } from 'class-validator';
+import { IsOptional, IsString, IsInt, IsIn, Min, Max } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class ListProjectsDto {
@@ -18,4 +18,8 @@ export class ListProjectsDto {
   @IsOptional()
   @IsString()
   keyword?: string = '';
+
+  @IsOptional()
+  @IsIn(['draft', 'in_progress', 'completed', 'all'])
+  status?: string = 'all';
 }
