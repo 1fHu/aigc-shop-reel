@@ -139,8 +139,12 @@ export const useAuthStore = create<AuthState>()(
         },
 
         logout: async () => {
+          // 后端要求 body 带 refreshToken 才能拉黑；从 store 取或回落到 localStorage
+          const refreshToken = get().refreshToken || localStorage.getItem(REFRESH_TOKEN_KEY) || '';
           try {
-            await authService.logout();
+            if (refreshToken) {
+              await authService.logout(refreshToken);
+            }
           } finally {
             clearTokens();
             set({ ...initialState }, false, 'auth/logout');

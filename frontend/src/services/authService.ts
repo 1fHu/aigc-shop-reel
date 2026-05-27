@@ -33,9 +33,9 @@ export const authService = {
     return api.post('/auth/refresh', { refreshToken });
   },
 
-  /** 安全登出（吊销 refresh token） */
-  logout(): Promise<void> {
-    return api.post('/auth/logout');
+  /** 安全登出（必须带 refreshToken 由后端拉黑） */
+  logout(refreshToken: string): Promise<void> {
+    return api.post('/auth/logout', { refreshToken });
   },
 
   /** 获取当前用户信息与配额 */
