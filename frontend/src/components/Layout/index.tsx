@@ -1,68 +1,205 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Button, theme } from 'antd';
+import { Input, Dropdown, App, type MenuProps } from 'antd';
 import {
-  DashboardOutlined,
-  ProjectOutlined,
-  VideoCameraOutlined,
-  FundOutlined,
-  PlaySquareOutlined,
+  AppstoreOutlined,
+  FolderOpenOutlined,
   ExperimentOutlined,
+  PictureOutlined,
+  RobotOutlined,
+  FireOutlined,
+  BarChartOutlined,
+  QuestionCircleOutlined,
+  UserOutlined,
+  ThunderboltFilled,
+  SearchOutlined,
+  BellOutlined,
+  PlusOutlined,
+  InfoCircleOutlined,
+  CloseOutlined,
+  SettingOutlined,
+  LogoutOutlined,
 } from '@ant-design/icons';
 
-const { Header, Sider, Content } = Layout;
+import { useAuthStore, selectUser, selectIsGuest } from '@/stores/authStore';
+import NewProjectModal from '@/components/NewProjectModal';
+import styles from './Layout.module.css';
 
-const menuItems = [
-  { key: '/', icon: <DashboardOutlined />, label: '仪表盘' },
-  { key: '/projects', icon: <ProjectOutlined />, label: '项目管理' },
-  { key: '/viral-library', icon: <PlaySquareOutlined />, label: '优质视频库' },
-  { key: '/gene-bank', icon: <ExperimentOutlined />, label: '爆款基因库' },
-  { key: '/analytics', icon: <FundOutlined />, label: '数据看板' },
+interface NavItem {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { key: '/',              label: 'Dashboard',        icon: <AppstoreOutlined /> },
+  { key: '/projects',      label: 'Projects',         icon: <FolderOpenOutlined /> },
+  { key: '/script-studio', label: 'ScriptStudio',     icon: <ExperimentOutlined /> },
+  { key: '/materials',     label: 'Material Library', icon: <PictureOutlined /> },
+  { key: '/gene-bank',     label: 'AI Factory',       icon: <RobotOutlined /> },
+  { key: '/viral-library', label: 'Viral Library',    icon: <FireOutlined /> },
+  { key: '/analytics',     label: 'Analytics',        icon: <BarChartOutlined /> },
 ];
 
+/**
+ * AppLayout
+ *
+ * 主体框架，所有需要登录的页面都通过 <Outlet /> 渲染在主内容区。
+ *
+ * 布局：
+ *   ┌──────────────┬────────────────────────────────┐
+ *   │              │  Guest Banner（可选）           │
+ *   │              ├────────────────────────────────┤
+ *   │   Sidebar    │  Topbar (search/tabs/avatar)    │
+ *   │   (white)    ├────────────────────────────────┤
+ *   │              │                                │
+ *   │              │  Page Content (Outlet)          │
+ *   │              │                                │
+ *   └──────────────┴────────────────────────────────┘
+ */
 export default function AppLayout() {
-  const [collapsed, setCollapsed] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
-  const { token } = theme.useToken();
+  const { message } = App.useApp();
+
+  const user = useAuthStore(selectUser);
+  const isGuest = useAuthStore(selectIsGuest);
+  const logout = useAuthStore((s) => s.logout);
+
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+
+  const showGuestBanner = isGuest && !bannerDismissed;
+  const showProjectTabs = ['/', '/projects'].includes(location.pathname);
+
+  const handleLogout = async () => {
+    await logout();
+    message.success('已退出登录');
+    navigate('/login', { replace: true });
+  };
+
+  const avatarLetter = (user?.nickname || 'V').slice(0, 1).toUpperCase();
+
+  const avatarMenu: MenuProps['items'] = [
+    {
+      key: 'profile',
+      label: (
+        <div style={{ minWidth: 180 }}>
+          <div style={{ fontWeight: 500, color: '#111827' }}>{user?.nickname ?? '游客'}</div>
+          <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
+            {isGuest ? '游客模式 · 配额 ' + (user?.video_quota ?? 0) : user?.email}
+          </div>
+        </div>
+      ),
+      disabled: true,
+    },
+    { type: 'divider' },
+    { key: 'account',  icon: <UserOutlined />,     label: '个人资料' },
+    { key: 'settings', icon: <SettingOutlined />,  label: '账户设置' },
+    { key: 'help',     icon: <QuestionCircleOutlined />, label: '帮助中心' },
+    { type: 'divider' },
+    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true, onClick: handleLogout },
+  ];
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed}>
-        <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ color: token.colorWhite, fontSize: collapsed ? 16 : 20, fontWeight: 'bold' }}>
-            {collapsed ? 'VC' : 'VidCraft v0.1'}
-          </span>
+    <div className={styles.shell}>
+      {/* =========== Sidebar =========== */}
+      <aside className={styles.sider}>
+        <div className={styles.brand}>
+          <div className={styles.brandLogo}><ThunderboltFilled /></div>
+          <div>
+            <div className={styles.brandText}>VidCraft</div>
+            <div className={styles.brandTagline}>PRO WORKSTATION</div>
+          </div>
         </div>
-        <Menu
-          theme="dark"
-          mode="inline"
-          selectedKeys={[location.pathname]}
-          items={menuItems}
-          onClick={({ key }) => navigate(key)}
-        />
-      </Sider>
-      <Layout>
-        <Header
-          style={{
-            background: token.colorBgContainer,
-            padding: '0 24px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-          }}
-        >
-          <span style={{ fontSize: 16, fontWeight: 500 }}>
-            {menuItems.find((m) => m.key === location.pathname)?.label || 'VidCraft'}
-          </span>
-          <Button type="primary" icon={<VideoCameraOutlined />} onClick={() => navigate('/projects')}>
-            新建项目
-          </Button>
-        </Header>
-        <Content style={{ margin: 24 }}>
+
+        <nav className={styles.nav}>
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => navigate(item.key)}
+              className={`${styles.navItem} ${location.pathname === item.key ? styles.navItemActive : ''}`}
+            >
+              <span className={styles.navIcon}>{item.icon}</span>
+              {item.label}
+            </button>
+          ))}
+
+          <div className={styles.navDivider} />
+
+          <button type="button" className={styles.navItem}>
+            <span className={styles.navIcon}><QuestionCircleOutlined /></span>
+            帮助中心
+          </button>
+          <button type="button" className={styles.navItem}>
+            <span className={styles.navIcon}><UserOutlined /></span>
+            账户
+          </button>
+        </nav>
+
+        <button type="button" className={styles.createBtn} onClick={() => setCreateOpen(true)}>
+          <PlusOutlined /> Create New Video
+        </button>
+      </aside>
+
+      {/* =========== Main column =========== */}
+      <div className={styles.main}>
+        {/* Guest banner */}
+        {showGuestBanner && (
+          <div className={styles.guestBanner}>
+            <span className={styles.guestBannerLeft}>
+              <InfoCircleOutlined />
+              您正处于游客模式。登录后可解锁更多高级 AI 功能并保存您的创作进度。
+            </span>
+            <span className={styles.guestBannerRight}>
+              <span className={styles.guestBannerLink} onClick={handleLogout}>立即登录</span>
+              <button type="button" className={styles.guestBannerClose} onClick={() => setBannerDismissed(true)} aria-label="关闭">
+                <CloseOutlined />
+              </button>
+            </span>
+          </div>
+        )}
+
+        {/* Topbar */}
+        <header className={styles.topbar}>
+          <div className={styles.search}>
+            <Input
+              prefix={<SearchOutlined style={{ color: '#9CA3AF' }} />}
+              placeholder="搜索项目、脚本或素材..."
+              variant="filled"
+            />
+          </div>
+
+          {showProjectTabs && (
+            <div className={styles.tabs}>
+              <button className={`${styles.tab} ${styles.tabActive}`}>所有项目</button>
+              <button className={styles.tab}>最近使用</button>
+              <button className={styles.tab}>团队共享</button>
+            </div>
+          )}
+          {!showProjectTabs && <div />}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button className={styles.upgrade}>Upgrade Pro</button>
+            <button className={styles.iconBtn} aria-label="通知">
+              <BellOutlined />
+              <span className={styles.iconBtnDot} />
+            </button>
+            <Dropdown menu={{ items: avatarMenu }} placement="bottomRight" trigger={['click']}>
+              <div className={styles.avatar}>{avatarLetter}</div>
+            </Dropdown>
+          </div>
+        </header>
+
+        {/* Content */}
+        <main className={styles.content}>
           <Outlet />
-        </Content>
-      </Layout>
-    </Layout>
+        </main>
+      </div>
+
+      {/* 全局：新建项目 Modal（被侧栏 "Create New Video" 触发） */}
+      <NewProjectModal open={createOpen} onClose={() => setCreateOpen(false)} />
+    </div>
   );
 }
