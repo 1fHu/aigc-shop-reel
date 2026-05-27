@@ -1,0 +1,242 @@
+.page {
+  padding: 32px;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 28px;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.title {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+  color: #111827;
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 14px;
+  color: #6B7280;
+  margin-top: 8px;
+}
+
+.subtitleCount {
+  font-family: 'JetBrains Mono', monospace;
+  color: #111827;
+  margin: 0 2px;
+}
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.viewToggle {
+  display: inline-flex;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.viewToggle button {
+  width: 36px;
+  height: 36px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: #6B7280;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.viewToggle button + button {
+  border-left: 1px solid #E5E7EB;
+}
+
+.viewToggle button:hover {
+  color: #111827;
+  background: #F8FAFC;
+}
+
+.viewToggleActive {
+  background: #EEF2FF !important;
+  color: #4648D4 !important;
+}
+
+.createBtn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8B5CF6 0%, #4648D4 50%, #0EA5E9 100%);
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: opacity 0.15s;
+}
+
+.createBtn:hover { opacity: 0.94; }
+
+/* Filters */
+.filters {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 24px;
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+
+.filterGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filterLabel {
+  color: #6B7280;
+  font-size: 12px;
+}
+
+.filterChip {
+  padding: 4px 12px;
+  border-radius: 999px;
+  border: 1px solid #E5E7EB;
+  background: #ffffff;
+  color: #6B7280;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.filterChip:hover {
+  background: #F8FAFC;
+  color: #111827;
+}
+
+.filterChipActive {
+  background: #EEF2FF;
+  border-color: #C7D2FE;
+  color: #4648D4;
+  font-weight: 500;
+}
+
+.filterDivider {
+  width: 1px;
+  height: 16px;
+  background: #E5E7EB;
+}
+
+.filterPill {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #E5E7EB;
+  background: #ffffff;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #6B7280;
+  cursor: pointer;
+}
+
+.filterPill:hover {
+  background: #F8FAFC;
+  color: #111827;
+}
+
+/* Grid */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+/* "Create new" placeholder card */
+.placeholderCard {
+  border-radius: 16px;
+  border: 2px dashed #E5E7EB;
+  background: transparent;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  color: #6B7280;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.placeholderCard:hover {
+  border-color: #818CF8;
+  background: rgba(239, 246, 255, 0.5);
+  color: #4648D4;
+}
+
+.placeholderIconCircle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: #EEF2FF;
+  color: #4648D4;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  margin-bottom: 12px;
+}
+
+.placeholderTitle {
+  font-weight: 500;
+  font-size: 14px;
+  color: inherit;
+}
+
+.placeholderSubtitle {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin-top: 4px;
+}
+
+/* Empty state */
+.empty {
+  text-align: center;
+  padding: 64px 20px;
+  color: #9CA3AF;
+}
+
+.empty h3 {
+  font-family: 'Geist', system-ui, sans-serif;
+  color: #6B7280;
+  font-weight: 500;
+  margin: 0 0 8px;
+}
+
+/* Footer */
+.footer {
+  margin-top: 48px;
+  font-size: 12px;
+  color: #9CA3AF;
+  display: flex;
+  justify-content: space-between;
+}
+
+.footer a {
+  color: #9CA3AF;
+  margin-left: 20px;
+  text-decoration: none;
+}
+.footer a:hover { color: #6B7280; }
