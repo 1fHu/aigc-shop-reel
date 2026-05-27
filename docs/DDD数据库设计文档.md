@@ -156,7 +156,7 @@ erDiagram
 | --- | --- | --- | --- | --- | --- |
 | `id` | `UUID` | ❌ | `uuid_generate_v4()` | **PK** | 全局账户标识，对外暴露 |
 | `email` | `VARCHAR(255)` | ❌ | — | **UNIQUE** | 登录名；游客账号统一使用 `demo@vidcraft.icu` |
-| `password_hash` | `VARCHAR(255)` | ❌ | — | — | **bcrypt cost ≥ 10**，禁止明文/可逆加密 |
+| `password_hash` | `VARCHAR(255)` | ❌ | — | — | **bcrypt cost = 10**，禁止明文/可逆加密 |
 | `nickname` | `VARCHAR(100)` | ✅ | NULL | — | 显示名；游客默认为「演示商家」 |
 | `avatar_url` | `VARCHAR(500)` | ✅ | NULL | — | 指向 MinIO/`vidcraft-media` 桶内对象 |
 | `plan_type` | `VARCHAR(20)` | ❌ | `'free'` | 枚举：`free` / `pro`（详见 6.1） | 套餐类型 |
