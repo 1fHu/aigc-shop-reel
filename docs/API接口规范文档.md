@@ -368,6 +368,7 @@ AIGC 带货视频生成系统
 | **page** | Integer | 否 | 页码，默认 1 |
 | **limit** | Integer | 否 | 每页条数，默认 20，最大 50 |
 | **keyword** | String | 否 | 项目名称关键词筛选 |
+| **status** | String | 否 | 按状态筛选：`draft` / `in_progress` / `completed` / `all`（默认 `all`） |
 
 **返回参数**
 
@@ -380,13 +381,16 @@ AIGC 带货视频生成系统
 | **data[].cover\_url** | String | 商品封面图 URL |
 | **data[].video\_count** | Integer | 已生成视频数量 |
 | **data[].status** | String | 项目状态：draft / in\_progress / completed |
+| **data[].views** | Integer | 该项目下视频累计播放量 |
+| **data[].render\_progress** | Integer | 渲染进度 0-100，状态为 in\_progress 时进度条用 |
+| **data[].tiktok\_ready** | Boolean | 是否达到 TikTok 发布标准 |
 | **data[].updated\_at** | String | 最后编辑时间 |
 
 **返回示例**
 
 |  |
 | --- |
-| {  "code": 200, "msg": null, "total": 3,  "data": [  { "id": "proj-001", "name": "防晒霜推广", "cover\_url": "https://...", "video\_count": 2, "status": "in\_progress", "updated\_at": "2025-06-01T12:00:00Z" }  ], "traceId": "..."  } |
+| {  "code": 200, "msg": null, "total": 3,  "data": [  { "id": "proj-001", "name": "防晒霜推广", "cover\_url": "https://...", "video\_count": 2, "status": "in\_progress", "views": 4200, "render\_progress": 100, "tiktok\_ready": true, "updated\_at": "2025-06-01T12:00:00Z" }  ], "traceId": "..."  } |
 
 ## GET /api/projects/:id 获取项目详情
 
