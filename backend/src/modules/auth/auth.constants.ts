@@ -1,5 +1,5 @@
 export const GUEST_USER_ID = 'a0000000-0000-0000-0000-000000000001';
-export const GUEST_USER_EMAIL = 'demo@vidcraft.io';
+export const GUEST_USER_EMAIL = 'demo@vidcraft.icu';
 export const GUEST_USER_NICKNAME = '体验用户';
 export const GUEST_USER_PASSWORD = 'demo1234';
 
