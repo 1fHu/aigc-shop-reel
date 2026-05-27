@@ -204,7 +204,7 @@ export class MockStoreService {
     const demoUser: UserRecord = {
       id: '00000000-0000-0000-0000-000000000001',
       email: 'demo@vidcraft.icu',
-      password_hash: '$2b$10$demo',
+      password_hash: '$2b$10$DwNHW8YvtRzhRlA4aBKn..AlbqIazJ1aD6yW9ZwKX6ABI/6jjoHzG',
       nickname: '体验用户',
       avatar_url: null,
       plan_type: 'free',

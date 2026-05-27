@@ -30,15 +30,21 @@ export class TransformInterceptor<T> implements NestInterceptor<T, ApiResponse<T
     const traceId: string = req?.headers?.['x-trace-id'] || req?.traceId || randomUUID();
     return next.handle().pipe(
       map((payload: unknown) => {
-        if (payload && typeof payload === 'object' && '__envelope__' in (payload as Record<string, unknown>)) {
-          const env = payload as { code?: number; msg?: string | null; total?: number; data?: T | null };
-          return {
-            code: env.code ?? 200,
-            msg: env.msg ?? null,
-            total: env.total ?? 0,
-            data: (env.data ?? null) as T | null,
-            traceId,
-          };
+        if (payload && typeof payload === 'object') {
+          const obj = payload as Record<string, unknown>;
+          if ('__envelope__' in obj) {
+            const env = payload as { code?: number; msg?: string | null; total?: number; data?: T | null };
+            return {
+              code: env.code ?? 200,
+              msg: env.msg ?? null,
+              total: env.total ?? 0,
+              data: (env.data ?? null) as T | null,
+              traceId,
+            };
+          }
+          if ('code' in obj && 'data' in obj && 'traceId' in obj) {
+            return payload as ApiResponse<T>;
+          }
         }
         return {
           code: 200,
