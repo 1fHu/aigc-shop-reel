@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "AIGC video creation platform for TikTok e-commerce",
   "scripts": {
+    "postinstall": "cd frontend && npm install && cd ../backend && npm install",
     "dev": "concurrently -n infra,frontend,backend -c blue,green,yellow \"npm run dev:infra\" \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:infra": "docker compose -f docker/docker-compose.yml up -d postgres redis minio jaeger",
     "dev:frontend": "cd frontend && npm run dev",
