@@ -257,9 +257,9 @@ interface Script {
 
 ---
 
-## 5. 🆕 Dashboard 聚合端点（spec v1.0 不存在）
+## 5. 🆕 Dashboard 聚合端点 ✅
 
-### 5.1 `GET /api/dashboard/overview` 新增 🔴
+### 5.1 `GET /api/dashboard/overview` ✅ 已实现
 
 前端 Dashboard 页**需要一个聚合端点**：
 
@@ -304,7 +304,7 @@ interface StatCardData {
 | 4 | Scripts | FactorKey 编码（中/英）| 用英文 snake key |
 | 5 | Scripts | SSE 事件协议 | spec 补事件结构 |
 | 6 | Videos | WebSocket 协议章节 | spec 补 socket 事件 |
-| 7 | Dashboard | `GET /api/dashboard/overview` 新端点 | spec 加 endpoint |
+| 7 | Dashboard | ~~`GET /api/dashboard/overview` 新端点~~ ✅ 已实现 | 后端已加 endpoint |
 
 ### 🟡 建议处理（影响 UX / 维护性）
 
