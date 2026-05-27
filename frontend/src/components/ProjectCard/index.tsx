@@ -46,7 +46,7 @@ export default function ProjectCard({
   showMenu = true,
 }: Props) {
   const navigate = useNavigate();
-  const statusCfg = STATUS_CONFIG[project.status];
+  const statusCfg = STATUS_CONFIG[project.status] ?? { label: project.status, color: 'default' };
   const isGenerating = project.status === 'in_progress';
 
   return (
