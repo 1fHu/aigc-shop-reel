@@ -6,7 +6,7 @@
 ## 🎯 核心约束
 
 1. **写任何 service / store / mock / 接口调用前，必须先读 [`frontend/docs/API_CONVENTIONS.md`](docs/API_CONVENTIONS.md)**，确保字段名、端点路径、响应结构与文档对齐
-2. 字段名、端点、响应结构以 [`docs/VidCraft_API接口规范文档_v1.0.md`](../docs/VidCraft_API接口规范文档_v1.0.md) 为最终权威；不确定不要凭印象写
+2. 字段名、端点、响应结构以 [`docs/API接口规范文档.md`](../docs/API接口规范文档.md) 为最终权威；不确定不要凭印象写
 3. 响应成功码是 **200**（不是 0），错误消息字段是 **`msg`**（不是 `message`）
 4. 后端字段不做 camelCase 转换，原样使用（含 snake_case 字段如 `is_guest` / `cover_url` / `video_count`）
 
@@ -55,6 +55,6 @@ npm run build       # 必须能产出
 
 ## 💬 不确定时
 
-- 字段名 / 端点 / 状态枚举 → 翻 `docs/VidCraft_API接口规范文档_v1.0.md`
+- 字段名 / 端点 / 状态枚举 → 翻 `docs/API接口规范文档.md`
 - 项目结构 / 风格 → 参考已有的 `authService.ts` / `authStore.ts` / `mocks/handlers/auth.ts` 三个样板
 - 设计 token / 颜色 / 圆角 → 看 `src/theme.ts`，**不要硬编码颜色**
