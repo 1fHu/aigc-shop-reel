@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { MockStoreService, ProjectRecord } from '../../common/mock-store.service';
 import { UpdateProductDto } from './dto/update-product.dto';
 
