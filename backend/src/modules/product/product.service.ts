@@ -1,11 +1,27 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { MockStoreService } from '../../common/mock-store.service';
+import { MockStoreService, ProjectRecord } from '../../common/mock-store.service';
+import { UpdateProductDto } from './dto/update-product.dto';
 
 @Injectable()
 export class ProductService {
-  private readonly logger = new Logger(ProductService.name);
 
   constructor(private readonly store: MockStoreService) {}
+
+  /** flat 商品结构（spec v1.2：与 parse-url / parse-image 返回结构一致） */
+  private toFlatProduct(project: ProjectRecord) {
+    const info = (project.product_info ?? {}) as Record<string, unknown>;
+    return {
+      project_id: project.id,
+      name: (info.name as string) ?? null,
+      category: (info.category as string) ?? null,
+      selling_points: (info.selling_points as string[]) ?? [],
+      target_audience: (info.target_audience as string) ?? null,
+      usage_scene: (info.usage_scene as string) ?? null,
+      price_anchor: (info.price_anchor as string) ?? null,
+      cover_url: project.cover_url ?? (info.cover_url as string) ?? null,
+      updated_at: project.updated_at,
+    };
+  }
 
   parseUrl(projectId: string, url: string) {
     const parsed = this.store.parseProductUrl(url);
@@ -25,12 +41,12 @@ export class ProductService {
     return parsed;
   }
 
-  updateProjectProduct(projectId: string, productInfo: Record<string, unknown>) {
-    const project = this.store.upsertProduct(projectId, productInfo);
+  updateProjectProduct(projectId: string, productInfo: UpdateProductDto) {
+    const project = this.store.upsertProduct(projectId, { ...productInfo });
     if (!project) {
       throw new NotFoundException('项目不存在');
     }
-    return { project_id: project.id, product_info: project.product_info, updated_at: project.updated_at };
+    return this.toFlatProduct(project);
   }
 
   confirm(projectId: string) {
@@ -46,7 +62,7 @@ export class ProductService {
     if (!project) {
       throw new NotFoundException('项目不存在');
     }
-    return { project_id: project.id, product_info: project.product_info, confirmed: project.status !== 'draft' };
+    return { ...this.toFlatProduct(project), confirmed: project.status !== 'draft' };
   }
 
   importFromProject(targetProjectId: string, sourceProjectId: string) {
