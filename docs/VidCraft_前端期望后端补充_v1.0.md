@@ -33,18 +33,11 @@
 
 涉及端点：`POST /api/projects`、`GET /api/projects`、`GET /api/projects/:id`、`PUT /api/projects/:id`、`DELETE /api/projects/:id`
 
-### 1.1 `description` 字段（POST /api/projects）🟡
+### 1.1 `description` 字段（POST /api/projects）✅
+后端已对齐
 
-- **spec v1.0**：请求体未明示 `description`，仅 `name` 必填
-- **前端实际发送**：`{ name: string, description?: string }`，可选
-- **建议**：
-  - 选项 A：spec 补 `description: String?`，DB 加列
-  - 选项 B：明确说不接受，前端 UI 去掉描述字段
-- **现状**：mock 接收但不存储，等待对齐
+### 1.2 `ProjectListItem` 缺展示字段 ✅
 
-### 1.2 `ProjectListItem` 缺展示字段 🔴
-
-前端 Dashboard / Projects 页**实际渲染需要**但 spec 没定义的字段：
 
 ```ts
 interface ProjectListItem {
@@ -55,22 +48,18 @@ interface ProjectListItem {
   status: 'completed' | 'in_progress' | 'draft';
   updated_at: string;
 
-  // 👇 spec v1.0 没有，前端目前在 Dashboard 用硬编码兜底
-  views?: number | string;          // 该项目下视频累计播放量（"4.2k" 这种格式可后端格式化）
-  render_progress?: number;         // 0-100，状态为 in_progress 时进度条用
-  tiktok_ready?: boolean;           // 顶部"TIKTOK READY"徽章
+  // ✅ 已补充
+  views: number;                    // 该项目下视频累计播放量，整数，格式化由前端完成
+  render_progress: number;          // 0-100，状态为 in_progress 时进度条用
+  tiktok_ready: boolean;            // 是否达到 TikTok 发布标准
 }
 ```
 
-- **影响**：Projects 列表 / Dashboard 最近项目网格的视觉信息不完整，目前用 `i === 0` 这种硬编码 demo
-- **建议**：spec v1.x 把这 3 个字段加进 `ProjectListItem`
+- **已解决**：后端已在 `GET /api/projects` 列表返回中补充 `views`（Integer）、`render_progress`（Integer, 0-100）和 `tiktok_ready`（Boolean）
 
-### 1.3 `?status=` 查询参数 🟡
+### 1.3 `?status=` 查询参数 ✅
 
-- **spec v1.0**：`GET /api/projects` 只支持 `page / limit / keyword`
-- **前端实际**：状态筛选目前是 client-side（fetch 全部后再筛选）
-- **影响**：数据量小没问题；项目数超百级别时浪费带宽
-- **建议**：spec 补 `status?: 'completed'|'in_progress'|'draft'|'all'` 查询参数
+- **已解决**：后端已支持 `GET /api/projects?status=draft|in_progress|completed|all`，默认 `all`
 
 ### 1.4 `confirm_name` 在 DELETE 请求 body 里 ✓
 
@@ -268,9 +257,9 @@ interface Script {
 
 ---
 
-## 5. 🆕 Dashboard 聚合端点（spec v1.0 不存在）
+## 5. 🆕 Dashboard 聚合端点 ✅
 
-### 5.1 `GET /api/dashboard/overview` 新增 🔴
+### 5.1 `GET /api/dashboard/overview` ✅ 已实现
 
 前端 Dashboard 页**需要一个聚合端点**：
 
@@ -309,20 +298,20 @@ interface StatCardData {
 
 | # | 模块 | 项 | 建议方案 |
 |---|---|---|---|
-| 1 | Projects | `ProjectListItem` 缺 `views` / `render_progress` / `tiktok_ready` | spec 加 3 个字段 |
+| 1 | Projects | ~~`ProjectListItem` 缺 `views` / `render_progress` / `tiktok_ready`~~ ✅ 已补充 | spec 已加 3 个字段 |
 | 2 | Products | PUT 响应结构与其他端点不一致 | 统一为 flat 结构 |
 | 3 | Scripts | ScriptMode key 编码（中/英）| 用英文 snake key |
 | 4 | Scripts | FactorKey 编码（中/英）| 用英文 snake key |
 | 5 | Scripts | SSE 事件协议 | spec 补事件结构 |
 | 6 | Videos | WebSocket 协议章节 | spec 补 socket 事件 |
-| 7 | Dashboard | `GET /api/dashboard/overview` 新端点 | spec 加 endpoint |
+| 7 | Dashboard | ~~`GET /api/dashboard/overview` 新端点~~ ✅ 已实现 | 后端已加 endpoint |
 
 ### 🟡 建议处理（影响 UX / 维护性）
 
 | # | 模块 | 项 |
 |---|---|---|
 | 8 | Projects | POST 是否接受 `description` |
-| 9 | Projects | `?status=` 查询参数 |
+| 9 | Projects | ~~`?status=` 查询参数~~ ✅ 已支持 |
 | 10 | Products | GET 响应结构示例 |
 | 11 | Scripts | Script GET 是否含 `history` / `product_snapshot` |
 | 12 | Scripts | replace-factor 响应加 `affected_scene_ids` |

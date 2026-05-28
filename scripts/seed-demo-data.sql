@@ -7,7 +7,7 @@
 INSERT INTO users (id, email, password_hash, nickname, plan_type, video_quota)
 VALUES (
     'a0000000-0000-0000-0000-000000000001',
-    'demo@vidcraft.io',
+    'demo@vidcraft.icu',
     '$2b$10$placeholder_demo_hash_replace_with_real_bcrypt',
     '演示商家',
     'free',
