@@ -28,7 +28,7 @@ export class AuthService {
     const payload = { sub: user.id, email: user.email, role: user.is_guest ? 'guest' : 'user' };
     return {
       accessToken: this.jwtService.sign(payload),
-      refreshToken: this.store.issueRefreshToken(),
+      refreshToken: this.store.issueRefreshToken(user.id),
     };
   }
 
@@ -84,7 +84,15 @@ export class AuthService {
     if (this.store.isRefreshTokenBlacklisted(refreshToken)) {
       throw new UnauthorizedException('Refresh Token 已失效');
     }
-    return { accessToken: this.jwtService.sign({ sub: 'refreshed', email: 'refreshed@vidcraft.icu', role: 'user' }) };
+    const userId = this.store.getUserIdByRefreshToken(refreshToken);
+    if (!userId) {
+      throw new UnauthorizedException('Refresh Token 无效或已过期');
+    }
+    const user = this.store.getUserById(userId);
+    if (!user) {
+      throw new UnauthorizedException('用户不存在');
+    }
+    return { accessToken: this.jwtService.sign({ sub: user.id, email: user.email, role: user.is_guest ? 'guest' : 'user' }) };
   }
 
   logout(refreshToken: string) {

@@ -25,8 +25,29 @@ export class Project {
   @Column({ type: 'jsonb', nullable: true, name: 'product_info' })
   productInfo: object;
 
+  @Column({ type: 'varchar', nullable: true, name: 'cover_url' })
+  coverUrl: string;
+
   @Column({ type: 'varchar', default: 'draft' })
   status: string;
+
+  @Column({ type: 'int', default: 0, name: 'material_count' })
+  materialCount: number;
+
+  @Column({ type: 'int', default: 0, name: 'script_count' })
+  scriptCount: number;
+
+  @Column({ type: 'int', default: 0, name: 'video_count' })
+  videoCount: number;
+
+  @Column({ type: 'int', default: 0 })
+  views: number;
+
+  @Column({ type: 'int', default: 0, name: 'render_progress' })
+  renderProgress: number;
+
+  @Column({ type: 'boolean', default: false, name: 'tiktok_ready' })
+  tiktokReady: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
