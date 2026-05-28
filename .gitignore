@@ -44,3 +44,16 @@ generated/
 
 # TypeScript
 *.tsbuildinfo
+
+# Personal notes / design briefs (not part of project deliverables)
+STITCH_DESIGN_BRIEF.md
+STITCH_DESIGN_SYSTEM.md
+
+# Claude Code session files
+.claude/
+
+# 静态原型参考（仅供前端实现期间对照使用，不进生产）
+prototype.html
+
+# documents
+*.docx

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ProductService } from './product.service';
+import { UpdateProductDto } from './dto/update-product.dto';
 import { ok } from '../../common/api-response';
 
 @Controller('api/products')
@@ -22,7 +23,7 @@ export class ProductController {
 
   @UseGuards(AuthGuard('jwt'))
   @Put(':project_id')
-  update(@Param('project_id') projectId: string, @Body() body: Record<string, unknown>) {
+  update(@Param('project_id') projectId: string, @Body() body: UpdateProductDto) {
     return ok(this.productService.updateProjectProduct(projectId, body));
   }
 

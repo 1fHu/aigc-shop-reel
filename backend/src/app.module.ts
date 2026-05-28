@@ -6,6 +6,7 @@ import { DatabaseModule } from './database/database.module';
 import { MockStoreModule } from './common/mock-store.module';
 import { AppController } from './app.controller';
 import { QueueModule } from './queue/queue.module';
+import { RedisModule } from './redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { UserModule } from './modules/user/user.module';
 import { ProjectModule } from './modules/project/project.module';
@@ -16,6 +17,7 @@ import { VideoModule } from './modules/video/video.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ViralLibraryModule } from './modules/viral-library/viral-library.module';
 import { GeneBankModule } from './modules/gene-bank/gene-bank.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { VolcanoModule } from './modules/volcano/volcano.module';
 
 @Module({
@@ -24,6 +26,7 @@ import { VolcanoModule } from './modules/volcano/volcano.module';
     ConfigModule.forRoot({ isGlobal: true, envFilePath: path.resolve(__dirname, '../../.env'), load: [configuration] }),
     MockStoreModule,
     DatabaseModule,
+    RedisModule,
     QueueModule,
     AuthModule,
     UserModule,
@@ -35,6 +38,7 @@ import { VolcanoModule } from './modules/volcano/volcano.module';
     AnalyticsModule,
     ViralLibraryModule,
     GeneBankModule,
+    DashboardModule,
     VolcanoModule,
   ],
 })
