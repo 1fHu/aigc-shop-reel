@@ -6,8 +6,8 @@ AIGC 带货视频生成系统
 
 |  |  |
 | --- | --- |
-| **文档版本** | v1.1 |
-| **状态** | 正式版（修订：补充 /api/users/me、修正 JWT 有效期与 Token 传输方式） |
+| **文档版本** | v1.2 |
+| **状态** | 正式版（v1.2：基于前端联调反馈补充 Products/Scripts/Videos 模块细节、统一因子 Key 编码、补充 SSE/WebSocket 协议、新增取消任务端点） |
 | **基础路径** | https://api.vidcraft.io |
 | **鉴权方式** | JWT Bearer Token |
 | **响应格式** | JSON |
@@ -97,6 +97,7 @@ AIGC 带货视频生成系统
 | **PUT** | **/api/videos/:id/settings** | 更新 TTS 配音 / BGM 设置 | P1 |
 | **GET** | **/api/videos/:id/download** | 获取视频下载临时链接 | P1 |
 | **POST** | **/api/videos/:id/export** | 触发指定画幅 / 分辨率导出 | P1 |
+| **POST** | **/api/videos/:id/cancel** | 取消视频生成任务（v1.2 新增） | P1 |
 | **POST** | **/api/volcano/seedance-callback** | Seedance 回调（内部，HMAC 验证） | P0 |
 | **GET** | **/api/analytics/:video\_id** | 获取视频指标 + 分镜流失分布（Mock） | P0 |
 | **POST** | **/api/analytics/:video\_id/diagnose** | 触发分析师 Agent 诊断 | P1 |
@@ -368,6 +369,7 @@ AIGC 带货视频生成系统
 | **page** | Integer | 否 | 页码，默认 1 |
 | **limit** | Integer | 否 | 每页条数，默认 20，最大 50 |
 | **keyword** | String | 否 | 项目名称关键词筛选 |
+| **status** | String | 否 | 按状态筛选：`draft` / `in_progress` / `completed` / `all`（默认 `all`） |
 
 **返回参数**
 
@@ -380,13 +382,16 @@ AIGC 带货视频生成系统
 | **data[].cover\_url** | String | 商品封面图 URL |
 | **data[].video\_count** | Integer | 已生成视频数量 |
 | **data[].status** | String | 项目状态：draft / in\_progress / completed |
+| **data[].views** | Integer | 该项目下视频累计播放量 |
+| **data[].render\_progress** | Integer | 渲染进度 0-100，状态为 in\_progress 时进度条用 |
+| **data[].tiktok\_ready** | Boolean | 是否达到 TikTok 发布标准 |
 | **data[].updated\_at** | String | 最后编辑时间 |
 
 **返回示例**
 
 |  |
 | --- |
-| {  "code": 200, "msg": null, "total": 3,  "data": [  { "id": "proj-001", "name": "防晒霜推广", "cover\_url": "https://...", "video\_count": 2, "status": "in\_progress", "updated\_at": "2025-06-01T12:00:00Z" }  ], "traceId": "..."  } |
+| {  "code": 200, "msg": null, "total": 3,  "data": [  { "id": "proj-001", "name": "防晒霜推广", "cover\_url": "https://...", "video\_count": 2, "status": "in\_progress", "views": 4200, "render\_progress": 100, "tiktok\_ready": true, "updated\_at": "2025-06-01T12:00:00Z" }  ], "traceId": "..."  } |
 
 ## GET /api/projects/:id 获取项目详情
 
@@ -558,11 +563,29 @@ AIGC 带货视频生成系统
 | **usage\_scene** | String | 否 | 使用场景 |
 | **price\_anchor** | String | 否 | 价格锚点 |
 
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data.project\_id** | String | 项目 UUID |
+| **data.name** | String | 商品名称 |
+| **data.category** | String | 品类 |
+| **data.selling\_points** | Array | 核心卖点列表 |
+| **data.target\_audience** | String | 目标人群 |
+| **data.usage\_scene** | String | 使用场景 |
+| **data.price\_anchor** | String | 价格锚点 |
+| **data.cover\_url** | String | 商品主图 URL |
+| **data.updated\_at** | String | 更新时间 ISO 8601 |
+
+|  |
+| --- |
+| v1.2 变更：PUT 响应结构统一为 flat 格式（与 parse-url / parse-image 返回结构一致），不再嵌套 product\_info 对象。前端只需一种解包逻辑。 |
+
 **返回示例**
 
 |  |
 | --- |
-| { "code": 200, "msg": null, "total": 0, "data": { "project\_id": "proj-001", "product\_info": { ... }, "updated\_at": "2025-06-01T12:00:00Z" }, "traceId": "..." } |
+| { "code": 200, "msg": null, "total": 0, "data": { "project\_id": "proj-001", "name": "XX SPF50+ 防晒霜 50ml", "category": "美妆", "selling\_points": ["SPF50+ PA++++", "轻薄不油腻", "防水防汗"], "target\_audience": "18-30岁都市女性", "usage\_scene": "户外运动/日常出行", "price\_anchor": "原价¥199，现¥89", "cover\_url": "https://...", "updated\_at": "2025-06-01T12:00:00Z" }, "traceId": "..." } |
 
 ## POST /api/products/:project\_id/confirm 确认商品信息
 
@@ -592,11 +615,30 @@ AIGC 带货视频生成系统
 | --- |
 | 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
 
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data.project\_id** | String | 项目 UUID |
+| **data.name** | String | 商品名称 |
+| **data.category** | String | 品类 |
+| **data.selling\_points** | Array | 核心卖点列表 |
+| **data.target\_audience** | String | 目标人群 |
+| **data.usage\_scene** | String | 使用场景 |
+| **data.price\_anchor** | String | 价格锚点 |
+| **data.cover\_url** | String | 商品主图 URL |
+| **data.confirmed** | Boolean | 是否已确认商品信息 |
+| **data.updated\_at** | String | 更新时间 ISO 8601 |
+
+|  |
+| --- |
+| v1.2 变更：GET 响应结构同样采用 flat 格式（与 parse-url / PUT 响应一致），不再嵌套 product\_info。新增 confirmed 字段标识商品信息确认状态。 |
+
 **返回示例**
 
 |  |
 | --- |
-| { "code": 200, "msg": null, "total": 0, "data": { "project\_id": "proj-001", "product\_info": { "name": "...", "category": "美妆", "selling\_points": [...], "target\_audience": "...", "usage\_scene": "...", "price\_anchor": "..." }, "confirmed": true }, "traceId": "..." } |
+| { "code": 200, "msg": null, "total": 0, "data": { "project\_id": "proj-001", "name": "XX SPF50+ 防晒霜 50ml", "category": "美妆", "selling\_points": ["SPF50+ PA++++", "轻薄不油腻", "防水防汗"], "target\_audience": "18-30岁都市女性", "usage\_scene": "户外运动/日常出行", "price\_anchor": "原价¥199，现¥89", "cover\_url": "https://...", "confirmed": true, "updated\_at": "2025-06-01T12:00:00Z" }, "traceId": "..." } |
 
 ## POST /api/products/import 从历史项目导入商品信息
 
@@ -804,19 +846,36 @@ AIGC 带货视频生成系统
 | --- | --- | --- | --- |
 | **project\_id** | String | 是 | 所属项目 UUID |
 | **strategy\_type** | String | 是 | 创作策略：pain\_point（痛点共鸣）/ review（产品测评）/ story（情感故事）/ promotion（限时促销） |
-| **mode** | String | 否 | 生产模式：default / viral\_copy（爆款仿写）/ template（灵感模板），默认 default |
-| **reference\_id** | String | 否 | 参考视频 ID（mode=viral\_copy 时必填，来自 viral\_library 或 viral\_genes） |
+| **mode** | String | 否 | 生成模式：`reference`（爆款仿写）/ `template`（灵感模板）/ `auto`（自动化生成），默认 `auto` |
+| **reference\_id** | String | 否 | 参考视频 ID（mode=reference 时必填，来自 viral\_library 或 viral\_genes） |
 | **template\_id** | String | 否 | 模板 ID（mode=template 时必填） |
+
+|  |
+| --- |
+| v1.2 变更：`mode` 枚举值统一为英文 snake\_case Key（i18n 友好、避免编码问题）。中文展示名由前端 UI 层映射：reference → 爆款仿写、template → 灵感模板、auto → 自动化生成。原 `default` 重命名为 `auto`，原 `viral_copy` 重命名为 `reference`。 |
 
 |  |
 | --- |
 | 响应类型：text/event-stream（SSE）。前端通过 EventSource 接收流式数据，分镜逐条推送。 |
 
-**SSE 事件格式**
+**SSE 事件协议**
+
+每个事件以 `data: <JSON>\n\n` 格式推送，`Content-Type: text/event-stream`。
+
+| **事件类型** | **触发时机** | **Payload 字段** |
+| --- | --- | --- |
+| `meta` | 流开始时首先推送 | `script_id`（剧本 UUID）、`total_scenes`（预计分镜总数） |
+| `scene` | 每个分镜生成完成时 | `scene`（完整 Scene 对象，含 index/description/camera\_motion/duration/voiceover/subtitle） |
+| `done` | 全部分镜生成完成 | `script_id`、`total_shots`、`total_duration` |
+| `error` | 生成失败 | `msg`（错误描述）、`traceId` |
 
 |  |
 | --- |
-| // 分镜生成中（逐条推送）  data: { "event": "shot", "index": 0, "shot": { "description": "开场特写...", "camera\_motion": "push-in", "duration": 3, "voiceover": "你还在为...", "subtitle": "拒绝油腻感" } }  // 全部分镜生成完成  data: { "event": "done", "script\_id": "scrip-001", "total\_shots": 5, "total\_duration": 15 }  // 生成失败  data: { "event": "error", "msg": "API超时，请重试", "traceId": "..." } |
+| // 1. 流开始：推送元信息  data: { "type": "meta", "script\_id": "scrip-001", "total\_scenes": 5 }  // 2. 逐条推送分镜  data: { "type": "scene", "scene": { "index": 0, "description": "开场特写...", "camera\_motion": "push-in", "duration": 3, "voiceover": "你还在为...", "subtitle": "拒绝油腻感", "reference\_image\_url": null } }  // 3. 全部完成  data: { "type": "done", "script\_id": "scrip-001", "total\_shots": 5, "total\_duration": 15 }  // 异常中断  data: { "type": "error", "msg": "API超时，请重试", "traceId": "..." } |
+
+|  |
+| --- |
+| v1.2 变更：①事件类型字段从 `event` 改为 `type`（与前端 TypeScript 类型定义对齐）；②新增 `meta` 事件，在流开始时推送 script\_id 和预计分镜数，前端可提前初始化 UI 骨架；③分镜事件从 `shot` 改为 `scene`，payload 统一为完整 Scene 对象。 |
 
 ## GET /api/scripts/:id 获取剧本详情
 
@@ -829,25 +888,40 @@ AIGC 带货视频生成系统
 | **参数** | **类型** | **备注** |
 | --- | --- | --- |
 | **data.id** | String | 剧本 UUID |
+| **data.project\_id** | String | 所属项目 UUID |
+| **data.mode** | String | 生成模式：`reference` / `template` / `auto` |
 | **data.strategy\_type** | String | 创作策略类型 |
-| **data.status** | String | draft / confirmed |
+| **data.status** | String | draft / generating / completed / archived |
 | **data.total\_duration** | Float | 总时长（秒） |
-| **data.storyboard** | Array | 分镜列表 |
-| **data.storyboard[].index** | Integer | 分镜序号（从 0 开始） |
-| **data.storyboard[].description** | String | 画面描述 |
-| **data.storyboard[].camera\_motion** | String | 镜头运动：push-in / pull-out / pan-left / static 等 |
-| **data.storyboard[].duration** | Float | 时长（秒） |
-| **data.storyboard[].voiceover** | String | 配音文案 |
-| **data.storyboard[].subtitle** | String | 字幕文字 |
-| **data.storyboard[].reference\_image\_url** | String | 参考图 URL（图生视频路径使用） |
-| **data.factors** | Object | 当前剧本的因子快照 JSONB |
-| **data.factor\_history** | Array | 因子替换操作历史 |
+| **data.version** | Integer | 剧本版本号，整数自增（每次因子替换或重生成 +1） |
+| **data.scenes** | Array | 分镜列表 |
+| **data.scenes[].index** | Integer | 分镜序号（从 0 开始） |
+| **data.scenes[].description** | String | 画面描述 |
+| **data.scenes[].camera\_motion** | String | 镜头运动：push-in / pull-out / pan-left / static 等 |
+| **data.scenes[].duration** | Float | 时长（秒） |
+| **data.scenes[].voiceover** | String \| null | 配音文案，可为空字符串或 null |
+| **data.scenes[].subtitle** | String \| null | 字幕文字，可为空字符串或 null |
+| **data.scenes[].reference\_image\_url** | String \| null | 参考图 URL（图生视频路径使用） |
+| **data.factors** | Object | 当前剧本的因子快照，Key 为英文 snake\_case |
+| **data.history** | Array | 因子替换操作历史（随剧本一起返回） |
+| **data.history[].id** | String | 历史记录 UUID |
+| **data.history[].dimension** | String | 替换的因子维度 |
+| **data.history[].old\_value** | String | 替换前的值 |
+| **data.history[].new\_value** | String | 替换后的值 |
+| **data.history[].timestamp** | String | 替换时间 ISO 8601 |
+| **data.product\_snapshot** | Object \| null | 商品信息快照（flat 结构，同 GET /products 返回），避免前端额外请求 |
+| **data.created\_at** | String | 创建时间 ISO 8601 |
+| **data.updated\_at** | String | 更新时间 ISO 8601 |
+
+|  |
+| --- |
+| v1.2 变更：①字段 `storyboard` 重命名为 `scenes`（语义更清晰，与前端类型定义对齐）；②新增 `mode`（生成模式）、`version`（版本号，整数自增）、`project_id`、`product_snapshot`（商品快照）、`created_at`/`updated_at` 字段；③`factor_history` 重命名为 `history`，随剧本一起返回（无需单独端点）；④分镜字段 `voiceover`/`subtitle` 允许空字符串或 null（前端新建空白分镜时需要）；⑤后端以 `scenes[]` 数组顺序为权威排序，忽略每条的 `index` 字段（前端拖拽重排后直接提交新数组即可）。 |
 
 **返回示例**
 
 |  |
 | --- |
-| { "code": 200, "msg": null, "total": 0, "data": { "id": "scrip-001", "strategy\_type": "pain\_point", "status": "draft", "total\_duration": 14.5, "storyboard": [ { "index": 0, "description": "特写防晒霜瓶身...", "camera\_motion": "push-in", "duration": 3.0, "voiceover": "夏天出门，你最怕什么？", "subtitle": "你最怕什么", "reference\_image\_url": null } ], "factors": { "visual\_style": "轻奢质感风", "hook\_type": "问题式Hook", "narration\_style": "活泼种草", "rhythm": "中速", "cta": "立即下单" }, "factor\_history": [] }, "traceId": "..." } |
+| { "code": 200, "msg": null, "total": 0, "data": { "id": "scrip-001", "project\_id": "proj-001", "mode": "auto", "strategy\_type": "pain\_point", "status": "draft", "total\_duration": 14.5, "version": 1, "scenes": [ { "index": 0, "description": "特写防晒霜瓶身...", "camera\_motion": "push-in", "duration": 3.0, "voiceover": "夏天出门，你最怕什么？", "subtitle": "你最怕什么", "reference\_image\_url": null } ], "factors": { "visual\_style": "轻奢质感风", "opener": "问题式Hook", "narration": "活泼种草", "pacing": "中速", "cta": "立即下单" }, "history": [], "product\_snapshot": { "name": "XX SPF50+ 防晒霜", "category": "美妆", "selling\_points": ["SPF50+"], "target\_audience": "18-30岁都市女性" }, "created\_at": "2025-06-01T10:00:00Z", "updated\_at": "2025-06-01T14:30:00Z" }, "traceId": "..." } |
 
 ## PUT /api/scripts/:id/storyboard 保存分镜编辑
 
@@ -859,13 +933,17 @@ AIGC 带货视频生成系统
 
 | **参数** | **类型** | **必填** | **备注** |
 | --- | --- | --- | --- |
-| **storyboard** | Array | 是 | 完整分镜列表（顺序即为最终顺序），字段同 GET 返回的 storyboard[] |
+| **scenes** | Array | 是 | 完整分镜列表（数组顺序即为最终顺序），字段同 GET 返回的 scenes[]。后端以数组顺序为权威排序，忽略各条的 `index` 字段。 |
+
+|  |
+| --- |
+| v1.2 变更：请求字段从 `storyboard` 重命名为 `scenes`。分镜中 `voiceover`、`subtitle` 允许空字符串（前端新建空白分镜默认值为空字符串）。 |
 
 **返回示例**
 
 |  |
 | --- |
-| { "code": 200, "msg": null, "total": 0, "data": { "id": "scrip-001", "updated\_at": "2025-06-01T15:00:00Z", "total\_duration": 13.5 }, "traceId": "..." } |
+| { "code": 200, "msg": null, "total": 0, "data": { "id": "scrip-001", "version": 2, "updated\_at": "2025-06-01T15:00:00Z", "total\_duration": 13.5 }, "traceId": "..." } |
 
 ## POST /api/scripts/:id/regenerate-shot 单分镜重新生成
 
@@ -884,11 +962,11 @@ AIGC 带货视频生成系统
 | --- |
 | 响应类型：text/event-stream（SSE），格式同 /generate 中的 shot 事件。 |
 
-**返回示例（完成事件）**
+**SSE 事件格式**
 
 |  |
 | --- |
-| data: { "event": "done", "shot\_index": 2, "shot": { "description": "新画面描述...", "duration": 3.0, "voiceover": "..." } } |
+| // 重生成完成  data: { "type": "scene", "scene": { "index": 2, "description": "新画面描述...", "camera\_motion": "push-in", "duration": 3.0, "voiceover": "...", "subtitle": "...", "reference\_image\_url": null } }  // 完成  data: { "type": "done", "shot\_index": 2 }  // 失败  data: { "type": "error", "msg": "生成失败，请重试" } |
 
 ## POST /api/scripts/:id/replace-factor 因子局部替换
 
@@ -900,19 +978,23 @@ AIGC 带货视频生成系统
 
 | **参数** | **类型** | **必填** | **备注** |
 | --- | --- | --- | --- |
-| **dimension** | String | 是 | 替换的因子维度，枚举：visual\_style / hook\_type / narration\_style / rhythm / cta |
+| **dimension** | String | 是 | 替换的因子维度，枚举：`visual_style` / `opener` / `narration` / `pacing` / `cta` |
 | **new\_value** | String | 是 | 新的因子值（来自 GET /api/factors 返回的可选值） |
 | **scope** | String | 否 | 重生成范围：affected（仅受影响的分镜）/ all（全部分镜重生成），默认 affected |
 
 |  |
 | --- |
-| 响应类型：text/event-stream（SSE）。受影响的分镜流式推送更新，未受影响的分镜不重生成。完成后推送 done 事件，factor\_history 自动追加本次记录，支持撤销。 |
-
-**返回示例（完成事件）**
+| v1.2 变更：因子维度 Key 统一为英文 snake\_case，与 GET /api/factors 的 dimension 字段对齐。`hook_type` → `opener`、`narration_style` → `narration`、`rhythm` → `pacing`。 |
 
 |  |
 | --- |
-| data: { "event": "done", "script\_id": "scrip-001", "replaced\_dimension": "visual\_style", "new\_value": "夏日度假风", "affected\_shots": [0, 1, 2], "factor\_history\_id": "fh-001" } |
+| 响应类型：text/event-stream（SSE）。先推送 `affected` 事件告知前端哪些分镜将受影响（前端可立即显示加载蒙层），再逐条推送更新后的分镜，最后推送 done 事件。factor\_history 自动追加本次记录，支持撤销。 |
+
+**SSE 事件格式**
+
+|  |
+| --- |
+| // 1. 先推送受影响的分镜 ID 列表（前端可立即展示加载状态）  data: { "type": "affected", "affected\_scene\_ids": [0, 1, 2] }  // 2. 逐条推送更新后的分镜  data: { "type": "scene", "scene": { "index": 0, "description": "新画面描述...", "camera\_motion": "push-in", "duration": 3.0, "voiceover": "...", "subtitle": "...", "reference\_image\_url": null } }  // 3. 全部完成  data: { "type": "done", "script\_id": "scrip-001", "replaced\_dimension": "visual\_style", "new\_value": "夏日度假风", "affected\_scene\_ids": [0, 1, 2], "history\_entry\_id": "fh-001", "version": 3 } |
 
 ## GET /api/factors 获取因子库
 
@@ -929,18 +1011,22 @@ AIGC 带货视频生成系统
 | **参数** | **类型** | **备注** |
 | --- | --- | --- |
 | **data[]** | Array | 因子维度列表 |
-| **data[].dimension** | String | 维度 Key：visual\_style / hook\_type / narration\_style / rhythm / cta |
+| **data[].dimension** | String | 维度 Key：`visual_style` / `opener` / `narration` / `pacing` / `cta` |
 | **data[].label** | String | 维度中文名称 |
 | **data[].description** | String | 维度说明 |
 | **data[].values** | Array | 可选值列表 |
-| **data[].values[].value** | String | 因子值 Key |
-| **data[].values[].label** | String | 因子值中文描述 |
+| **data[].values[].value** | String | 因子值 Key（英文 snake\_case） |
+| **data[].values[].label** | String | 因子值中文描述（前端 UI 展示用） |
+
+|  |
+| --- |
+| v1.2 变更：维度 Key 统一为英文 snake\_case。映射关系：`visual_style`（视觉风格）/ `opener`（开场手法）/ `narration`（旁白风格）/ `pacing`（节奏密度）/ `cta`（CTA 形式）。原 `hook_type`、`narration_style`、`rhythm` 已废弃。 |
 
 **返回示例**
 
 |  |
 | --- |
-| { "code": 200, "msg": null, "total": 5, "data": [ { "dimension": "visual\_style", "label": "视觉风格", "description": "控制画面整体色调与构图偏好", "values": [ { "value": "minimalist\_black", "label": "黑风极简" }, { "value": "summer\_vacation", "label": "夏日度假风" }, { "value": "cyberpunk", "label": "赛博科技风" }, { "value": "luxury", "label": "轻奢质感风" } ] } ], "traceId": "..." } |
+| { "code": 200, "msg": null, "total": 5, "data": [ { "dimension": "visual\_style", "label": "视觉风格", "description": "控制画面整体色调与构图偏好", "values": [ { "value": "minimalist\_black", "label": "黑风极简" }, { "value": "summer\_vacation", "label": "夏日度假风" }, { "value": "cyberpunk", "label": "赛博科技风" }, { "value": "luxury", "label": "轻奢质感风" } ] }, { "dimension": "opener", "label": "开场手法", "description": "控制前3秒吸引力方式", "values": [ { "value": "question\_hook", "label": "问题式Hook" }, { "value": "price\_anchor\_hook", "label": "价格锚点Hook" }, { "value": "suspense\_hook", "label": "悬念式Hook" } ] }, { "dimension": "narration", "label": "旁白风格", "description": "控制配音文案的语气与措辞", "values": [ { "value": "elegant", "label": "优雅知性" }, { "value": "energetic", "label": "活泼种草" }, { "value": "professional", "label": "专业测评" } ] }, { "dimension": "pacing", "label": "节奏密度", "description": "控制分镜时长分配策略", "values": [ { "value": "fast", "label": "快切节奏（0.5-1s/镜）" }, { "value": "medium", "label": "中速（1-2s/镜）" }, { "value": "slow", "label": "慢镜强调（2-3s/镜）" } ] }, { "dimension": "cta", "label": "CTA 形式", "description": "控制结尾行动号召方式", "values": [ { "value": "buy\_now", "label": "立即下单" }, { "value": "cart", "label": "点击购物车" }, { "value": "flash\_sale", "label": "限时优惠" } ] } ], "traceId": "..." } |
 
 # 7. M6 视频创作
 
@@ -993,29 +1079,39 @@ AIGC 带货视频生成系统
 | **参数** | **类型** | **备注** |
 | --- | --- | --- |
 | **data.video\_id** | String | 视频 UUID |
-| **data.status** | String | 整体状态：queued / generating / composing / completed / failed |
+| **data.status** | String | 整体状态：`queued` / `rendering` / `completed` / `failed` |
 | **data.progress** | Integer | 完成百分比（0-100） |
 | **data.completed\_shots** | Integer | 已完成分镜数 |
 | **data.total\_shots** | Integer | 总分镜数 |
-| **data.estimated\_seconds** | Integer | 预计剩余秒数 |
+| **data.estimated\_remaining** | Integer | 预计剩余秒数（整数） |
+| **data.render\_id** | String | 渲染任务编号，格式 `VC-XXXXX-AIGC`（前端展示用） |
+| **data.resolution** | String | 分辨率描述，如 `"1080×1920 (9:16)"` |
+| **data.cover\_url** | String \| null | 视频封面 URL，仅 status=completed 时有值 |
+| **data.download\_url** | String \| null | 视频下载 URL，仅 status=completed 时有值 |
+| **data.error\_message** | String \| null | 失败原因描述，仅 status=failed 时有值 |
 | **data.shots[]** | Array | 各分镜状态列表 |
 | **data.shots[].index** | Integer | 分镜序号 |
-| **data.shots[].status** | String | queued / generating / completed / failed / retrying |
+| **data.shots[].label** | String | 分镜简要标签（如"产品外观展示"），来自剧本分镜描述摘要 |
+| **data.shots[].status** | String | `queued` / `generating` / `completed` / `failed` / `retrying` |
 | **data.shots[].retry\_count** | Integer | 已重试次数（最多 3 次） |
-| **data.shots[].error\_msg** | String | 失败原因（status=failed 时有值） |
-| **data.shots[].thumbnail\_url** | String | 已完成分镜的视频截图 URL |
-| **data.shots[].preview\_url** | String | 已完成分镜的视频预览 URL |
+| **data.shots[].error\_msg** | String \| null | 失败原因（status=failed 时有值） |
+| **data.shots[].thumbnail\_url** | String \| null | 已完成分镜的视频截图 URL |
+| **data.shots[].preview\_url** | String \| null | 已完成分镜的视频预览 URL |
 | **data.trace\_id** | String | 链路追踪 ID |
 
 |  |
 | --- |
-| 建议同时通过 WebSocket 订阅实时推送（事件：shot:completed / shot:failed / video:composing / video:completed），此接口作为轮询兜底（每 5s 轮询一次）。 |
+| v1.2 变更：①视频整体 status 简化为 4 值枚举（`queued`/`rendering`/`completed`/`failed`），后端内部的 `generating`+`composing` 合并为前端可见的 `rendering`；②`estimated_seconds` 重命名为 `estimated_remaining`（语义更明确，单位：秒，整数）；③新增 `render_id`（渲染任务编号）、`resolution`（字符串描述）、`cover_url`/`download_url`（仅 completed 时返回）、`error_message`（仅 failed 时返回）、`shots[].label` 字段。 |
+
+|  |
+| --- |
+| 推荐通过 WebSocket 订阅实时推送（见下方 WebSocket 协议章节），此接口作为轮询兜底（建议间隔 5s）。 |
 
 **返回示例**
 
 |  |
 | --- |
-| { "code": 200, "msg": null, "total": 0, "data": { "video\_id": "vid-001", "status": "generating", "progress": 40, "completed\_shots": 2, "total\_shots": 5, "estimated\_seconds": 90, "shots": [ { "index": 0, "status": "completed", "retry\_count": 0, "error\_msg": null, "thumbnail\_url": "https://...", "preview\_url": "https://..." }, { "index": 1, "status": "generating", "retry\_count": 0, "error\_msg": null, "thumbnail\_url": null, "preview\_url": null } ], "trace\_id": "tr-abc123" }, "traceId": "tr-abc123" } |
+| { "code": 200, "msg": null, "total": 0, "data": { "video\_id": "vid-001", "status": "rendering", "progress": 40, "completed\_shots": 2, "total\_shots": 5, "estimated\_remaining": 90, "render\_id": "VC-00123-AIGC", "resolution": "1080×1920 (9:16)", "cover\_url": null, "download\_url": null, "error\_message": null, "shots": [ { "index": 0, "label": "开场特写", "status": "completed", "retry\_count": 0, "error\_msg": null, "thumbnail\_url": "https://...", "preview\_url": "https://..." }, { "index": 1, "label": "产品外观展示", "status": "generating", "retry\_count": 0, "error\_msg": null, "thumbnail\_url": null, "preview\_url": null } ], "trace\_id": "tr-abc123" }, "traceId": "tr-abc123" } |
 
 ## POST /api/videos/:id/shots/:index/regenerate 单分镜重新生成
 
@@ -1110,6 +1206,41 @@ AIGC 带货视频生成系统
 |  |
 | --- |
 | { "code": 200, "msg": null, "total": 0, "data": { "export\_task\_id": "exp-001", "status": "queued", "estimated\_seconds": 60 }, "traceId": "..." } |
+
+## POST /api/videos/:id/cancel 取消视频生成任务
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+|  |
+| --- |
+| v1.2 新增。取消正在进行中的视频生成任务。仅 status 为 `queued` 或 `rendering` 时可取消。已完成或已失败的任务不可取消。取消后已完成的分镜保留，未完成的分镜标记为 cancelled。 |
+
+**路径参数**
+
+| **参数** | **类型** | **必填** | **备注** |
+| --- | --- | --- | --- |
+| **id** | String | 是 | 视频 UUID |
+
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data.video\_id** | String | 视频 UUID |
+| **data.status** | String | 取消后状态：`failed` |
+| **data.cancelled\_shots** | Integer | 被取消的分镜数量 |
+| **data.completed\_shots** | Integer | 已完成的分镜数量 |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 0, "data": { "video\_id": "vid-001", "status": "failed", "cancelled\_shots": 3, "completed\_shots": 2 }, "traceId": "..." } |
+
+|  |
+| --- |
+| 取消不可逆。取消成功后不退还视频生成配额（配额在提交任务时扣减）。如视频已处于 composing 阶段，取消可能无法立即生效。 |
 
 ## POST /api/volcano/seedance-callback Seedance 回调接收（内部接口）
 
@@ -1266,7 +1397,7 @@ AIGC 带货视频生成系统
 
 |  |
 | --- |
-| { "code": 200, "msg": null, "total": 12, "data": [ { "id": "gene-001", "category": "美妆", "strategy\_summary": "第一人称BGM氛围沉浸：用轻柔BGM引入真实使用场景，强调质感体验", "factors": { "visual\_style": "轻奢质感风", "hook\_type": "问题式Hook", "narration\_style": "优雅知性", "rhythm": "慢镜强调", "cta": "品牌心智" }, "storyboard\_structure": { "shot\_count": 4, "rhythm": "慢-快-慢", "cta\_position": "last\_shot" }, "performance\_score": 88.5, "shot\_count": 4, "source\_count": 7 } ], "traceId": "..." } |
+| { "code": 200, "msg": null, "total": 12, "data": [ { "id": "gene-001", "category": "美妆", "strategy\_summary": "第一人称BGM氛围沉浸：用轻柔BGM引入真实使用场景，强调质感体验", "factors": { "visual\_style": "轻奢质感风", "opener": "问题式Hook", "narration": "优雅知性", "pacing": "慢镜强调", "cta": "品牌心智" }, "storyboard\_structure": { "shot\_count": 4, "pacing": "慢-快-慢", "cta\_position": "last\_shot" }, "performance\_score": 88.5, "shot\_count": 4, "source\_count": 7 } ], "traceId": "..." } |
 
 ## GET /api/genes/:id 获取基因详情
 
@@ -1325,9 +1456,9 @@ AIGC 带货视频生成系统
 | **data[].cover\_url** | String | 封面图 URL（从元数据或 Doubao Vision 提取） |
 | **data[].status** | String | analyzing / completed / failed |
 | **data[].performance\_score** | Float | 性能分（若有数据则展示，否则为 null） |
-| **data[].analysis\_report.hook** | String | Hook 手法摘要 |
+| **data[].analysis\_report.opener** | String | 开场手法摘要（与因子维度 `opener` 对齐） |
 | **data[].analysis\_report.shot\_count** | Integer | 估计分镜数 |
-| **data[].analysis\_report.rhythm** | String | 节奏特征 |
+| **data[].analysis\_report.pacing** | String | 节奏特征（与因子维度 `pacing` 对齐） |
 | **data[].analysis\_report.cta** | String | CTA 形式 |
 | **data[].analysis\_report.style\_tags** | Array | 视觉风格标签列表 |
 
@@ -1335,7 +1466,7 @@ AIGC 带货视频生成系统
 
 |  |
 | --- |
-| { "code": 200, "msg": null, "total": 28, "data": [ { "id": "vlib-001", "title": "防晒霜测评｜亲测4款SPF50防晒，谁更好用？", "platform": "tiktok", "source\_url": "https://www.tiktok.com/@xxx/video/xxx", "declared\_at": "2025-06-01T09:00:00Z", "cover\_url": "https://minio/.../cover.jpg", "status": "completed", "performance\_score": 91.5, "analysis\_report": { "hook": "开场3秒晒伤恐惧钩子", "shot\_count": 6, "rhythm": "快切节奏（0.5-1s/镜）", "cta": "限时优惠", "style\_tags": ["自然日系", "真实测评"] } } ], "traceId": "..." } |
+| { "code": 200, "msg": null, "total": 28, "data": [ { "id": "vlib-001", "title": "防晒霜测评｜亲测4款SPF50防晒，谁更好用？", "platform": "tiktok", "source\_url": "https://www.tiktok.com/@xxx/video/xxx", "declared\_at": "2025-06-01T09:00:00Z", "cover\_url": "https://minio/.../cover.jpg", "status": "completed", "performance\_score": 91.5, "analysis\_report": { "opener": "开场3秒晒伤恐惧钩子", "shot\_count": 6, "pacing": "快切节奏（0.5-1s/镜）", "cta": "限时优惠", "style\_tags": ["自然日系", "真实测评"] } } ], "traceId": "..." } |
 
 ## POST /api/viral-library/import-url 导入外部视频 URL
 
@@ -1417,7 +1548,7 @@ AIGC 带货视频生成系统
 | **data.declared\_at** | String | 来源声明时间 |
 | **data.cover\_url** | String | 封面图 URL |
 | **data.analysis\_report** | Object | 完整拆解报告 JSONB |
-| **data.analysis\_report.hook** | String | Hook 手法详述 |
+| **data.analysis\_report.opener** | String | 开场手法详述 |
 | **data.analysis\_report.selling\_points** | Array | 提炼卖点列表 |
 | **data.analysis\_report.shot\_structure** | Array | 分镜结构描述列表 |
 | **data.analysis\_report.visual\_style** | String | 视觉风格分析 |
@@ -1430,7 +1561,7 @@ AIGC 带货视频生成系统
 
 |  |
 | --- |
-| { "code": 200, "msg": null, "total": 0, "data": { "id": "vlib-001", "title": "防晒霜测评", "platform": "tiktok", "source\_url": "https://...", "declared\_at": "2025-06-01T09:00:00Z", "cover\_url": "https://...", "analysis\_report": { "hook": "开场3秒特写皮肤晒伤后泛红，搭配文案：你知道不防晒有多可怕吗", "selling\_points": ["SPF50+防护", "轻薄不闷"], "shot\_structure": [ { "index": 0, "duration": 3, "description": "晒伤特写+恐惧Hook" }, { "index": 1, "duration": 2, "description": "产品出镜，质地展示" } ], "visual\_style": "自然日系，暖色调", "bgm\_style": "轻快流行，节奏感强", "cta": "最后1秒叠加优惠码文字", "style\_tags": ["自然日系", "真实测评", "快切"] }, "performance\_score": 91.5 }, "traceId": "..." } |
+| { "code": 200, "msg": null, "total": 0, "data": { "id": "vlib-001", "title": "防晒霜测评", "platform": "tiktok", "source\_url": "https://...", "declared\_at": "2025-06-01T09:00:00Z", "cover\_url": "https://...", "analysis\_report": { "opener": "开场3秒特写皮肤晒伤后泛红，搭配文案：你知道不防晒有多可怕吗", "selling\_points": ["SPF50+防护", "轻薄不闷"], "shot\_structure": [ { "index": 0, "duration": 3, "description": "晒伤特写+恐惧Hook" }, { "index": 1, "duration": 2, "description": "产品出镜，质地展示" } ], "visual\_style": "自然日系，暖色调", "bgm\_style": "轻快流行，节奏感强", "cta": "最后1秒叠加优惠码文字", "style\_tags": ["自然日系", "真实测评", "快切"] }, "performance\_score": 91.5 }, "traceId": "..." } |
 
 ## POST /api/viral-library/:id/reference 一键借鉴（注入剧本编辑器）
 
@@ -1504,22 +1635,72 @@ AIGC 带货视频生成系统
 | **male\_mature** | 男声-成熟 | 适合科技、汽车、金融类目 |
 | **female\_professional** | 女声-专业 | 适合教育、医疗、B2B类目 |
 
-**D. WebSocket 事件列表**
+**D. WebSocket 协议规范（v1.2 补充）**
 
-| **事件名称** | **触发时机** | **Payload 说明** |
+**D.1 连接方式**
+
+|  |
+| --- |
+| 客户端使用 socket.io-client 连接 WebSocket：  const socket = io('wss://api.vidcraft.io', { auth: { token: '<access\_token>' }, transports: ['websocket'] });  本地开发：ws://localhost:3000 |
+
+**D.2 连接认证**
+
+| **参数** | **类型** | **说明** |
 | --- | --- | --- |
-| **shot:completed** | 某分镜生成完成 | { shot\_index, preview\_url, thumbnail\_url, trace\_id } |
-| **shot:failed** | 某分镜生成失败 | { shot\_index, retry\_count, error\_msg, trace\_id } |
-| **shot:retrying** | 某分镜开始重试 | { shot\_index, retry\_count } |
-| **video:composing** | 所有分镜完成开始合成 | { video\_id, trace\_id } |
-| **video:completed** | 视频合成完成 | { video\_id, video\_url, duration, trace\_id } |
-| **video:failed** | 视频合成失败 | { video\_id, error\_msg, trace\_id } |
-| **diagnosis:completed** | AI 诊断完成 | { video\_id, diagnosis\_id } |
-| **viral\_library:analyzed** | 视频库拆解完成 | { viral\_library\_id, status } |
-| **material:parsed** | 素材 AI 解析完成 | { material\_id, tags } |
+| **auth.token** | String | JWT Access Token，连接握手时携带 |
+
+连接成功后服务端推送 `connect` 事件。Token 无效或过期时，服务端断开连接并推送 `error` 事件（`{ message: 'Unauthorized' }`）。
+
+**D.3 断线重连**
+
+socket.io-client 内置自动重连机制。推荐配置：`reconnection: true, reconnectionAttempts: 5, reconnectionDelay: 1000`。重连成功后，前端应主动调用 `GET /api/videos/:id/status` 补全断线期间的状态变更。
+
+**D.4 订阅/取消订阅**
+
+| **客户端事件** | **方向** | **说明** |
+| --- | --- | --- |
+| `video:subscribe` | 客户端 → 服务端 | 订阅视频生成进度，Payload: `{ video_id: string }` |
+| `video:unsubscribe` | 客户端 → 服务端 | 取消订阅，Payload: `{ video_id: string }` |
+
+**D.5 服务端推送事件**
+
+| **事件名称** | **触发时机** | **Payload** |
+| --- | --- | --- |
+| **video:progress** | 视频生成进度更新（含分镜完成/失败/重试） | `{ video_id, status, progress, completed_shots, total_shots, estimated_remaining, shot: { index, status, thumbnail_url?, preview_url?, error_msg? }, trace_id }` |
+| **shot:completed** | 某分镜生成完成 | `{ video_id, shot_index, preview_url, thumbnail_url, trace_id }` |
+| **shot:failed** | 某分镜生成失败 | `{ video_id, shot_index, retry_count, error_msg, trace_id }` |
+| **shot:retrying** | 某分镜开始重试 | `{ video_id, shot_index, retry_count }` |
+| **video:composing** | 所有分镜完成，开始 FFmpeg 合成 | `{ video_id, trace_id }` |
+| **video:completed** | 视频合成完成 | `{ video_id, video_url, cover_url, download_url, duration, resolution, trace_id }` |
+| **video:failed** | 视频合成失败 | `{ video_id, error_msg, trace_id }` |
+| **diagnosis:completed** | AI 诊断完成 | `{ video_id, diagnosis_id }` |
+| **viral\_library:analyzed** | 视频库拆解完成 | `{ viral_library_id, status }` |
+| **material:parsed** | 素材 AI 解析完成 | `{ material_id, tags }` |
+
+|  |
+| --- |
+| v1.2 变更：①新增 `video:progress` 聚合事件（前端可仅监听此事件更新整体进度 UI）；②所有视频相关事件新增 `video_id` 字段（支持前端同时监控多个任务）；③`video:completed` 新增 `cover_url`/`download_url`/`resolution` 字段（前端可直接展示，无需额外请求）；④补充连接认证、断线重连、订阅机制说明。 |
 
 **E. 接口版本说明**
 
 |  |
 | --- |
-| 当前版本 v1.0，所有接口路径以 /api 为前缀。后续版本变更将以 /api/v2 前缀区分，旧版本接口保持 6 个月兼容期。 |
+| 当前版本 v1.2，所有接口路径以 /api 为前缀。后续版本变更将以 /api/v2 前缀区分，旧版本接口保持 6 个月兼容期。 |
+
+**F. v1.2 变更汇总**
+
+| **模块** | **变更项** | **说明** |
+| --- | --- | --- |
+| Products | PUT 响应 flat 化 | 统一为与 parse-url 一致的 flat 结构，移除 product\_info 嵌套 |
+| Products | GET 响应补充 | 新增明确的返回参数表和 flat 结构示例 |
+| Scripts | mode 枚举变更 | `default` → `auto`、`viral_copy` → `reference`、`template` 不变 |
+| Scripts | 因子 Key 统一 | `hook_type` → `opener`、`narration_style` → `narration`、`rhythm` → `pacing` |
+| Scripts | SSE 协议增强 | 事件字段 `event` → `type`，新增 `meta` 事件，分镜事件 `shot` → `scene` |
+| Scripts | GET 响应增强 | 新增 `mode`/`version`/`history`/`product_snapshot`/`project_id` 字段 |
+| Scripts | replace-factor SSE 增强 | 新增 `affected` 事件（先推送受影响分镜 ID） |
+| Scripts | storyboard 重命名 | `storyboard` → `scenes`（GET 返回 + PUT 请求） |
+| Scripts | Scene 字段约束 | `voiceover`/`subtitle` 明确允许空字符串或 null |
+| Videos | status 简化 | 4 值枚举：`queued`/`rendering`/`completed`/`failed` |
+| Videos | status 响应增强 | 新增 `render_id`/`resolution`/`cover_url`/`download_url`/`error_message`/`shots[].label` |
+| Videos | 取消端点 | 新增 `POST /api/videos/:id/cancel` |
+| WebSocket | 协议补充 | 新增连接认证、订阅机制、`video:progress` 聚合事件 |

@@ -26,6 +26,9 @@ export type ProjectRecord = {
   material_count: number;
   script_count: number;
   video_count: number;
+  views: number;
+  render_progress: number;
+  tiktok_ready: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -201,7 +204,7 @@ export class MockStoreService {
     const demoUser: UserRecord = {
       id: '00000000-0000-0000-0000-000000000001',
       email: 'demo@vidcraft.icu',
-      password_hash: '$2b$10$demo',
+      password_hash: '$2b$10$OGE1TqfiNXe7MExEJ9HpWOuShMo7Mg6sGaEbdf93AKvzXHLNBzmau',
       nickname: '体验用户',
       avatar_url: null,
       plan_type: 'free',
@@ -231,6 +234,9 @@ export class MockStoreService {
       material_count: 5,
       script_count: 2,
       video_count: 1,
+      views: 4200,
+      render_progress: 100,
+      tiktok_ready: true,
       created_at: now,
       updated_at: now,
     };
@@ -531,6 +537,9 @@ export class MockStoreService {
       material_count: 0,
       script_count: 0,
       video_count: 0,
+      views: 0,
+      render_progress: 0,
+      tiktok_ready: false,
       created_at: now,
       updated_at: now,
     };

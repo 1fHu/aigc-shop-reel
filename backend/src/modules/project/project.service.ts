@@ -18,8 +18,9 @@ export class ProjectService {
     };
   }
 
-  list(userId: string, keyword = '', page = 1, limit = 20) {
-    const all = this.store.listProjects(userId, keyword);
+  list(userId: string, keyword = '', page = 1, limit = 20, status = 'all') {
+    const all = this.store.listProjects(userId, keyword)
+      .filter((p) => status === 'all' ? true : p.status === status);
     const total = all.length;
     const offset = (page - 1) * limit;
     const items = all.slice(offset, offset + limit).map((project) => ({
@@ -28,6 +29,9 @@ export class ProjectService {
       cover_url: project.cover_url,
       video_count: project.video_count,
       status: project.status,
+      views: project.views,
+      render_progress: project.render_progress,
+      tiktok_ready: project.tiktok_ready,
       updated_at: project.updated_at,
     }));
     return { items, total };

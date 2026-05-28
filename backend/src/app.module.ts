@@ -17,6 +17,7 @@ import { VideoModule } from './modules/video/video.module';
 import { AnalyticsModule } from './modules/analytics/analytics.module';
 import { ViralLibraryModule } from './modules/viral-library/viral-library.module';
 import { GeneBankModule } from './modules/gene-bank/gene-bank.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { VolcanoModule } from './modules/volcano/volcano.module';
 
 @Module({
@@ -37,6 +38,7 @@ import { VolcanoModule } from './modules/volcano/volcano.module';
     AnalyticsModule,
     ViralLibraryModule,
     GeneBankModule,
+    DashboardModule,
     VolcanoModule,
   ],
 })

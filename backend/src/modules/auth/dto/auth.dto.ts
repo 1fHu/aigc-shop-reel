@@ -4,7 +4,7 @@ export class AuthUserDto {
   @ApiProperty({ example: 'a0000000-0000-0000-0000-000000000001' })
   id!: string;
 
-  @ApiProperty({ example: 'demo@vidcraft.io', required: false, nullable: true })
+  @ApiProperty({ example: 'demo@vidcraft.icu', required: false, nullable: true })
   email?: string | null;
 
   @ApiProperty({ example: '体验用户' })
