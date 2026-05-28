@@ -13,7 +13,8 @@ import {
 import type { RcFile } from 'antd/es/upload';
 
 import { productService } from '@/services/productService';
-import type { ParsedProduct } from '@/types';
+import ManualProductFormModal from '@/components/ManualProductFormModal';
+import { categoryLabel, type ParsedProduct } from '@/types';
 import styles from './ProductParse.module.css';
 
 type Step = 1 | 2 | 3;
@@ -35,6 +36,7 @@ export default function ProductParse() {
   const [step, setStep] = useState<Step>(1);
   const [url, setUrl] = useState('');
   const [product, setProduct] = useState<ParsedProduct | null>(null);
+  const [manualOpen, setManualOpen] = useState(false);
 
   const handleParseUrl = async () => {
     if (!url.trim()) {
@@ -158,10 +160,33 @@ export default function ProductParse() {
                 支持 JPG, PNG, WEBP · 最大 10MB
               </p>
             </Upload.Dragger>
+
+            <div className={styles.orDivider}><span>或跳过 AI 直接填写</span></div>
+
+            <div style={{ textAlign: 'center' }}>
+              <button
+                type="button"
+                onClick={() => setManualOpen(true)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: '#4648D4',
+                  fontSize: 14,
+                  fontWeight: 500,
+                  cursor: 'pointer',
+                  padding: '8px 16px',
+                }}
+              >
+                ✏️ 手动填写商品信息 →
+              </button>
+              <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
+                已有商品资料？直接录入名称、品类、卖点等字段
+              </p>
+            </div>
           </div>
 
           <p className={styles.emptyHint}>
-            暂无商品解析信息，请在上方输入链接或上传图片
+            暂无商品解析信息，请在上方输入链接、上传图片或手动填写
           </p>
         </>
       )}
@@ -196,7 +221,11 @@ export default function ProductParse() {
         <div className={styles.card}>
           <div className={styles.resultHead}>
             <div className={styles.resultCover}>
-              <img src={product.cover_url} alt={product.name} />
+              {/* cover_url 兜底：手动填写没图时，用 picsum 按名字哈希出稳定占位图 */}
+              <img
+                src={product.cover_url || `https://picsum.photos/seed/${encodeURIComponent(product.name)}/300/300`}
+                alt={product.name}
+              />
             </div>
             <div className={styles.resultInfo}>
               <div className={styles.resultInfoHead}>
@@ -204,7 +233,7 @@ export default function ProductParse() {
                   <h3 className={styles.resultTitle}>{product.name}</h3>
                   <div className={styles.resultTags}>
                     <Tag color="processing" style={{ margin: 0, borderRadius: 999 }}>
-                      {product.category}
+                      {categoryLabel(product.category)}
                     </Tag>
                     <Tag color="cyan" style={{ margin: 0, borderRadius: 999 }}>2024 新品</Tag>
                   </div>
@@ -241,19 +270,41 @@ export default function ProductParse() {
           </div>
 
           <div className={styles.actionRow}>
-            <button
-              type="button"
-              className={styles.backBtn}
-              onClick={() => { setStep(1); setProduct(null); setUrl(''); }}
-            >
-              ← 重新解析
-            </button>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <button
+                type="button"
+                className={styles.backBtn}
+                onClick={() => { setStep(1); setProduct(null); setUrl(''); }}
+              >
+                ← 重新解析
+              </button>
+              <button
+                type="button"
+                className={styles.backBtn}
+                onClick={() => setManualOpen(true)}
+                style={{ color: '#4648D4' }}
+              >
+                ✏️ 手动调整
+              </button>
+            </div>
             <button type="button" className={styles.nextBtn} onClick={handleNext}>
               下一步：生成剧本 <ArrowRightOutlined />
             </button>
           </div>
         </div>
       )}
+
+      {/* 手动填写 Modal —— 提交后跳到结果展示态 (step 3) */}
+      <ManualProductFormModal
+        open={manualOpen}
+        projectId={effectiveProjectId}
+        initialValue={product}
+        onClose={() => setManualOpen(false)}
+        onSaved={(saved) => {
+          setProduct(saved);
+          setStep(3);
+        }}
+      />
     </div>
   );
 }
