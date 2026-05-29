@@ -72,6 +72,7 @@ export default function NewProjectModal({ open, onClose, onCreated }: Props) {
           label="项目名称"
           rules={[
             { required: true, message: '请输入项目名称' },
+            { min: 2, message: '项目名称至少 2 个字符' },
             { max: 60, message: '不超过 60 个字符' },
           ]}
         >

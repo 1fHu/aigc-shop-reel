@@ -67,6 +67,9 @@ AIGC 带货视频生成系统
 | **POST** | **/api/auth/logout** | 安全退出，吊销 Refresh Token | P0 |
 | **GET** | **/api/auth/profile** | 获取当前用户信息与配额 | P0 |
 | **PUT** | **/api/auth/profile** | 更新昵称 / 头像 | P0 |
+| **POST** | **/api/auth/verify-email** | 验证邮箱验证码，完成注册 | P0 |
+| **POST** | **/api/auth/forgot-password** | 发送密码重置邮件 | P0 |
+| **POST** | **/api/auth/reset-password** | 使用重置 token 修改密码 | P0 |
 | **GET** | **/api/users/me** | 获取当前登录用户信息（JWT 解析） | P0 |
 | **POST** | **/api/projects** | 创建新项目 | P0 |
 | **GET** | **/api/projects** | 获取项目列表 | P0 |
@@ -146,11 +149,13 @@ AIGC 带货视频生成系统
 
 # 2. M1 用户认证与账户
 
-## POST /api/auth/register 新用户注册
+## POST /api/auth/register 新用户注册（发送验证码）
 
 |  |
 | --- |
 | 🔓 无需鉴权（公开接口） |
+
+> **v1.3 变更**：注册改为两步流程。第一步发送邮箱验证码，第二步验证通过后创建用户。
 
 **请求参数**
 
@@ -159,20 +164,49 @@ AIGC 带货视频生成系统
 | **email** | String | 是 | 邮箱地址，格式校验 |
 | **password** | String | 是 | 密码，≥8 位，须包含字母与数字 |
 | **confirmPassword** | String | 是 | 确认密码，须与 password 一致 |
+| **nickname** | String | 否 | 用户名（昵称），登录时使用 |
 
 **返回参数**
 
 | **参数** | **类型** | **备注** |
 | --- | --- | --- |
-| **data.accessToken** | String | JWT Access Token（有效期由服务端配置决定，开发环境默认 7 天） |
-| **data.refreshToken** | String | Refresh Token（内存 Mock，服务重启失效） |
-| **data.user** | Object | 新用户信息，plan\_type: 'free'，video\_quota: 3 |
+| **data.verifyPending** | Boolean | 固定 true，表示等待验证 |
+| **data.email** | String | 注册邮箱，用于下一步 verify-email |
 
 **返回示例**
 
 |  |
 | --- |
-| {  "code": 200,  "msg": null,  "total": 0,  "data": {  "accessToken": "eyJ...",  "refreshToken": "rt-...",  "user": { "id": "uuid", "email": "user@example.com", "nickname": "user", "plan\_type": "free", "video\_quota": 3 }  },  "traceId": "..."  } |
+| { "code": 200, "msg": null, "total": 0, "data": { "verifyPending": true, "email": "user@example.com" }, "traceId": "..." } |
+
+|  |
+| --- |
+| 系统向注册邮箱发送 6 位数字验证码（10 分钟有效）。开发环境下验证码同时输出到后端控制台日志。 |
+
+## POST /api/auth/verify-email 验证邮箱并完成注册
+
+|  |
+| --- |
+| 🔓 无需鉴权（公开接口） |
+
+> **v1.3 新增**
+
+**请求参数**
+
+| **参数** | **类型** | **必填** | **备注** |
+| --- | --- | --- | --- |
+| **email** | String | 是 | 注册时使用的邮箱 |
+| **code** | String | 是 | 6 位数字验证码 |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 0, "data": { "accessToken": "eyJ...", "refreshToken": "rt-...", "user": { "id": "uuid", "email": "user@example.com", "nickname": "新用户", "plan_type": "free", "video_quota": 3 } }, "traceId": "..." } |
+
+|  |
+| --- |
+| 验证码错误或过期返回 400 "验证码错误或已过期"。 |
 
 ## POST /api/auth/login 用户登录
 
@@ -180,30 +214,81 @@ AIGC 带货视频生成系统
 | --- |
 | 🔓 无需鉴权（公开接口） |
 
+> **v1.3 变更**：登录方式从邮箱改为用户名（昵称）。
+
 **请求参数**
 
 | **参数** | **类型** | **必填** | **备注** |
 | --- | --- | --- | --- |
-| **email** | String | 是 | 邮箱地址 |
+| **username** | String | 是 | 用户名（注册时填写的昵称） |
 | **password** | String | 是 | 密码 |
 
 **返回参数**
 
 | **参数** | **类型** | **备注** |
 | --- | --- | --- |
-| **data.accessToken** | String | JWT Access Token，JSON Body 返回，由客户端负责存储 |
-| **data.refreshToken** | String | Refresh Token，JSON Body 返回，由客户端负责存储 |
+| **data.accessToken** | String | JWT Access Token，JSON Body 返回 |
+| **data.refreshToken** | String | Refresh Token，JSON Body 返回 |
 | **data.user** | Object | 用户信息对象 |
 
 **返回示例**
 
 |  |
 | --- |
-| {  "code": 200,  "msg": null,  "total": 0,  "data": {  "accessToken": "eyJ...",  "refreshToken": "rt-...",  "user": { "id": "uuid", "email": "user@example.com", "nickname": "商家A", "plan\_type": "pro", "video\_quota": 10 }  },  "traceId": "..."  } |
+| { "code": 200, "msg": null, "total": 0, "data": { "accessToken": "eyJ...", "refreshToken": "rt-...", "user": { "id": "uuid", "email": "user@example.com", "nickname": "商家A", "plan_type": "pro", "video_quota": 10 } }, "traceId": "..." } |
 
 |  |
 | --- |
-| 当前实现：Token 以 JSON Body 形式返回，客户端负责安全存储。连续失败锁定与 httpOnly Cookie 为规划功能，暂未实现。 |
+| 用户名或密码错误返回 401 "用户名或密码错误"。 |
+
+## POST /api/auth/forgot-password 忘记密码
+
+|  |
+| --- |
+| 🔓 无需鉴权（公开接口） |
+
+> **v1.3 新增**。向注册邮箱发送密码重置链接（30 分钟有效）。开发环境下链接同时输出到后端控制台日志。
+
+**请求参数**
+
+| **参数** | **类型** | **必填** | **备注** |
+| --- | --- | --- | --- |
+| **email** | String | 是 | 注册时使用的邮箱 |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 0, "data": { "sent": true }, "traceId": "..." } |
+
+|  |
+| --- |
+| 无论邮箱是否注册均返回 { sent: true }，防止邮箱枚举攻击。生产环境通过 Resend 真实发送邮件。 |
+
+## POST /api/auth/reset-password 重置密码
+
+|  |
+| --- |
+| 🔓 无需鉴权（公开接口） |
+
+> **v1.3 新增**。
+
+**请求参数**
+
+| **参数** | **类型** | **必填** | **备注** |
+| --- | --- | --- | --- |
+| **token** | String | 是 | 邮件中的重置 token |
+| **newPassword** | String | 是 | 新密码，≥8 位，须包含字母与数字 |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 0, "data": { "reset": true }, "traceId": "..." } |
+
+|  |
+| --- |
+| Token 过期或无效返回 400 "重置链接已失效或无效，请重新申请"。 |
 
 ## POST /api/auth/refresh 刷新 Access Token
 
@@ -1685,9 +1770,21 @@ socket.io-client 内置自动重连机制。推荐配置：`reconnection: true, 
 
 |  |
 | --- |
-| 当前版本 v1.2，所有接口路径以 /api 为前缀。后续版本变更将以 /api/v2 前缀区分，旧版本接口保持 6 个月兼容期。 |
+| 当前版本 v1.3，所有接口路径以 /api 为前缀。后续版本变更将以 /api/v2 前缀区分，旧版本接口保持 6 个月兼容期。 |
 
-**F. v1.2 变更汇总**
+**F. v1.3 变更汇总（2026-05-30）**
+
+| **模块** | **变更项** | **说明** |
+| --- | --- | --- |
+| Auth | 登录改为用户名 | `POST /api/auth/login` 参数 `email` → `username` |
+| Auth | 注册两步验证 | 新增 `POST /api/auth/verify-email`，注册先发验证码再创建用户 |
+| Auth | 忘记密码 | 新增 `POST /api/auth/forgot-password`，Resend 真实邮件发送重置链接 |
+| Auth | 重置密码 | 新增 `POST /api/auth/reset-password`，token 校验后更新密码 |
+| Auth | 全局 HTTP 200 | 所有 POST 端点统一返回 HTTP 200（业务码走 envelope code） |
+| Products | parse-image 文件上传 | 确认 multipart/form-data 实现，接收真实文件 |
+| Products | cover_url 占位图 | Mock 模式返回 placehold.co 可显示占位图 |
+
+**F. v1.2 变更汇总（历史）**
 
 | **模块** | **变更项** | **说明** |
 | --- | --- | --- |

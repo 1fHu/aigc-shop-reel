@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, UploadedFile, UseGuards, UseInterceptors } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { ProductService } from './product.service';
 import { UpdateProductDto } from './dto/update-product.dto';
@@ -15,10 +16,11 @@ export class ProductController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(FileInterceptor('image'))
   @Post('parse-image')
-  parseImage(@Body() body: { project_id: string; image: { originalname?: string } | string }) {
-    const imageName = typeof body.image === 'string' ? body.image : body.image.originalname || 'image.jpg';
-    return ok(this.productService.parseImage(body.project_id, imageName));
+  parseImage(@Body('project_id') projectId: string, @UploadedFile() image?: Express.Multer.File) {
+    const imageName = image?.originalname || 'uploaded-image.jpg';
+    return ok(this.productService.parseImage(projectId, imageName));
   }
 
   @UseGuards(AuthGuard('jwt'))

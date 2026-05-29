@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Input, Checkbox, App } from 'antd';
 import {
   ThunderboltFilled,
-  MailOutlined,
+  UserOutlined,
   LockOutlined,
   ControlOutlined,
   LineChartOutlined,
@@ -33,7 +33,7 @@ export default function Login() {
   const guestLogin = useAuthStore((s) => s.guestLogin);
   const login = useAuthStore((s) => s.login);
 
-  const [form, setForm] = useState({ email: '', password: '', remember: false });
+  const [form, setForm] = useState({ username: '', password: '', remember: false });
 
   // 登录前的目的地（被 RequireAuth 守卫跳转过来时携带）
   const redirectTo = (location.state as { from?: { pathname: string } } | null)?.from?.pathname || '/';
@@ -56,12 +56,12 @@ export default function Login() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.email || !form.password) {
-      message.warning('请填写邮箱和密码');
+    if (!form.username || !form.password) {
+      message.warning('请填写用户名和密码');
       return;
     }
     try {
-      await login({ email: form.email, password: form.password });
+      await login({ username: form.username, password: form.password });
       message.success('登录成功');
     } catch {
       // 拦截器已统一 toast
@@ -250,15 +250,15 @@ export default function Login() {
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>
-                邮箱地址
+                用户名
               </label>
               <Input
                 size="large"
-                prefix={<MailOutlined style={{ color: '#9CA3AF' }} />}
-                placeholder="name@company.com"
-                value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
-                autoComplete="email"
+                prefix={<UserOutlined style={{ color: '#9CA3AF' }} />}
+                placeholder="你的用户名"
+                value={form.username}
+                onChange={(e) => setForm({ ...form, username: e.target.value })}
+                autoComplete="username"
               />
             </div>
 
@@ -283,7 +283,7 @@ export default function Login() {
               >
                 <span style={{ color: '#6B7280' }}>记住我</span>
               </Checkbox>
-              <a style={{ color: '#4648D4' }}>忘记密码？</a>
+              <Link to="/forgot-password" style={{ color: '#4648D4' }}>忘记密码？</Link>
             </div>
 
             <Button htmlType="submit" block size="large" loading={loading} style={{ height: 44, fontWeight: 600 }}>
@@ -292,7 +292,7 @@ export default function Login() {
           </form>
 
           <p style={{ textAlign: 'center', fontSize: 14, color: '#6B7280', marginTop: 24 }}>
-            还没有账号？<a style={{ color: '#4648D4', fontWeight: 500, marginLeft: 4 }}>立即注册</a>
+            还没有账号？<Link to="/register" style={{ color: '#4648D4', fontWeight: 500, marginLeft: 4 }}>立即注册</Link>
           </p>
 
           <p className={styles.footer}>© 2026 VidCraft · 服务条款 · 隐私政策</p>
