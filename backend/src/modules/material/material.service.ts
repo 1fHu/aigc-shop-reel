@@ -1,4 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
 import { MockStoreService } from '../../common/mock-store.service';
 
 const MAX_FILES = 20;
@@ -11,7 +13,10 @@ const VIDEO_MIME = new Set(['video/mp4', 'video/quicktime', 'video/x-msvideo', '
 export class MaterialService {
   private readonly logger = new Logger(MaterialService.name);
 
-  constructor(private readonly store: MockStoreService) {}
+  constructor(
+    private readonly store: MockStoreService,
+    @InjectQueue('material-analysis') private readonly analysisQueue: Queue,
+  ) {}
 
   upload(userId: string, projectId: string, files: Express.Multer.File[]) {
     const project = this.store.getProject(projectId);
@@ -46,7 +51,15 @@ export class MaterialService {
       projectId,
       files.map((file) => ({ originalname: file.originalname, mimetype: file.mimetype, size: file.size })),
     );
-    this.logger.log(`项目 ${projectId} 上传 ${created.length} 个素材，等待异步 AI 解析`);
+
+    // 入库后异步触发 AI 解析：投递到 material-analysis 队列，由 processor 回填 analysis/tags 并把 status 翻成 ready。
+    // 投递失败不应阻断上传（素材仍为 parsing，可后续重试），因此 fire-and-forget + 记录日志。
+    for (const material of created) {
+      this.analysisQueue
+        .add({ materialId: material.id })
+        .catch((err: Error) => this.logger.error(`素材 ${material.id} 解析任务入队失败：${err.message}`));
+    }
+    this.logger.log(`项目 ${projectId} 上传 ${created.length} 个素材，已触发异步 AI 解析`);
     return created;
   }
 

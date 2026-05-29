@@ -663,6 +663,8 @@ export class MockStoreService {
     const now = new Date().toISOString();
     const created = files.map((file, index) => {
       const fileType = file.mimetype?.startsWith('video/') ? 'video' : 'image';
+      // 新建即为「待解析」状态：analysis/tags/embedding/duration/slices 留空，
+      // 由 material-analysis 队列的异步 AI 解析完成后回填（见 updateMaterialAnalysis）。
       const material: MaterialRecord = {
         id: randomUUID(),
         project_id: projectId,
@@ -670,17 +672,13 @@ export class MockStoreService {
         file_type: fileType,
         file_name: file.originalname || `upload-${index + 1}`,
         file_size: file.size || 1024,
-        analysis: {
-          summary: fileType === 'video' ? '视频素材解析中' : '图片素材解析中',
-          tags: fileType === 'video' ? ['视频', '素材'] : ['图片', '素材'],
-          duration: fileType === 'video' ? 45.2 : null,
-        },
-        embedding: '[0.1,0.2,0.3]',
-        tags: fileType === 'video' ? ['视频', '素材'] : ['图片', '素材'],
+        analysis: {},
+        embedding: '',
+        tags: [],
         thumbnail_url: `https://example.com/materials/${index + 1}-thumb.jpg`,
         status: 'parsing',
-        duration: fileType === 'video' ? 45.2 : null,
-        slices: fileType === 'video' ? [{ id: randomUUID(), start_sec: 0, end_sec: 5.5, thumbnail_url: 'https://example.com/materials/slice-thumb.jpg', tags: ['开场镜头'] }] : [],
+        duration: null,
+        slices: [],
         created_at: now,
       };
       this.materials.set(material.id, material);
@@ -691,6 +689,28 @@ export class MockStoreService {
       this.updateProject(projectId, { material_count: project.material_count + created.length, status: 'material_pending' });
     }
     return created;
+  }
+
+  /** 异步 AI 解析回填：填入 analysis/tags/embedding/duration 并把 status 翻成 ready / failed。 */
+  updateMaterialAnalysis(
+    id: string,
+    patch: { status: 'ready' | 'failed'; analysis?: Record<string, unknown>; tags?: string[]; embedding?: string; duration?: number | null; slices?: Array<Record<string, unknown>> },
+  ) {
+    const current = this.materials.get(id);
+    if (!current) {
+      return undefined;
+    }
+    const updated: MaterialRecord = {
+      ...current,
+      status: patch.status,
+      analysis: patch.analysis ?? current.analysis,
+      tags: patch.tags ?? current.tags,
+      embedding: patch.embedding ?? current.embedding,
+      duration: patch.duration !== undefined ? patch.duration : current.duration,
+      slices: patch.slices ?? current.slices,
+    };
+    this.materials.set(id, updated);
+    return { ...updated };
   }
 
   getMaterial(id: string) {
