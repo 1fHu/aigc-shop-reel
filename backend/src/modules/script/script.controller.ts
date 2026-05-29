@@ -12,9 +12,25 @@ export class ScriptController {
   @Post('generate')
   generate(@Body() body: { project_id: string; strategy_type: string }, @Res() response: Response) {
     const script = this.scriptService.generate(body.project_id, body.strategy_type);
+    response.status(200);
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    response.write(`data: ${JSON.stringify({ event: 'shot', index: 0, shot: script.storyboard[0] })}\n\n`);
-    response.write(`data: ${JSON.stringify({ event: 'done', script_id: script.id, total_shots: script.storyboard.length, total_duration: script.total_duration })}\n\n`);
+    response.setHeader('Cache-Control', 'no-cache');
+    response.setHeader('Connection', 'keep-alive');
+    for (const shot of script.storyboard) {
+      const scene = {
+        id: `scene-${shot.index}`,
+        index: shot.index,
+        duration: shot.duration || 3,
+        thumb_url: `https://placehold.co/400x240/8B5CF6/fff?text=Scene+${shot.index + 1}`,
+        description: shot.description,
+        camera_motion: shot.camera_motion || 'static',
+        bgm: 'Modern Beat',
+        voiceover: shot.voiceover || '',
+        subtitle: shot.subtitle || '',
+      };
+      response.write(`data: ${JSON.stringify({ type: 'scene', scene })}\n\n`);
+    }
+    response.write(`data: ${JSON.stringify({ type: 'done', script_id: script.id, total_shots: script.storyboard.length, total_duration: script.total_duration })}\n\n`);
     response.end();
   }
 
@@ -34,8 +50,9 @@ export class ScriptController {
   @Post(':id/regenerate-shot')
   regenerateShot(@Param('id') id: string, @Body() body: { shot_index: number; new_prompt?: string }, @Res() response: Response) {
     const result = this.scriptService.regenerateShot(id, body.shot_index, body.new_prompt);
+    response.status(200);
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-    response.write(`data: ${JSON.stringify(result)}\n\n`);
+    response.write(`data: ${JSON.stringify({ type: 'done', shot_index: body.shot_index, shot: result })}\n\n`);
     response.end();
   }
 

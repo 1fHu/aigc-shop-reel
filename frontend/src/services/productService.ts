@@ -19,9 +19,7 @@ export const productService = {
     const fd = new FormData();
     fd.append('project_id', projectId);
     fd.append('image', image);
-    return api.post('/products/parse-image', fd, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    });
+    return api.post('/products/parse-image', fd, { timeout: 60000 });
   },
 
   /** 获取项目当前商品信息 */

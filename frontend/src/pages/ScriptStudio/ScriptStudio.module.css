@@ -560,3 +560,15 @@
 .skelShell {
   padding: 24px;
 }
+
+/* Empty state */
+.page { padding: 32px; max-width: 720px; margin: 0 auto; }
+.emptyState { text-align: center; padding: 80px 0; }
+.emptyState h2 { font-family: 'Geist', sans-serif; font-size: 24px; color: #111827; margin-bottom: 12px; }
+.emptyState p { color: #6B7280; font-size: 14px; margin-bottom: 24px; }
+.genBtn {
+  height: 48px; padding: 0 32px; border-radius: 12px; font-size: 15px; font-weight: 600;
+  background: linear-gradient(135deg, #8B5CF6, #4648D4, #0EA5E9); color: #fff; border: none; cursor: pointer;
+}
+.genBtn:disabled { opacity: 0.5; cursor: not-allowed; }
+

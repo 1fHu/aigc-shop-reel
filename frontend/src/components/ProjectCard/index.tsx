@@ -1,20 +1,18 @@
 import { useNavigate } from 'react-router-dom';
-import { Tag } from 'antd';
-import { ClockCircleOutlined, EyeOutlined, MoreOutlined } from '@ant-design/icons';
+import { Tag, Dropdown, App } from 'antd';
+import { ClockCircleOutlined, EyeOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
 
+import { projectService } from '@/services/projectService';
 import type { ProjectListItem, ProjectStatus } from '@/types';
 import styles from './ProjectCard.module.css';
 
 interface Props {
   project: ProjectListItem;
-  /** 可选：覆盖卡片右上标签（如 "TIKTOK READY"） */
   topTag?: string;
-  /** 可选：观看量展示 */
   views?: string;
-  /** 可选：渲染中进度 0-100 */
   renderProgress?: number;
-  /** 是否显示 3 点菜单（hover 出现） */
   showMenu?: boolean;
+  onDeleted?: () => void;
 }
 
 const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string }> = {
@@ -34,70 +32,97 @@ function relativeTime(iso: string): string {
   return `${day} 天前`;
 }
 
-/**
- * 项目卡片
- * Dashboard / Projects 共用
- */
 export default function ProjectCard({
   project,
   topTag,
   views,
   renderProgress,
   showMenu = true,
+  onDeleted,
 }: Props) {
   const navigate = useNavigate();
+  const { modal } = App.useApp();
   const statusCfg = STATUS_CONFIG[project.status] ?? { label: project.status, color: 'default' };
   const isGenerating = project.status === 'in_progress';
 
+  const handleDelete = () => {
+    modal.confirm({
+      title: '确认删除',
+      content: `确定要删除项目「${project.name}」吗？删除后不可恢复。`,
+      okText: '确认删除',
+      cancelText: '取消',
+      okButtonProps: { danger: true },
+      onOk: async () => {
+        await projectService.remove(project.id);
+        onDeleted?.();
+      },
+    });
+  };
+
+  const menuItems = [
+    {
+      key: 'delete',
+      icon: <DeleteOutlined />,
+      label: '删除项目',
+      danger: true,
+      onClick: (e: { domEvent: React.MouseEvent }) => {
+        e.domEvent.stopPropagation();
+        handleDelete();
+      },
+    },
+  ];
+
   return (
     <div
-      className={styles.card}
-      onClick={() => navigate(`/projects/${project.id}/video`)}
-      role="button"
-      tabIndex={0}
-    >
-      {showMenu && (
-        <button
-          className={styles.menuBtn}
-          onClick={(e) => { e.stopPropagation(); /* TODO: open menu */ }}
-          aria-label="更多操作"
-        >
-          <MoreOutlined />
-        </button>
-      )}
-
-      <div className={styles.coverWrap}>
-        <img src={project.cover_url} alt={project.name} className={styles.cover} />
-
-        {isGenerating && (
-          <div className={styles.generatingMask}>
-            <span className={styles.generatingText}>
-              {renderProgress !== undefined ? `${renderProgress}%...` : 'RENDERING...'}
-            </span>
-            {renderProgress !== undefined && (
-              <div className={styles.progressTrack}>
-                <div className={styles.progressBar} style={{ width: `${renderProgress}%` }} />
-              </div>
-            )}
-          </div>
+        className={styles.card}
+        onClick={() => navigate(`/projects/${project.id}/video`)}
+        role="button"
+        tabIndex={0}
+      >
+        {showMenu && (
+          <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
+            <button
+              className={styles.menuBtn}
+              onClick={(e) => e.stopPropagation()}
+              aria-label="更多操作"
+            >
+              <MoreOutlined />
+            </button>
+          </Dropdown>
         )}
 
-        {topTag && <span className={styles.topTag}>{topTag}</span>}
-      </div>
+        <div className={styles.coverWrap}>
+          <img src={project.cover_url} alt={project.name} className={styles.cover} />
 
-      <div className={styles.body}>
-        <div className={styles.titleRow}>
-          <h3 className={styles.title}>{project.name}</h3>
-          <Tag color={statusCfg.color} style={{ margin: 0, borderRadius: 999, fontSize: 11 }}>
-            {statusCfg.label}
-          </Tag>
+          {isGenerating && (
+            <div className={styles.generatingMask}>
+              <span className={styles.generatingText}>
+                {renderProgress !== undefined ? `${renderProgress}%...` : 'RENDERING...'}
+              </span>
+              {renderProgress !== undefined && (
+                <div className={styles.progressTrack}>
+                  <div className={styles.progressBar} style={{ width: `${renderProgress}%` }} />
+                </div>
+              )}
+            </div>
+          )}
+
+          {topTag && <span className={styles.topTag}>{topTag}</span>}
         </div>
-        <div className={styles.meta}>
-          <span><ClockCircleOutlined /> {relativeTime(project.updated_at)}</span>
-          {views && <span><EyeOutlined /> {views}</span>}
-          {isGenerating && !views && <span style={{ color: '#D97706' }}>⏳ 等待完成</span>}
+
+        <div className={styles.body}>
+          <div className={styles.titleRow}>
+            <h3 className={styles.title}>{project.name}</h3>
+            <Tag color={statusCfg.color} style={{ margin: 0, borderRadius: 999, fontSize: 11 }}>
+              {statusCfg.label}
+            </Tag>
+          </div>
+          <div className={styles.meta}>
+            <span><ClockCircleOutlined /> {relativeTime(project.updated_at)}</span>
+            {views && <span><EyeOutlined /> {views}</span>}
+            {isGenerating && !views && <span style={{ color: '#D97706' }}>⏳ 等待完成</span>}
+          </div>
         </div>
-      </div>
     </div>
   );
 }

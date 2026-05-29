@@ -29,8 +29,8 @@ export const projectService = {
     return api.post('/projects', payload);
   },
 
-  /** 删除项目（请求体带 confirm_name 二次确认） */
-  remove(id: string, confirmName: string): Promise<void> {
-    return api.delete(`/projects/${id}`, { data: { confirm_name: confirmName } });
+  /** 删除项目 */
+  remove(id: string): Promise<void> {
+    return api.delete(`/projects/${id}`);
   },
 };

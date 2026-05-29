@@ -15,6 +15,13 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('proxyReq', (proxyReq, req) => {
+            if (req.headers['content-type']?.includes('multipart')) {
+              proxyReq.setHeader('Connection', 'keep-alive');
+            }
+          });
+        },
       },
       '/socket.io': {
         target: 'http://localhost:3000',
