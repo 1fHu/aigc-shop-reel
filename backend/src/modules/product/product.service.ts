@@ -1,11 +1,15 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { MockStoreService, ProjectRecord } from '../../common/mock-store.service';
+import { VolcanoApiService } from '../volcano/volcano-api.service';
 import { UpdateProductDto } from './dto/update-product.dto';
 
 @Injectable()
 export class ProductService {
 
-  constructor(private readonly store: MockStoreService) {}
+  constructor(
+    private readonly store: MockStoreService,
+    private readonly volcano: VolcanoApiService,
+  ) {}
 
   /** flat 商品结构（spec v1.2：与 parse-url / parse-image 返回结构一致） */
   private toFlatProduct(project: ProjectRecord) {
@@ -32,8 +36,12 @@ export class ProductService {
     return parsed;
   }
 
-  parseImage(projectId: string, imageName: string) {
-    const parsed = this.store.parseProductImage(imageName);
+  async parseImage(projectId: string, imageName: string, imageBuffer?: Buffer) {
+    const aiResult = await this.volcano.analyzeProductImage(imageName, imageBuffer);
+    const parsed = {
+      ...aiResult,
+      cover_url: `https://placehold.co/400x600/E2E8F0/475569?text=${encodeURIComponent(aiResult.name)}`,
+    };
     const project = this.store.upsertProduct(projectId, parsed);
     if (!project) {
       throw new NotFoundException('项目不存在');

@@ -102,6 +102,7 @@ type VideoRecord = {
   status: 'pending' | 'generating' | 'composing' | 'completed' | 'failed';
   trace_id: string | null;
   generation_cost: number | null;
+  mock_render?: boolean;
   settings: {
     tts: { language: string; voice: string };
     bgm: { preset_id: string | null; custom_url: string | null; volume: number };
@@ -822,8 +823,11 @@ export class MockStoreService {
       strategy_type: strategyType,
       content: '基于商品信息生成的示例剧本',
       storyboard: [
-        { index: 0, description: '开场 Hook', camera_motion: 'push-in', duration: 3, voiceover: '你还在为...', subtitle: '拒绝油腻感', reference_image_url: null },
-        { index: 1, description: '产品展示', camera_motion: 'static', duration: 4, voiceover: '这款防晒的重点是...', subtitle: '轻薄不油腻', reference_image_url: null },
+        { index: 0, description: '开场 Hook：痛点提问', camera_motion: 'push-in', duration: 3, voiceover: '你还在为...', subtitle: '拒绝油腻感', reference_image_url: null },
+        { index: 1, description: '产品外观 + 卖点特写', camera_motion: 'static', duration: 3, voiceover: '这款防晒的重点是...', subtitle: '轻薄不油腻', reference_image_url: null },
+        { index: 2, description: '使用场景演示', camera_motion: 'tracking', duration: 3, voiceover: '户外也能清爽自在', subtitle: '全天候防护', reference_image_url: null },
+        { index: 3, description: '质地/成分细节展示', camera_motion: 'push-in', duration: 3, voiceover: '成分温和，敏感肌适用', subtitle: '温和不刺激', reference_image_url: null },
+        { index: 4, description: '行动号召 CTA', camera_motion: 'static', duration: 3, voiceover: '现在下单立享优惠', subtitle: '立即下单', reference_image_url: null },
       ],
       factors: {
         visual_style: '轻奢质感风',
@@ -834,7 +838,7 @@ export class MockStoreService {
       },
       factor_history: [],
       status: 'completed',
-      total_duration: 7,
+      total_duration: 15,
       created_at: now,
       updated_at: now,
     };
@@ -907,6 +911,7 @@ export class MockStoreService {
       status: 'generating',
       trace_id: randomUUID(),
       generation_cost: 2.4,
+      mock_render: false,
       settings: {
         tts: { language: 'zh', voice: 'female_gentle' },
         bgm: { preset_id: 'bgm-001', custom_url: null, volume: 0.15 },
@@ -945,29 +950,122 @@ export class MockStoreService {
     return video ? { ...video, settings: { tts: { ...video.settings.tts }, bgm: { ...video.settings.bgm } } } : undefined;
   }
 
+  getVideoTask(taskId: string) {
+    const task = this.videoTasks.get(taskId);
+    return task ? { ...task } : undefined;
+  }
+
+  getVideoTasks(videoId: string) {
+    return [...this.videoTasks.values()].filter((t) => t.video_id === videoId).map((t) => ({ ...t }));
+  }
+
+  updateVideoTask(taskId: string, patch: Partial<VideoTaskRecord>) {
+    const task = this.videoTasks.get(taskId);
+    if (!task) return;
+    Object.assign(task, patch, { updated_at: new Date().toISOString() });
+    this.videoTasks.set(taskId, task);
+  }
+
+  updateVideo(videoId: string, patch: Partial<VideoRecord>) {
+    const video = this.videos.get(videoId);
+    if (!video) return;
+    Object.assign(video, patch, { updated_at: new Date().toISOString() });
+    this.videos.set(videoId, video);
+  }
+
   getVideoStatus(id: string) {
     const video = this.videos.get(id);
     if (!video) {
       return undefined;
     }
-    const tasks = [...this.videoTasks.values()].filter((task) => task.video_id === id).map((task) => ({ ...task }));
-    const completedShots = tasks.filter((task) => task.status === 'completed').length;
-    const totalShots = tasks.length;
+    const tasks = [...this.videoTasks.values()]
+      .filter((task) => task.video_id === id)
+      .map((task) => ({ ...task }))
+      .sort((a, b) => a.shot_index - b.shot_index);
+    const script = this.scripts.get(video.script_id || '');
+
+    const totalShots = Math.max(tasks.length, script?.storyboard.length || 0, 1);
+    const durationSec = Math.max(15, Math.round(video.duration || script?.total_duration || 15));
+    const startAt = new Date(video.created_at).getTime();
+    const elapsed = Math.max(0, (Date.now() - startAt) / 1000);
+    const shotDuration = durationSec / totalShots;
+    const rawProgress = Math.min(100, (elapsed / durationSec) * 100);
+
+    let progress = Math.round(rawProgress);
+    if (video.status === 'completed') {
+      progress = 100;
+    } else if (video.status === 'failed') {
+      progress = Math.min(progress, 95);
+    } else if (!video.mock_render) {
+      progress = Math.min(progress, 95);
+    }
+
+    if (video.mock_render && rawProgress >= 100 && video.status !== 'completed' && video.status !== 'failed') {
+      const fallbackUrl = `https://placehold.co/1080x1920/0B1C30/FFFFFF?text=VidCraft`;
+      this.updateVideo(video.id, { status: 'completed', video_url: video.video_url || fallbackUrl });
+      video.status = 'completed';
+      progress = 100;
+    }
+
+    const currentShot = Math.min(totalShots - 1, Math.floor(Math.min(elapsed, durationSec - 0.001) / shotDuration));
+
+    const shots = Array.from({ length: totalShots }).map((_, i) => {
+      const task = tasks.find((t) => t.shot_index === i);
+      const shotLabel = script?.storyboard.find((s) => s.index === i)?.description || `Scene ${String(i + 1).padStart(2, '0')}`;
+      let status: VideoTaskRecord['status'] = task?.status || 'queued';
+      let shotProgress = 0;
+
+      if (video.status === 'completed') {
+        status = 'completed';
+        shotProgress = 100;
+      } else if (video.status === 'failed') {
+        status = status === 'completed' ? 'completed' : 'failed';
+        shotProgress = status === 'completed' ? 100 : 0;
+      } else {
+        if (i < currentShot) {
+          status = 'completed';
+          shotProgress = 100;
+        } else if (i === currentShot) {
+          status = 'processing';
+          shotProgress = Math.max(0, Math.min(99, Math.round(((elapsed - i * shotDuration) / shotDuration) * 100)));
+        } else {
+          status = 'queued';
+          shotProgress = 0;
+        }
+      }
+
+      return {
+        index: i,
+        label: shotLabel,
+        status,
+        retry_count: task?.retry_count || 0,
+        error_msg: task?.error_msg || null,
+        thumbnail_url: task?.thumbnail_url || `https://placehold.co/200x200/E2E8F0/94A3B8?text=Scene+${i + 1}`,
+        preview_url: task?.preview_url || null,
+        progress: shotProgress,
+      };
+    });
+
+    const completedShots = shots.filter((shot) => shot.status === 'completed').length;
+
+    const estimatedRemaining = (video.status === 'completed' || video.status === 'failed')
+      ? 0
+      : Math.max(0, Math.round(durationSec - elapsed));
+
     return {
       video_id: video.id,
-      status: video.status,
-      progress: totalShots === 0 ? 0 : Math.round((completedShots / totalShots) * 100),
+      status: video.status === 'generating' || video.status === 'composing' ? 'rendering' : video.status,
+      progress,
       completed_shots: completedShots,
       total_shots: totalShots,
-      estimated_seconds: 90,
-      shots: tasks.map((task) => ({
-        index: task.shot_index,
-        status: task.status,
-        retry_count: task.retry_count,
-        error_msg: task.error_msg,
-        thumbnail_url: task.thumbnail_url,
-        preview_url: task.preview_url,
-      })),
+      estimated_remaining: estimatedRemaining,
+      estimated_seconds: estimatedRemaining,
+      render_id: video.trace_id,
+      resolution: video.resolution || '1080×1920 (9:16)',
+      cover_url: video.status === 'completed' ? video.video_url : null,
+      download_url: video.video_url,
+      error_message: video.status === 'failed' ? '视频生成失败' : null,
+      shots,
       trace_id: video.trace_id,
     };
   }

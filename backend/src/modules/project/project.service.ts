@@ -69,16 +69,13 @@ export class ProjectService {
     return { id: project!.id, name: project!.name, updated_at: project!.updated_at };
   }
 
-  delete(id: string, userId: string, confirmName: string) {
+  delete(id: string, userId: string) {
     const project = this.store.getProject(id);
     if (!project) {
       throw new NotFoundException('项目不存在');
     }
     if (project.user_id !== userId) {
       throw new ForbiddenException('无权删除该项目');
-    }
-    if (project.name !== confirmName) {
-      throw new BadRequestException('项目名称确认不一致，删除已取消');
     }
     this.store.deleteProject(id);
     return null;

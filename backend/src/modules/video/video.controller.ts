@@ -1,4 +1,7 @@
-import { Body, Controller, Get, Param, Post, Put, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Res, UseGuards } from '@nestjs/common';
+import { Response } from 'express';
+import { join } from 'path';
+import { existsSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
 import { VideoService } from './video.service';
 import { ok } from '../../common/api-response';
@@ -41,5 +44,16 @@ export class VideoController {
   @Post(':id/export')
   export(@Param('id') id: string, @Body() body: { aspect_ratio: string; resolution: string }) {
     return ok(this.videoService.export(id, body.aspect_ratio, body.resolution));
+  }
+
+  @Get(':id/file')
+  getFile(@Param('id') id: string, @Res() res: Response) {
+    const filePath = join(process.cwd(), '..', 'uploads', 'videos', `${id}.mp4`);
+    if (!existsSync(filePath)) {
+      return res.status(404).json({ code: 404, msg: '视频文件不存在' });
+    }
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.sendFile(filePath);
   }
 }

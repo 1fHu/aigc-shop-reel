@@ -215,6 +215,7 @@ export default function Projects() {
               key={p.id}
               project={p}
               renderProgress={p.status === 'in_progress' ? 75 : undefined}
+              onDeleted={() => setProjects((cur) => cur.filter((item) => item.id !== p.id))}
             />
           ))}
 

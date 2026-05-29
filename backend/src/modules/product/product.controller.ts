@@ -18,9 +18,10 @@ export class ProductController {
   @UseGuards(AuthGuard('jwt'))
   @UseInterceptors(FileInterceptor('image'))
   @Post('parse-image')
-  parseImage(@Body('project_id') projectId: string, @UploadedFile() image?: Express.Multer.File) {
+  async parseImage(@Body('project_id') projectId: string, @UploadedFile() image?: Express.Multer.File) {
     const imageName = image?.originalname || 'uploaded-image.jpg';
-    return ok(this.productService.parseImage(projectId, imageName));
+    const imageBuffer = image?.buffer;
+    return ok(await this.productService.parseImage(projectId, imageName, imageBuffer));
   }
 
   @UseGuards(AuthGuard('jwt'))
