@@ -193,7 +193,8 @@ return { items, total };
 - 用 `@UseInterceptors(FilesInterceptor('files'))`（多文件）或 `FileInterceptor('field')`（单文件），配 `@UploadedFiles()` / `@UploadedFile()`，类型 `Express.Multer.File`。
 - 非文件字段（如 `project_id`）仍走 `@Body() dto`，全局 ValidationPipe 会校验。
 - **大小/类型/数量限制在 Service 层校验并抛 `BadRequestException`**（给出含文件名的中文提示），不要只依赖 multer 的 limits（multer 抛的错不是 HttpException，会变 500）。素材上传限制示例见 `material.service.ts`（≤20 个文件，图片 JPG/PNG/WEBP ≤20MB，视频 MP4/MOV/AVI ≤500MB）。
-- 真实存储（MinIO）与异步 AI 解析（BullMQ `material-analysis` 队列）目前是**桩**：上传后 `status` 置 `parsing`，文件 URL 用占位，队列 processor 是 TODO。接入真实存储时再按 `TDD技术设计文档.md` 落地。
+- 真实存储（MinIO）目前是**桩**：文件 URL 用占位，未真正落盘。接入真实存储时按 `TDD技术设计文档.md` 落地。
+- 异步 AI 解析已接成**编排骨架**（见下节），但底层 Doubao 调用仍是降级桩。
 
 ---
 
@@ -224,6 +225,37 @@ npm run db:seed       # 灌入种子数据（scripts/seed-demo-data.sql）
 - **已知坑：e2e 测试结束后 jest 不会自动退出**——因为 Redis/BullMQ/OpenTelemetry 等句柄未关闭（测试也没调 `app.close()`）。跑的时候用 `npx jest --config ./test/jest-e2e.json --forceExit`（必要时加 `--runInBand`），否则进程会挂住。
 - e2e 启动会加载整个 `AppModule`：需要 Redis 在线（`npm run dev:infra`）。`DatabaseModule` 是空壳，所以**不需要 Postgres 也能跑通**业务逻辑（数据走 Mock Store）。
 - UI/前端联调类改动：本目录只负责后端；按 `docs/VidCraft_前端期望后端补充_v1.0.md` 对齐字段后，由前端联调验证。
+
+---
+
+## 异步 AI 解析（素材）—— 当前为编排骨架
+
+素材上传后的解析是异步的，链路已接通（真实 Doubao 调用待补）：
+
+```
+POST /api/materials/upload
+  └─ MaterialService.upload(): 校验 → store.createMaterials()（status=parsing，analysis/tags 留空）
+        └─ 每个素材投递一条 job 到 BullMQ 队列 'material-analysis'（fire-and-forget，入队失败仅记日志，不阻断上传）
+              └─ MaterialAnalysisProcessor.process()（queue/material-analysis.processor.ts）
+                    ├─ VolcanoApiService.analyzeMaterial()  ← ★降级桩，TODO 接 Doubao Vision + Embedding★
+                    └─ store.updateMaterialAnalysis(): 回填 analysis/tags/embedding/duration，status → ready/failed
+前端通过轮询 GET /api/materials 观察 status 从 parsing → ready（暂无 WebSocket 推送）。
+```
+
+关键约束：
+- 队列连接依赖 **Redis 在线**（`npm run dev:infra`）。Redis 挂掉时 `queue.add` 会失败，素材会停在 `parsing`。
+- `@nestjs/bull` 用的是 **`bull`（v4）**，不是 `bullmq`；注入队列用 `@InjectQueue('material-analysis')`，类型从 `'bull'` 导入。`material.module.ts` 必须 `BullModule.registerQueue({ name: 'material-analysis' })`，processor 所在的 `QueueModule` 需 `imports: [VolcanoModule]` 才能注入 `VolcanoApiService`。
+- processor 在 **API 进程内**运行（非独立 worker 进程），直接读写同一份内存 Mock Store。
+- 要接真实 AI：在 `VolcanoApiService.analyzeMaterial()` 里换成 Doubao Vision 打标 + Doubao Embedding(1024 维) 调用即可，processor / 队列 / 状态机均无需改动。
+
+## 待办 / 已知未实现（Roadmap）
+
+- **文本素材**（产品已决定「先记入待办，暂不做」）：允许商家在素材库上传纯文本（卖点文案/买家评价/话术）。实现方式建议：新增 `file_type: 'text'`、文本存 `content` 列、跳过 Vision 直接走 Embedding。落地前需先扩展 `docs/API接口规范文档.md` 契约，并同步 mock/entity/SQL 与前端 UI。
+- **真实 Doubao 调用**：`VolcanoApiService.analyzeMaterial()` 目前是降级桩。
+- **MinIO 真实存储**：上传文件未真正落盘，`file_url`/`thumbnail_url` 为占位。
+- **视频切片**：`material_slices`（FFmpeg 场景切片）未生成，processor 留了 TODO。
+- **素材 `status` 列漂移**：API/mock 有 `status`，但 `material.entity.ts` 与 `init-db.sql` 暂无该列，迁移真实库前需补上（连同 `thumbnail_url`/`duration`/`slices`）。
+- **素材状态推送**：当前靠前端轮询，未来可加 WebSocket（参考 `video.gateway.ts`）。
 
 ---
 

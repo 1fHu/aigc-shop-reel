@@ -3,9 +3,11 @@ import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { VideoGenerationProcessor } from './video-generation.processor';
 import { MaterialAnalysisProcessor } from './material-analysis.processor';
+import { VolcanoModule } from '../modules/volcano/volcano.module';
 
 @Module({
   imports: [
+    VolcanoModule,
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
