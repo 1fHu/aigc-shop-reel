@@ -1,7 +1,24 @@
-import { Body, Controller, Delete, Get, Param, Post, Put, Query, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Post,
+  Put,
+  Query,
+  UploadedFiles,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
+import { FilesInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { MaterialService } from './material.service';
 import { ok } from '../../common/api-response';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { AuthenticatedUser } from '../auth/jwt.strategy';
+import { UploadMaterialDto } from './dto/upload-material.dto';
+import { ListMaterialsDto } from './dto/list-materials.dto';
 
 @Controller('api/materials')
 export class MaterialController {
@@ -9,15 +26,27 @@ export class MaterialController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post('upload')
-  upload(@Body() body: { project_id: string; files?: Array<{ originalname?: string; mimetype?: string; size?: number }> }) {
-    return ok(this.materialService.upload(body.project_id, body.files || []), body.files?.length || 0);
+  @UseInterceptors(FilesInterceptor('files'))
+  upload(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() body: UploadMaterialDto,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    const created = this.materialService.upload(user.id, body.project_id, files ?? []);
+    return ok(created, created.length);
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Get()
-  list(@Query('project_id') projectId: string, @Query('type') type = 'all') {
-    const materials = this.materialService.list(projectId, type);
-    return ok(materials, materials.length);
+  list(@CurrentUser() user: AuthenticatedUser, @Query() query: ListMaterialsDto) {
+    const { items, total } = this.materialService.list(
+      user.id,
+      query.project_id,
+      query.type ?? 'all',
+      query.page ?? 1,
+      query.limit ?? 24,
+    );
+    return ok(items, total);
   }
 
   @UseGuards(AuthGuard('jwt'))
