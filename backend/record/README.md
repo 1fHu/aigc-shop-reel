@@ -2,35 +2,46 @@
 
 代码变更日志、功能迭代记录、Bug 修复说明存放于此。
 
-## 本次改动（快速概览）
+---
 
-- **目标**：使后端在无外部依赖（Postgres/Redis/MinIO/Volcano）的情况下可启动、可用于前端联调和 CI e2e 测试。
-- **实现方式**：新增全局内存 Mock 数据层并将各模块控制器/服务接入该层，移除运行时对 TypeORM 的强依赖。
+## 2026-05-30 — feat/videocreate 分支
 
-## 主要文件变更
+### 认证模块重构
 
-- 新增：`src/common/mock-store.service.ts`、`src/common/mock-store.module.ts`、`src/common/api-response.ts`
-- 新增：`src/app.controller.ts`（健康检查）
-- 修改/实现：各模块（`auth`、`project`、`product`、`material`、`script`、`video`、`analytics`、`gene-bank`、`viral-library`、`volcano`）的控制器与服务，改为使用 MockStore
-- 修复：`src/modules/auth/local.strategy.ts`（实现密码校验）
-- 测试：`test/app.e2e-spec.ts` — 覆盖健康检查、访客登录与项目流、注册/登录/个人信息更新、以及若干查询接口
+**登录改为用户名+密码**
+- `POST /api/auth/login` 参数从 `{email, password}` 改为 `{username, password}`
+- 新增 `MockStore.getUserByNickname()` 方法
+- `auth.service.ts`: login 方法用 nickname 查找用户
 
-## 如何运行（本地快速验证）
+**邮箱验证码注册流程**
+- `POST /api/auth/register` 不再直接创建用户，改为发送6位验证码
+- 新增 `POST /api/auth/verify-email` → 验证码校验成功后创建用户
+- MockStore 新增 `storeVerificationCode()` / `consumeVerificationCode()`
+- EmailService 新增 `sendVerificationCode()` 方法
 
-```powershell
-Set-Location e:\vidcraft\backend
-npm install
-npm run build
-npm run test:e2e
-```
+**忘记/重置密码（Resend 真实邮件）**
+- 新增 `POST /api/auth/forgot-password` → 发送重置链接
+- 新增 `POST /api/auth/reset-password` → token 校验后更新密码
+- MockStore 新增 `issueResetToken()` / `consumeResetToken()`
+- EmailService 新增 `sendPasswordReset()` 方法
+- 开发模式控制台输出链接：`[DEV] 密码重置链接: http://...`
 
-测试说明：当前 e2e 测试均通过（4 个测试），但测试运行后 Jest 会报告存在未关闭的异步句柄（open handles）。这不影响测试断言结果；通常由长期运行的 socket/gateway 或第三方长期任务引起。在 CI 中可以忽略或进一步定位。
+**全局 HTTP 状态码修复**
+- `main.ts` 全局中间件：所有 201 → 200
+- auth controller 所有 POST 端点加 `@HttpCode(200)`
+- `HttpExceptionFilter` 统一返回 `{code, msg, total, data, traceId}`
 
-## 后续建议
+**预置管理员账号**
+- username: `admin` / password: `admin123456` / email: `3051225284@qq.com`
 
-- 实现或恢复 TypeORM 适配层，以便在生产环境中使用真实持久化并保留 MockStore 作为开发/CI 的回退。
-- 进一步完善 `LocalStrategy` 与用户注册/验证流程的安全性（密码策略、邮箱验证、演示用户密码替换为 bcrypt 哈希）。
-- 可选：将 Video Gateway 以可关闭方式改造，避免测试环境中的持续句柄。
+### 依赖
+- 新增 `resend` SDK（真实邮件发送）
 
-记录时间：2026-05-23
+### 关键文件
+- `src/common/mock-store.service.ts` — 新增验证码/重置token存储
+- `src/modules/auth/auth.controller.ts` — 新增 verify-email/forgot-password/reset-password
+- `src/modules/auth/auth.service.ts` — 登录改username，注册改验证码流程
+- `src/modules/auth/email.service.ts` — Resend 邮件发送服务
+- `src/main.ts` — 全局 201→200 + HttpExceptionFilter 注册
 
+记录时间：2026-05-30

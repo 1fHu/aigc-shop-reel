@@ -22,6 +22,15 @@ async function bootstrap() {
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());
+  // 全局强制所有响应 HTTP 200，业务码用 envelope code 表达
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    const originalSend = res.json.bind(res);
+    res.json = (body: unknown) => {
+      if (res.statusCode === 201) res.status(200);
+      return originalSend(body);
+    };
+    next();
+  });
 
   const config = new DocumentBuilder()
     .setTitle('VidCraft API')

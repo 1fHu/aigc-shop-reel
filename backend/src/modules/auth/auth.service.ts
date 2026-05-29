@@ -1,7 +1,8 @@
-import { Injectable, Logger, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcrypt';
 import { MockStoreService, UserRecord } from '../../common/mock-store.service';
+import { EmailService } from './email.service';
 
 @Injectable()
 export class AuthService {
@@ -10,6 +11,7 @@ export class AuthService {
   constructor(
     private readonly store: MockStoreService,
     private readonly jwtService: JwtService,
+    private readonly emailService: EmailService,
   ) {}
 
   async validateUser(email: string, password: string) {
@@ -45,23 +47,42 @@ export class AuthService {
     };
   }
 
-  async register(email: string, password: string, confirmPassword: string) {
+  async register(email: string, password: string, confirmPassword: string, nickname?: string) {
     if (password !== confirmPassword) {
       throw new ConflictException('密码不一致');
+    }
+    if (!password || password.length < 8 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      throw new ConflictException('密码至少 8 位，须包含字母与数字');
     }
     if (this.store.getUserByEmail(email)) {
       throw new ConflictException('邮箱已注册');
     }
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = this.store.createUser(email, passwordHash);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    this.store.storeVerificationCode(email, code, passwordHash, nickname);
+    await this.emailService.sendVerificationCode(email, code);
+    return { verifyPending: true, email };
+  }
+
+  async verifyEmail(email: string, code: string) {
+    const pending = this.store.consumeVerificationCode(email, code);
+    if (!pending) {
+      throw new BadRequestException('验证码错误或已过期');
+    }
+    // 实际创建用户
+    const user = this.store.createUser(email, pending.passwordHash, pending.nickname);
     const tokens = this.issueTokens(user);
     return { ...tokens, user: this.sanitizeUser(user) };
   }
 
-  async login(email: string, password: string) {
-    const user = await this.validateUser(email, password);
+  async login(username: string, password: string) {
+    const user = this.store.getUserByNickname(username);
     if (!user) {
-      throw new UnauthorizedException('邮箱或密码错误');
+      throw new UnauthorizedException('用户名或密码错误');
+    }
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      throw new UnauthorizedException('用户名或密码错误');
     }
     const tokens = this.issueTokens(user);
     return { ...tokens, user: this.sanitizeUser(user) };
@@ -125,5 +146,29 @@ export class AuthService {
       throw new UnauthorizedException('用户不存在');
     }
     return { nickname: user.nickname, avatar_url: user.avatar_url };
+  }
+
+  async forgotPassword(email: string) {
+    const user = this.store.getUserByEmail(email);
+    // 安全：无论用户是否存在都返回成功，防止邮箱枚举
+    if (!user) {
+      return { sent: true };
+    }
+    const token = this.store.issueResetToken(user.id);
+    await this.emailService.sendPasswordReset(email, token);
+    return { sent: true };
+  }
+
+  async resetPassword(token: string, newPassword: string) {
+    const userId = this.store.consumeResetToken(token);
+    if (!userId) {
+      throw new BadRequestException('重置链接已失效或无效，请重新申请');
+    }
+    if (!newPassword || newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      throw new BadRequestException('密码至少 8 位，须包含字母与数字');
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    this.store.updateUser(userId, { password_hash: passwordHash } as any);
+    return { reset: true };
   }
 }

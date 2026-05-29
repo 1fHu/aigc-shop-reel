@@ -198,13 +198,15 @@ export class MockStoreService {
   private readonly factors = new Map<string, FactorDefinitionRecord>();
   private readonly refreshTokenBlacklist = new Set<string>();
   private readonly refreshTokenStore = new Map<string, string>(); // token → userId
+  private readonly resetTokens = new Map<string, { userId: string; expiresAt: number }>();
+  private readonly pendingRegistrations = new Map<string, { code: string; expiresAt: number; passwordHash: string; nickname?: string }>();
 
   constructor() {
     const now = new Date().toISOString();
     const demoUser: UserRecord = {
       id: '00000000-0000-0000-0000-000000000001',
       email: 'demo@vidcraft.icu',
-      password_hash: '$2b$10$OGE1TqfiNXe7MExEJ9HpWOuShMo7Mg6sGaEbdf93AKvzXHLNBzmau',
+      password_hash: '$2b$10$Kgi184mPfw5dFWhhYicFQ.qm1Q.YHrvcvxTOP2ffr0s/hOGscVfVi',
       nickname: '体验用户',
       avatar_url: null,
       plan_type: 'free',
@@ -214,6 +216,20 @@ export class MockStoreService {
       updated_at: now,
     };
     this.users.set(demoUser.id, demoUser);
+
+    const adminUser: UserRecord = {
+      id: '00000000-0000-0000-0000-000000000002',
+      email: '3051225284@qq.com',
+      password_hash: '$2b$10$tyAs98aRRPAsY9tKDMCjqufWnZXgc5akchBjzYrVE/pBJGrcwjmeK',
+      nickname: 'admin',
+      avatar_url: null,
+      plan_type: 'free',
+      video_quota: 999,
+      is_guest: false,
+      created_at: now,
+      updated_at: now,
+    };
+    this.users.set(adminUser.id, adminUser);
 
     const demoProject: ProjectRecord = {
       id: 'proj-demo-001',
@@ -491,6 +507,11 @@ export class MockStoreService {
     return user ? { ...user } : undefined;
   }
 
+  getUserByNickname(nickname: string): UserRecord | undefined {
+    const user = [...this.users.values()].find((entry) => entry.nickname === nickname);
+    return user ? { ...user } : undefined;
+  }
+
   createUser(email: string, passwordHash: string, nickname?: string, isGuest = false): UserRecord {
     const now = new Date().toISOString();
     const user: UserRecord = {
@@ -617,7 +638,7 @@ export class MockStoreService {
       target_audience: '18-30岁都市女性',
       usage_scene: '社媒种草',
       price_anchor: '原价¥199，现¥89',
-      cover_url: `https://example.com/uploads/${encodeURIComponent(imageName || 'image.jpg')}`,
+      cover_url: `https://placehold.co/400x600/E2E8F0/475569?text=${encodeURIComponent(imageName || 'Product')}`,
     };
   }
 
@@ -641,6 +662,40 @@ export class MockStoreService {
 
   getUserIdByRefreshToken(token: string): string | undefined {
     return this.refreshTokenStore.get(token);
+  }
+
+  issueResetToken(userId: string): string {
+    const token = `pwr-${randomUUID()}`;
+    this.resetTokens.set(token, { userId, expiresAt: Date.now() + 30 * 60 * 1000 });
+    return token;
+  }
+
+  consumeResetToken(token: string): string | undefined {
+    const entry = this.resetTokens.get(token);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.resetTokens.delete(token);
+      return undefined;
+    }
+    this.resetTokens.delete(token);
+    return entry.userId;
+  }
+
+  // 邮箱验证码（注册流程）
+  storeVerificationCode(email: string, code: string, passwordHash: string, nickname?: string): void {
+    this.pendingRegistrations.set(email.toLowerCase(), { code, expiresAt: Date.now() + 10 * 60 * 1000, passwordHash, nickname });
+  }
+
+  consumeVerificationCode(email: string, code: string): { passwordHash: string; nickname?: string } | undefined {
+    const entry = this.pendingRegistrations.get(email.toLowerCase());
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.pendingRegistrations.delete(email.toLowerCase());
+      return undefined;
+    }
+    if (entry.code !== code) return undefined;
+    this.pendingRegistrations.delete(email.toLowerCase());
+    return { passwordHash: entry.passwordHash, nickname: entry.nickname };
   }
 
   blacklistRefreshToken(token: string): void {
