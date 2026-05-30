@@ -12,37 +12,52 @@ import {
 
 import styles from './ForgotPassword.module.css';
 
-type Step = 'input' | 'sent';
+type Step = 'input' | 'code' | 'done';
 
 export default function ForgotPassword() {
   const { message } = App.useApp();
   const [email, setEmail] = useState('');
+  const [code, setCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<Step>('input');
+  const [retrySec, setRetrySec] = useState(0);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const startCountdown = () => {
+    setRetrySec(60);
+    const t = setInterval(() => { setRetrySec((s) => { if (s <= 1) { clearInterval(t); return 0; } return s - 1; }); }, 1000);
+  };
+
+  const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
-
     const trimmed = email.trim();
-    if (!trimmed) {
-      message.warning('请输入邮箱地址');
-      return;
-    }
-
-    // 简单邮箱格式校验
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
-      message.warning('请输入有效的邮箱地址');
-      return;
-    }
+    if (!trimmed) { message.warning('请输入邮箱地址'); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { message.warning('请输入有效的邮箱地址'); return; }
 
     setLoading(true);
+    try {
+      await fetch('/api/auth/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: trimmed }) });
+      message.success('验证码已发送');
+      setStep('code');
+      startCountdown();
+    } catch { message.error('发送失败'); }
+    finally { setLoading(false); }
+  };
 
-    // TODO: 接入后端 POST /api/auth/forgot-password
-    // 目前前端模拟发送成功
-    await new Promise((r) => setTimeout(r, 1500));
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!code || code.length !== 6) { message.warning('请输入6位验证码'); return; }
+    if (!newPassword || newPassword.length < 8) { message.warning('密码至少8位，须包含字母与数字'); return; }
 
-    setLoading(false);
-    setStep('sent');
+    setLoading(true);
+    try {
+      const r = await fetch('/api/auth/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim(), code, newPassword }) });
+      const d = await r.json();
+      if (d.code !== 200) throw new Error(d.msg);
+      message.success('密码已重置');
+      setStep('done');
+    } catch { message.error('验证码错误或已过期'); }
+    finally { setLoading(false); }
   };
 
   return (
@@ -234,87 +249,48 @@ export default function ForgotPassword() {
             </span>
           </div>
 
-          {step === 'input' ? (
+          {step === 'input' && (
             <>
               <h1 className={styles.heading}>忘记密码</h1>
-              <p className={styles.subheading}>输入注册邮箱，我们将发送重置链接</p>
-
-              <form onSubmit={handleSubmit} style={{ marginTop: 32 }}>
+              <p className={styles.subheading}>输入注册邮箱，接收验证码</p>
+              <form onSubmit={handleSendCode} style={{ marginTop: 32 }}>
                 <div style={{ marginBottom: 24 }}>
-                  <label
-                    style={{
-                      display: 'block',
-                      fontSize: 12,
-                      fontWeight: 500,
-                      color: '#374151',
-                      marginBottom: 6,
-                    }}
-                  >
-                    邮箱地址
-                  </label>
-                  <Input
-                    size="large"
-                    prefix={<MailOutlined style={{ color: '#9CA3AF' }} />}
-                    placeholder="name@company.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                    autoFocus
-                  />
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>邮箱地址</label>
+                  <Input size="large" prefix={<MailOutlined style={{ color: '#9CA3AF' }} />} placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" autoFocus />
                 </div>
-
-                <Button
-                  htmlType="submit"
-                  type="primary"
-                  block
-                  size="large"
-                  loading={loading}
-                  className={`${styles.brandGradient} ${styles.glowButton}`}
-                  style={{
-                    height: 48,
-                    borderRadius: 12,
-                    fontSize: 15,
-                    fontWeight: 600,
-                    border: 'none',
-                  }}
-                >
-                  {loading ? '发送中...' : '发送重置链接'}
+                <Button htmlType="submit" type="primary" block size="large" loading={loading} className={`${styles.brandGradient} ${styles.glowButton}`} style={{ height: 48, borderRadius: 12, fontSize: 15, fontWeight: 600, border: 'none' }}>
+                  {loading ? '发送中...' : '发送验证码'}
                 </Button>
               </form>
             </>
-          ) : (
+          )}
+          {step === 'code' && (
             <>
-              <div style={{ textAlign: 'center', marginTop: 16 }}>
-                <CheckCircleFilled style={{ fontSize: 56, color: '#10B981' }} />
-              </div>
-              <h1 className={styles.heading} style={{ textAlign: 'center', marginTop: 20 }}>
-                邮件已发送
-              </h1>
-              <p className={styles.subheading} style={{ textAlign: 'center' }}>
-                如果 <strong>{email}</strong> 已注册，你将很快收到一封密码重置邮件。
-              </p>
-
-              <div
-                style={{
-                  marginTop: 32,
-                  padding: 16,
-                  borderRadius: 8,
-                  background: '#F0FDF4',
-                  border: '1px solid #BBF7D0',
-                  fontSize: 13,
-                  color: '#166534',
-                  lineHeight: 1.6,
-                }}
-              >
-                没有收到邮件？检查垃圾邮件箱，或{' '}
-                <a
-                  onClick={() => setStep('input')}
-                  style={{ color: '#4648D4', fontWeight: 500, cursor: 'pointer' }}
-                >
-                  重新发送
-                </a>
-                。
-              </div>
+              <h1 className={styles.heading}>重置密码</h1>
+              <p className={styles.subheading}>验证码已发送至 <strong>{email}</strong></p>
+              <form onSubmit={handleReset} style={{ marginTop: 32 }}>
+                <div style={{ marginBottom: 16 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>验证码</label>
+                  <Input size="large" placeholder="6位数字" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} autoFocus />
+                </div>
+                <div style={{ marginBottom: 24 }}>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>新密码</label>
+                  <Input.Password size="large" placeholder="至少8位，包含字母和数字" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
+                </div>
+                <Button htmlType="submit" type="primary" block size="large" loading={loading} className={`${styles.brandGradient} ${styles.glowButton}`} style={{ height: 48, borderRadius: 12, fontSize: 15, fontWeight: 600, border: 'none' }}>
+                  {loading ? '重置中...' : '重置密码'}
+                </Button>
+                <p style={{ textAlign: 'center', fontSize: 13, marginTop: 12 }}>
+                    {retrySec > 0 ? <span style={{ color: '#9CA3AF' }}>{retrySec}s 后可重新发送</span> : <a onClick={() => setStep('input')} style={{ color: '#4648D4', cursor: 'pointer' }}>重新发送验证码</a>}
+                  </p>
+              </form>
+            </>
+          )}
+          {step === 'done' && (
+            <>
+              <div style={{ textAlign: 'center', marginTop: 16 }}><CheckCircleFilled style={{ fontSize: 56, color: '#10B981' }} /></div>
+              <h1 className={styles.heading} style={{ textAlign: 'center', marginTop: 20 }}>密码已重置</h1>
+              <p className={styles.subheading} style={{ textAlign: 'center' }}>使用新密码登录即可</p>
             </>
           )}
 

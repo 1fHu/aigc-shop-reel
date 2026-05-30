@@ -23,7 +23,11 @@ import { VolcanoModule } from './modules/volcano/volcano.module';
 @Module({
   controllers: [AppController],
   imports: [
-    ConfigModule.forRoot({ isGlobal: true, envFilePath: path.resolve(__dirname, '../../.env'), load: [configuration] }),
+    ConfigModule.forRoot({
+      isGlobal: true,
+      envFilePath: [path.resolve(process.cwd(), '.env'), path.resolve(process.cwd(), '../.env')],
+      load: [configuration],
+    }),
     MockStoreModule,
     DatabaseModule,
     RedisModule,

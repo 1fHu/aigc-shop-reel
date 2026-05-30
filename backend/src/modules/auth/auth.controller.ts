@@ -66,7 +66,7 @@ export class AuthController {
 
   @HttpCode(200)
   @Post('reset-password')
-  async resetPassword(@Body() body: { token: string; newPassword: string }) {
-    return ok(await this.authService.resetPassword(body.token, body.newPassword));
+  async resetPassword(@Body() body: { email: string; code: string; newPassword: string }) {
+    return ok(await this.authService.resetPassword(body.email, body.code, body.newPassword));
   }
 }

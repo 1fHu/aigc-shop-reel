@@ -201,6 +201,7 @@ export class MockStoreService {
   private readonly refreshTokenStore = new Map<string, string>(); // token → userId
   private readonly resetTokens = new Map<string, { userId: string; expiresAt: number }>();
   private readonly pendingRegistrations = new Map<string, { code: string; expiresAt: number; passwordHash: string; nickname?: string }>();
+  private readonly passwordResetCodes = new Map<string, { code: string; expiresAt: number }>();
 
   constructor() {
     const now = new Date().toISOString();
@@ -680,6 +681,19 @@ export class MockStoreService {
     }
     this.resetTokens.delete(token);
     return entry.userId;
+  }
+
+  // 密码重置验证码
+  storePasswordResetCode(email: string, code: string): void {
+    this.passwordResetCodes.set(email.toLowerCase(), { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+  }
+  consumePasswordResetCode(email: string, code: string): boolean {
+    const entry = this.passwordResetCodes.get(email.toLowerCase());
+    if (!entry) return false;
+    if (Date.now() > entry.expiresAt) { this.passwordResetCodes.delete(email.toLowerCase()); return false; }
+    if (entry.code !== code) return false;
+    this.passwordResetCodes.delete(email.toLowerCase());
+    return true;
   }
 
   // 邮箱验证码（注册流程）

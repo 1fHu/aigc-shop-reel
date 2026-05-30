@@ -27,6 +27,7 @@ export default function Register() {
   const [step, setStep] = useState<'form' | 'verify'>('form');
   const [form, setForm] = useState({ nickname: '', email: '', password: '', confirmPassword: '' });
   const [code, setCode] = useState('');
+  const [retrySec, setRetrySec] = useState(0);
 
   const redirectTo =
     (location.state as { from?: { pathname: string } } | null)?.from?.pathname || '/';
@@ -52,9 +53,12 @@ export default function Register() {
       message.warning('密码至少 8 位，须包含字母与数字');
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      message.warning('请输入有效的邮箱地址');
+      return;
+    }
 
     try {
-      // Step 1: register triggers email verification code
       await api.post('/auth/register', {
         email: form.email,
         password: form.password,
@@ -63,6 +67,9 @@ export default function Register() {
       });
       setStep('verify');
       message.success('验证码已发送至你的邮箱');
+      // 60s 倒计时
+      setRetrySec(60);
+      const timer = setInterval(() => { setRetrySec((s) => { if (s <= 1) { clearInterval(timer); return 0; } return s - 1; }); }, 1000);
     } catch {
       // interceptor already shows error toast
     }
@@ -84,7 +91,7 @@ export default function Register() {
       const { accessToken, refreshToken } = res as any as { accessToken: string; refreshToken: string };
       localStorage.setItem('vidcraft_access_token', accessToken);
       localStorage.setItem('vidcraft_refresh_token', refreshToken);
-      await login({ username: form.email, password: form.password });
+      await login({ username: form.nickname || form.email.split('@')[0], password: form.password });
       message.success('注册成功，欢迎加入 VidCraft');
     } catch {
       message.error('验证码错误或已过期');
@@ -181,8 +188,12 @@ export default function Register() {
               </form>
 
               <p style={{ textAlign: 'center', fontSize: 13, color: '#6B7280', marginTop: 16 }}>
-                没有收到验证码？{' '}
-                <a onClick={() => setStep('form')} style={{ color: '#4648D4', fontWeight: 500, cursor: 'pointer' }}>换个邮箱重试</a>
+                没有收到验证码？
+                {retrySec > 0 ? (
+                  <span style={{ color: '#9CA3AF' }}> {retrySec}s 后可重新发送</span>
+                ) : (
+                  <a onClick={() => { setStep('form'); }} style={{ color: '#4648D4', fontWeight: 500, cursor: 'pointer', marginLeft: 4 }}>点击重新发送</a>
+                )}
               </p>
             </>
           )}
