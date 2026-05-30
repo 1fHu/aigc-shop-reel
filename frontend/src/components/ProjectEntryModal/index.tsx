@@ -43,10 +43,10 @@ interface Entry {
  * 新建项目流程不走此弹框，仍由 NewProjectModal 处理。
  */
 const ENTRIES: Entry[] = [
-  { key: 'materials', title: '素材库',        desc: '管理项目图片 / 视频素材',   icon: <PictureOutlined /> },
-  { key: 'script',    title: '分镜编辑 / 剧本', desc: '编辑分镜脚本与口播文案',     icon: <FileTextOutlined /> },
-  { key: 'style',     title: '风格模板',       desc: '挑选视频风格与模板',         icon: <FireOutlined /> },
-  { key: 'video',     title: 'Video',          desc: '查看 / 生成成片',           icon: <PlayCircleOutlined /> },
+  { key: 'materials', title: '素材库',       desc: '上传商品图，AI 解析卖点',   icon: <PictureOutlined /> },
+  { key: 'style',     title: '风格模板',      desc: '挑选视频风格与爆款模板',     icon: <FireOutlined /> },
+  { key: 'video',     title: '视频创作',      desc: '一键生成带货短视频',         icon: <PlayCircleOutlined /> },
+  { key: 'script',    title: '分镜编辑',      desc: '编辑分镜脚本与配音文案',     icon: <FileTextOutlined /> },
 ];
 
 export default function ProjectEntryModal({ open, project, onClose }: Props) {

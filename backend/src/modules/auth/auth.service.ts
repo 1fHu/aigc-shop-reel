@@ -1,4 +1,5 @@
-import { Injectable, Logger, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcrypt';
 import { MockStoreService, UserRecord } from '../../common/mock-store.service';
