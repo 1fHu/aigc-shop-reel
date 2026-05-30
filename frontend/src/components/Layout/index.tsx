@@ -6,6 +6,7 @@ import {
   FolderOpenOutlined,
   ExperimentOutlined,
   PictureOutlined,
+  PlayCircleOutlined,
   RobotOutlined,
   FireOutlined,
   BarChartOutlined,
@@ -30,16 +31,6 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
 }
-
-const NAV_ITEMS: NavItem[] = [
-  { key: '/',              label: 'Dashboard',        icon: <AppstoreOutlined /> },
-  { key: '/projects',      label: 'Projects',         icon: <FolderOpenOutlined /> },
-  { key: '/script-studio', label: 'ScriptStudio',     icon: <ExperimentOutlined /> },
-  { key: '/materials',     label: 'Material Library', icon: <PictureOutlined /> },
-  { key: '/gene-bank',     label: 'AI Factory',       icon: <RobotOutlined /> },
-  { key: '/viral-library', label: 'Viral Library',    icon: <FireOutlined /> },
-  { key: '/analytics',     label: 'Analytics',        icon: <BarChartOutlined /> },
-];
 
 /**
  * AppLayout
@@ -71,6 +62,19 @@ export default function AppLayout() {
 
   const showGuestBanner = isGuest && !bannerDismissed;
   const showProjectTabs = ['/', '/projects'].includes(location.pathname);
+  const projectMatch = location.pathname.match(/^\/projects\/([^/]+)/);
+  const activeProjectId = projectMatch?.[1];
+
+  const navItems: NavItem[] = [
+    { key: '/',              label: 'Dashboard',        icon: <AppstoreOutlined /> },
+    { key: '/projects',      label: 'Projects',         icon: <FolderOpenOutlined /> },
+    { key: activeProjectId ? `/projects/${activeProjectId}/materials` : '/materials', label: 'Material Library', icon: <PictureOutlined /> },
+    { key: activeProjectId ? `/projects/${activeProjectId}/script` : '/script-studio', label: 'Storyboard Editing', icon: <ExperimentOutlined /> },
+    { key: activeProjectId ? `/projects/${activeProjectId}/video` : '/video-creation', label: 'Video Craft', icon: <PlayCircleOutlined /> },
+    { key: '/gene-bank',     label: 'AI Factory',       icon: <RobotOutlined /> },
+    { key: '/viral-library', label: 'Viral Library',    icon: <FireOutlined /> },
+    { key: '/analytics',     label: 'Analytics',        icon: <BarChartOutlined /> },
+  ];
 
   const handleLogout = async () => {
     await logout();
@@ -114,7 +118,7 @@ export default function AppLayout() {
         </div>
 
         <nav className={styles.nav}>
-          {NAV_ITEMS.map((item) => (
+          {navItems.map((item) => (
             <button
               key={item.key}
               type="button"
