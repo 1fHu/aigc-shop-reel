@@ -3,6 +3,7 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { App } from 'antd';
 import { ArrowLeftOutlined, ReloadOutlined, ShareAltOutlined, DownloadOutlined, CaretRightFilled, ThunderboltOutlined } from '@ant-design/icons';
 import { videoService } from '@/services/videoService';
+import { scriptService } from '@/services/scriptService';
 import type { VideoTask } from '@/types';
 import styles from './VideoCreation.module.css';
 
@@ -55,15 +56,30 @@ export default function VideoCreation() {
     }, POLL_MS);
   };
 
-  // 用户操作触发：提交生成请求 → 开始轮询。busy 防止重复点击 / 重复提交
-  const handleGenerate = () => {
+  // 用户操作触发：解析真实剧本 → 提交生成请求 → 开始轮询。busy 防止重复点击 / 重复提交
+  const handleGenerate = async () => {
     if (busy) return;
     stopPolling();
     setBusy(true);
     setTask(null);
 
     const projectId = pid || 'demo-project';
-    const scriptId = sid || 'demo-script';
+
+    // 解析真实 scriptId：URL 带了就用；否则查该项目最新剧本（避免发无效占位 id 让后端兜底）
+    let scriptId = sid;
+    if (!scriptId && pid) {
+      try {
+        const latest = await scriptService.getLatestByProject(pid);
+        scriptId = latest?.id ?? '';
+      } catch {
+        /* 拦截器已 toast */
+      }
+    }
+    if (!scriptId) {
+      message.warning('请先生成剧本，再生成视频');
+      setBusy(false);
+      return;
+    }
 
     videoService.generate({ project_id: projectId, script_id: scriptId })
       .then((t) => {
