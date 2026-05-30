@@ -58,6 +58,9 @@ export class AuthService {
     if (this.store.getUserByEmail(email)) {
       throw new ConflictException('邮箱已注册');
     }
+    if (nickname && this.store.getUserByNickname(nickname)) {
+      throw new ConflictException('用户名已被使用');
+    }
     const passwordHash = await bcrypt.hash(password, 10);
     const code = String(Math.floor(100000 + Math.random() * 900000));
     this.store.storeVerificationCode(email, code, passwordHash, nickname);
@@ -78,7 +81,9 @@ export class AuthService {
   }
 
   async login(username: string, password: string) {
-    const user = this.store.getUserByNickname(username);
+    // 支持用户名或邮箱登录
+    let user = this.store.getUserByNickname(username);
+    if (!user) user = this.store.getUserByEmail(username);
     if (!user) {
       throw new UnauthorizedException('用户名或密码错误');
     }
