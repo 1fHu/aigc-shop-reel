@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { App } from 'antd';
 import { ArrowLeftOutlined, ReloadOutlined, ShareAltOutlined, DownloadOutlined, CaretRightFilled, ThunderboltOutlined } from '@ant-design/icons';
@@ -26,6 +26,8 @@ export default function VideoCreation() {
   const [task, setTask] = useState<VideoTask | null>(null);
   // busy: 已提交、正在生成/渲染中（从点击触发直到 completed/failed）
   const [busy, setBusy] = useState(false);
+  // checking: 进页面后一次性查「项目是否已有完成视频」，期间显示加载、避免空闲态闪现
+  const [checking, setChecking] = useState(true);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const stopPolling = () => {
@@ -78,6 +80,26 @@ export default function VideoCreation() {
       .catch(() => { setBusy(false); });
   };
 
+  // 进页面：一次性读取该项目「已有的最新视频」。已完成 → 直接进播放态；
+  // 否则保持空闲态（"开始生成"），用户触发生成的路径不受影响。
+  // 注意：这是单次 GET（非自动提交生成），不会重现之前的双调问题。
+  useEffect(() => {
+    let cancelled = false;
+    // checking 初始即 true；所有 setState 都放在异步回调里（避免 effect 体内同步 setState）
+    const load = pid ? videoService.getLatestByProject(pid) : Promise.resolve(null);
+    load
+      .then((existing) => {
+        if (cancelled) return;
+        if (existing && existing.status === 'completed') setTask(existing);
+      })
+      .catch(() => { /* 拦截器已 toast；当作"无已有视频"处理 */ })
+      .finally(() => { if (!cancelled) setChecking(false); });
+    return () => { cancelled = true; };
+  }, [pid]);
+
+  // 卸载时兜底清理轮询，防止离开页面后 setInterval 泄漏
+  useEffect(() => stopPolling, []);
+
   const leave = (to: number | string) => {
     stopPolling();
     if (typeof to === 'number') navigate(to);
@@ -103,8 +125,15 @@ export default function VideoCreation() {
         ) : task ? <span className={styles.tid}>TraceID: {task.render_id}</span> : null}
       </div>
 
+      {/* 进页面读取已有视频中 */}
+      {checking && (
+        <div className={styles.gen}>
+          <p className={styles.genSub}>正在加载项目视频…</p>
+        </div>
+      )}
+
       {/* 空闲态：必须由用户点击触发生成，不自动加载 */}
-      {!busy && !task && (
+      {!checking && !busy && !task && (
         <div className={styles.gen}>
           <p className={styles.genTitle}>准备生成您的带货视频</p>
           <p className={styles.genSub}>点击下方按钮，AI 将根据当前脚本为您生成专属短视频</p>
@@ -136,7 +165,7 @@ export default function VideoCreation() {
         <div className={styles.result}>
           <div className={styles.videoBox}>
             {(() => {
-              const src = task.download_url || task.video_url || (task.preview_url ?? '');
+              const src = task.download_url ?? '';
               return src ? (
                 <video key={src} className={styles.videoEl} src={src} poster={task.cover_url || undefined} controls playsInline />
               ) : (
@@ -148,7 +177,7 @@ export default function VideoCreation() {
           <div className={styles.resultMeta}>
             <span>分辨率 {task.resolution || '1080×1920'}</span>
             <span>·</span>
-            <span>时长 {fmt(task.duration || 0)}</span>
+            <span>画幅 {task.ratio || '9:16'}</span>
           </div>
         </div>
       )}

@@ -115,6 +115,22 @@ export const videoService = {
     return api.get(`/videos/${videoId}/status`).then((raw) => normalizeTask(raw as RawVideoTask));
   },
 
+  /**
+   * 获取某项目「已有的最新视频」（进入视频页时判断是否已生成完成、可直接播放）。
+   *
+   * 端点 `GET /api/videos?project_id=` 后端已实现（见 backend video.controller / API 接口规范文档 M6）：
+   * 返回该项目最新视频任务（已完成则带 download_url/cover_url），项目无视频时返回 null。
+   * 响应形状与 GET /videos/:id/status 一致，故复用 normalizeTask。
+   */
+  getLatestByProject(projectId: string): Promise<VideoTask | null> {
+    return api
+      .get('/videos', { params: { project_id: projectId } })
+      .then((data) => {
+        const raw = data as unknown as RawVideoTask | null;
+        return raw ? normalizeTask(raw) : null;
+      });
+  },
+
   /** 单分镜重新生成 */
   regenerateShot(videoId: string, shotIndex: number): Promise<VideoShot> {
     return api.post(`/videos/${videoId}/shots/${shotIndex}/regenerate`);
