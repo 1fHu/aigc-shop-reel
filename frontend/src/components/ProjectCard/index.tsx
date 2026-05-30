@@ -86,7 +86,7 @@ export default function ProjectCard({
         tabIndex={0}
       >
         {showMenu && (
-          <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
+          <Dropdown menu={{ items: menuItems as any }} trigger={['click']} placement="bottomRight">
             <button
               className={styles.menuBtn}
               onClick={(e) => e.stopPropagation()}

@@ -81,11 +81,10 @@ export default function Register() {
         code,
       });
       // Use the returned tokens to login
-      const { accessToken, refreshToken, user } = res as { accessToken: string; refreshToken: string; user: unknown };
+      const { accessToken, refreshToken } = res as any as { accessToken: string; refreshToken: string };
       localStorage.setItem('vidcraft_access_token', accessToken);
       localStorage.setItem('vidcraft_refresh_token', refreshToken);
-      // Relogin to set store state
-      await login({ email: form.email, password: form.password });
+      await login({ username: form.email, password: form.password });
       message.success('注册成功，欢迎加入 VidCraft');
     } catch {
       message.error('验证码错误或已过期');

@@ -144,7 +144,7 @@ export class VolcanoApiService {
     return 'image/jpeg';
   }
 
-  async analyzeMaterial(input: { fileType: 'image' | 'video'; fileName: string }): Promise<MaterialAnalysisResult> {
+  async analyzeMaterial(_input: { fileType: 'image' | 'video'; fileName: string }): Promise<MaterialAnalysisResult> {
     return { analysis: {}, tags: [], embedding: '[]', duration: null };
   }
 }
