@@ -29,6 +29,25 @@ export class VideoController {
     return ok(this.videoService.getStatus(id));
   }
 
+  // 分镜列表（真实每分镜状态 + 各分镜视频 URL + 剧本内容），供分镜编辑器
+  @UseGuards(AuthGuard('jwt'))
+  @Get(':id/shots')
+  getShots(@Param('id') id: string) {
+    return ok(this.videoService.getShots(id));
+  }
+
+  // 单个分镜片段文件（公开，供 <video> 直接加载；与 :id/file 一致不加鉴权）
+  @Get(':id/shots/:index/file')
+  getShotFile(@Param('id') id: string, @Param('index') index: string, @Res() res: Response) {
+    const filePath = join(process.cwd(), '..', 'uploads', 'videos', `${id}-shot-${index}.mp4`);
+    if (!existsSync(filePath)) {
+      return res.status(404).json({ code: 404, msg: '分镜视频不存在' });
+    }
+    res.setHeader('Content-Type', 'video/mp4');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.sendFile(filePath);
+  }
+
   @UseGuards(AuthGuard('jwt'))
   @Post(':id/shots/:index/regenerate')
   regenerateShot(@Param('id') id: string, @Param('index') index: string, @Body() body: { new_prompt?: string }) {
