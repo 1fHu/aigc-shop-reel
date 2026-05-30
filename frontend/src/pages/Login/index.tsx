@@ -250,7 +250,7 @@ export default function Login() {
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>
-                用户名
+                用户名或邮箱
               </label>
               <Input
                 size="large"
