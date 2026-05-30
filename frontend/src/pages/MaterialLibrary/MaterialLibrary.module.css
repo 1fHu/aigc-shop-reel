@@ -385,6 +385,30 @@
   }
 }
 
+/* FAB — 右下角浮动生成视频按钮 */
+.fab {
+  position: fixed; bottom: 32px; right: 32px; z-index: 30;
+  display: flex; align-items: center; gap: 8px;
+  padding: 14px 24px; border-radius: 16px; border: none;
+  background: linear-gradient(135deg, #8B5CF6, #4648D4, #0EA5E9);
+  color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+  box-shadow: 0 8px 32px rgba(70,72,212,0.4);
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.fab:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(70,72,212,0.55); }
+
+/* 状态角标 */
+.parsingBadge {
+  position: absolute; top: 8px; right: 8px;
+  background: #FEF3C7; color: #92400E; font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+}
+.failedBadge {
+  position: absolute; top: 8px; right: 8px;
+  background: #FEE2E2; color: #991B1B; font-size: 10px; font-weight: 600;
+  padding: 2px 8px; border-radius: 999px;
+}
+
 @media (max-width: 900px) {
   .layout {
     grid-template-columns: 1fr;
