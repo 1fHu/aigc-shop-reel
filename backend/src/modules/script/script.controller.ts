@@ -10,8 +10,8 @@ export class ScriptController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post('generate')
-  generate(@Body() body: { project_id: string; strategy_type: string }, @Res() response: Response) {
-    const script = this.scriptService.generate(body.project_id, body.strategy_type);
+  async generate(@Body() body: { project_id: string; strategy_type: string }, @Res() response: Response) {
+    const script = await this.scriptService.generate(body.project_id, body.strategy_type);
     response.status(200);
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.setHeader('Cache-Control', 'no-cache');
