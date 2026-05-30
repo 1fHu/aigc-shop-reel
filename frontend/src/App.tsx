@@ -8,7 +8,6 @@ import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
 import Projects from './pages/Projects';
-import ProductParse from './pages/ProductParse';
 import MaterialLibrary from './pages/MaterialLibrary';
 import ScriptStudio from './pages/ScriptStudio';
 import VideoCreation from './pages/VideoCreation';
@@ -49,17 +48,15 @@ function App() {
           <Route path="/gene-bank" element={<GeneBank />} />
           <Route path="/viral-library" element={<ViralLibrary />} />
 
-          {/* 项目级页面 —— 顶层入口（sidebar 用） */}
-          <Route path="/product-parse"  element={<ProductParse />} />
+          {/* 项目级页面 —— 顶层入口 */}
+          <Route path="/materials"      element={<MaterialLibrary />} />
           <Route path="/script-studio"  element={<ScriptStudio />} />
           <Route path="/video-creation" element={<VideoCreation />} />
-          <Route path="/materials"      element={<MaterialLibrary />} />
 
-          {/* 项目级页面 —— 项目嵌套（从项目卡点进去用） */}
-          <Route path="/projects/:id/product-parse" element={<ProductParse />} />
-          <Route path="/projects/:id/script"        element={<ScriptStudio />} />
-          <Route path="/projects/:id/video"         element={<VideoCreation />} />
-          <Route path="/projects/:id/materials"     element={<MaterialLibrary />} />
+          {/* 项目内子页：素材库 → 风格模板 → 视频创作 → 分镜编辑 */}
+          <Route path="/projects/:id/materials"    element={<MaterialLibrary />} />
+          <Route path="/projects/:id/script"       element={<ScriptStudio />} />
+          <Route path="/projects/:id/video"        element={<VideoCreation />} />
         </Route>
       </Routes>
     </BrowserRouter>
