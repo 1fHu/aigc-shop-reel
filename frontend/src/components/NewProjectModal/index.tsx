@@ -40,8 +40,8 @@ export default function NewProjectModal({ open, onClose, onCreated }: Props) {
       onCreated?.(project);
       form.resetFields();
       onClose();
-      // 创建后进入商品解析阶段
-      navigate(`/projects/${project.id}/product-parse`);
+      // 创建后进入素材库
+      navigate(`/projects/${project.id}/materials`);
     } catch (err) {
       // 表单校验错误或拦截器已 toast 网络错误
       if (!(err instanceof Error)) return;

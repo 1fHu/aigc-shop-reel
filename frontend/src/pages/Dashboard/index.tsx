@@ -107,7 +107,7 @@ export default function Dashboard() {
         </div>
         <div className={styles.headerActions}>
           <Button icon={<PlusOutlined />} onClick={() => setNewProjectOpen(true)}>新建项目</Button>
-          <Button icon={<CloudUploadOutlined />} onClick={() => navigate('/product-parse')}>上传商品</Button>
+          <Button icon={<CloudUploadOutlined />} onClick={() => setNewProjectOpen(true)}>上传素材</Button>
         </div>
       </div>
 

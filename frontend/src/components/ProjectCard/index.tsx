@@ -81,7 +81,7 @@ export default function ProjectCard({
   return (
     <div
         className={styles.card}
-        onClick={() => (onOpen ? onOpen() : navigate(`/projects/${project.id}/video`))}
+        onClick={() => (onOpen ? onOpen() : navigate(`/projects/${project.id}/materials`))}
         role="button"
         tabIndex={0}
       >

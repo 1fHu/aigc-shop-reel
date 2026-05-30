@@ -51,7 +51,7 @@ export default function Projects() {
   const [entryProject, setEntryProject] = useState<ProjectListItem | null>(null);
 
   // 点击任意「已有项目」→ 弹出工作台入口弹框（素材库/分镜/风格/Video 四入口）。
-  // 仅「新建项目」按钮走原创建流程（NewProjectModal → product-parse），不进此弹框。
+  // 仅「新建项目」按钮走原创建流程（NewProjectModal → materials），不进此弹框。
   const openProject = (p: ProjectListItem) => {
     setEntryProject(p);
   };
