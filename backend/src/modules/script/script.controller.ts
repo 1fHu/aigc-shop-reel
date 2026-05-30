@@ -1,12 +1,19 @@
-import { Body, Controller, Get, Param, Post, Put, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
 import { ScriptService } from './script.service';
 import { ok } from '../../common/api-response';
+import { GetProjectScriptDto } from './dto/get-project-script.dto';
 
 @Controller('api/scripts')
 export class ScriptController {
   constructor(private readonly scriptService: ScriptService) {}
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get()
+  getLatestByProject(@Req() request: { user: { id: string } }, @Query() query: GetProjectScriptDto) {
+    return ok(this.scriptService.getLatestByProject(query.project_id, request.user.id));
+  }
 
   @UseGuards(AuthGuard('jwt'))
   @Post('generate')

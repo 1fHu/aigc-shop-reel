@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button, Skeleton, Tag, App } from 'antd';
-import { RocketOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { RocketOutlined } from '@ant-design/icons';
 import { scriptService } from '@/services/scriptService';
 import type { Scene, ScriptMode } from '@/types';
 import styles from './ScriptStudio.module.css';
@@ -13,9 +13,29 @@ export default function ScriptStudio() {
 
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [scriptId, setScriptId] = useState('');
-  const [loading, setLoading] = useState(false);
+  // loading：进页面后一次性读取「项目已有剧本」，期间显示加载、避免空态闪现
+  const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [mode, setMode] = useState<ScriptMode>('auto');
+
+  // 进页面：若该项目此前已生成过剧本，直接回显（展示分镜列表），否则保持空态等待用户点击生成
+  useEffect(() => {
+    let cancelled = false;
+    const load = projectId
+      ? scriptService.getLatestByProject(projectId)
+      : Promise.resolve(null);
+    load
+      .then((existing) => {
+        if (cancelled) return;
+        if (existing && existing.scenes.length > 0) {
+          setScenes(existing.scenes);
+          setScriptId(existing.id);
+        }
+      })
+      .catch(() => { /* 无已有剧本或读取失败：保持空态 */ })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [projectId]);
 
   const handleGenerate = async () => {
     setScenes([]);
@@ -30,7 +50,7 @@ export default function ScriptStudio() {
           setGenerating(false);
         }
       }
-    } catch (e) {
+    } catch {
       message.error('剧本生成失败');
       setGenerating(false);
     }
@@ -42,6 +62,19 @@ export default function ScriptStudio() {
       : `/video-creation?scriptId=${scriptId}`;
     navigate(target);
   };
+
+  // 初次加载已有剧本中
+  if (loading) {
+    return (
+      <div className={styles.page}>
+        <div className={styles.emptyState}>
+          <h2>剧本工作室</h2>
+          <p>正在加载已有剧本…</p>
+          <Skeleton active paragraph={{ rows: 4 }} style={{ maxWidth: 520, margin: '24px auto 0', textAlign: 'left' }} />
+        </div>
+      </div>
+    );
+  }
 
   if (!scenes.length) {
     return (

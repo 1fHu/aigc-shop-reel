@@ -89,6 +89,7 @@ AIGC 带货视频生成系统
 | **PUT** | **/api/materials/:id/tags** | 更新素材标签 | P1 |
 | **DELETE** | **/api/materials/:id** | 删除素材（软删除） | P2 |
 | **POST** | **/api/scripts/generate** | 生成剧本（SSE 流式输出） | P0 |
+| **GET** | **/api/scripts?project\_id=** | 获取项目最新剧本（进剧本编辑页回显） | P1 |
 | **GET** | **/api/scripts/:id** | 获取剧本详情与分镜列表 | P0 |
 | **PUT** | **/api/scripts/:id/storyboard** | 保存分镜编辑（顺序/内容/时长） | P0 |
 | **POST** | **/api/scripts/:id/regenerate-shot** | 单分镜重新生成 | P1 |
@@ -963,6 +964,42 @@ AIGC 带货视频生成系统
 | --- |
 | v1.2 变更：①事件类型字段从 `event` 改为 `type`（与前端 TypeScript 类型定义对齐）；②新增 `meta` 事件，在流开始时推送 script\_id 和预计分镜数，前端可提前初始化 UI 骨架；③分镜事件从 `shot` 改为 `scene`，payload 统一为完整 Scene 对象。 |
 
+## GET /api/scripts?project_id= 获取项目最新剧本
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+**查询参数**
+
+| **参数** | **类型** | **必填** | **备注** |
+| --- | --- | --- | --- |
+| **project\_id** | String | 是 | 项目 UUID |
+
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data** | Object \| null | 该项目**最新**剧本（按创建时间倒序取第一条）；项目暂无剧本时为 `null` |
+| **data.id** | String | 剧本 UUID |
+| **data.project\_id** | String | 所属项目 UUID |
+| **data.total\_duration** | Number | 总时长（秒） |
+| **data.scenes[]** | Array | 分镜列表，结构与 generate 流式推送的 `scene` 一致（`id`/`index`/`duration`/`thumb_url`/`description`/`camera_motion`/`bgm`/`voiceover`/`subtitle`） |
+
+|  |
+| --- |
+| 用途：前端从项目工作台「分镜编辑 / 剧本」入口进入剧本编辑页时调用，已有剧本则直接回显分镜列表，否则进入「生成剧本」空态。项目不存在返回 404，非本人项目返回 403。 |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 0, "data": { "id": "scrip-001", "project\_id": "proj-001", "total\_duration": 16, "scenes": [ { "id": "scene-0", "index": 0, "duration": 3, "thumb\_url": "https://...", "description": "开场 Hook...", "camera\_motion": "push-in", "bgm": "Modern Beat", "voiceover": "...", "subtitle": "..." } ] }, "traceId": "..." } |
+
+|  |
+| --- |
+| 项目无剧本时：{ "code": 200, "msg": null, "total": 0, "data": null, "traceId": "..." } |
+
 ## GET /api/scripts/:id 获取剧本详情
 
 |  |
@@ -1834,4 +1871,5 @@ socket.io-client 内置自动重连机制。推荐配置：`reconnection: true, 
 | Videos | status 响应增强 | 新增 `render_id`/`resolution`/`cover_url`/`download_url`/`error_message`/`shots[].label` |
 | Videos | 取消端点 | 新增 `POST /api/videos/:id/cancel` |
 | Videos | 项目最新视频 | 新增 `GET /api/videos?project_id=`（取项目最新视频，前端进视频页判断是否可直接播放） |
+| Scripts | 项目最新剧本 | 新增 `GET /api/scripts?project_id=`（取项目最新剧本，前端进剧本编辑页回显已生成分镜）；剧本生成改由导演 Agent 基于商品信息真实生成并持久化 |
 | WebSocket | 协议补充 | 新增连接认证、订阅机制、`video:progress` 聚合事件 |

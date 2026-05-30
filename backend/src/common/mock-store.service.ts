@@ -860,6 +860,14 @@ export class MockStoreService {
     return script ? { ...script, storyboard: script.storyboard.map((shot) => ({ ...shot })), factors: { ...script.factors }, factor_history: script.factor_history.map((entry) => ({ ...entry })) } : undefined;
   }
 
+  /** 取某项目「最新的剧本」（按 created_at 倒序取第一条）；项目无剧本时返回 undefined */
+  getLatestScriptByProject(projectId: string) {
+    const latest = [...this.scripts.values()]
+      .filter((script) => script.project_id === projectId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    return latest ? this.getScript(latest.id) : undefined;
+  }
+
   saveStoryboard(id: string, storyboard: ScriptShot[]) {
     const script = this.scripts.get(id);
     if (!script) {
