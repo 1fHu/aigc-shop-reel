@@ -49,6 +49,11 @@ const initialProjects: ProjectListItem[] = [
 /** 模拟"数据库"，POST / DELETE 直接改这个 */
 const projectsStore: ProjectListItem[] = [...initialProjects];
 
+/** 供其它 mock handler（如 videos）按 id 查项目真实状态用 */
+export function findMockProject(id: string): ProjectListItem | undefined {
+  return projectsStore.find((p) => p.id === id);
+}
+
 /** 给新建项目用的默认封面（picsum 按 id 种子生成稳定图片） */
 function defaultCover(seed: string): string {
   return `https://picsum.photos/seed/${seed}/600/375`;
@@ -109,8 +114,18 @@ export const projectHandlers = [
         { status: 404 },
       );
     }
+    // 详情含各阶段进度计数（对齐后端 GET /api/projects/:id）。
+    // 草稿尚未进入剧本阶段 → script_count=0；其余阶段视为已生成剧本。
+    const detail = {
+      ...item,
+      description: '',
+      product_info: null,
+      material_count: item.status === 'draft' ? 0 : 5,
+      script_count: item.status === 'draft' ? 0 : 1,
+      video_count: item.video_count,
+    };
     return HttpResponse.json({
-      code: 200, msg: null, total: 0, data: item, traceId: `mock-${Date.now()}`,
+      code: 200, msg: null, total: 0, data: detail, traceId: `mock-${Date.now()}`,
     });
   }),
 

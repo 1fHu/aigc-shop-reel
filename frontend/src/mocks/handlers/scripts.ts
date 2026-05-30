@@ -143,6 +143,21 @@ export const scriptHandlers = [
     code: 200, msg: null, total: 0, data: factorLibrary, traceId: `mock-${Date.now()}`,
   })),
 
+  // GET /api/scripts?project_id=  —— 取项目最新剧本（进剧本编辑页回显），无则 data:null
+  http.get('/api/scripts', ({ request }) => {
+    const url = new URL(request.url);
+    const projectId = url.searchParams.get('project_id') || '';
+    const latest = [...scriptsStore.values()]
+      .filter((s) => s.project_id === projectId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    const data = latest
+      ? { id: latest.id, project_id: latest.project_id, total_duration: latest.total_duration, scenes: latest.scenes }
+      : null;
+    return HttpResponse.json({
+      code: 200, msg: null, total: 0, data, traceId: `mock-${Date.now()}`,
+    });
+  }),
+
   // GET /api/scripts/:id
   http.get('/api/scripts/:id', ({ params }) => {
     const script = getOrInitScript(String(params.id));
@@ -242,12 +257,15 @@ export const scriptHandlers = [
         send({ type: 'done', script_id: scriptId });
         controller.close();
 
-        // 同时把新 script 存进 store
+        // 同时把新 script 存进 store（created_at 设为当前，保证"取最新"排序正确）
+        const now = new Date().toISOString();
         scriptsStore.set(scriptId, {
           ...defaultScript,
           id: scriptId,
           project_id: body.project_id || defaultScript.project_id,
           mode: (body.mode as Script['mode']) || 'reference',
+          created_at: now,
+          updated_at: now,
           history: [{
             id: `h-${Date.now()}`,
             timestamp: new Date().toISOString(),

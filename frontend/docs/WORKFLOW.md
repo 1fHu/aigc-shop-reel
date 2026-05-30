@@ -179,11 +179,13 @@ git merge origin/master                                # merge 进来
 ```bash
 cd frontend
 npm run lint        # 必须 0 error
-npm run type-check  # 必须无错
-npm run build       # 必须能产出
+npm run type-check  # ⚠️ 见下，基本空跑，别只信它
+npm run build       # 真正的类型门禁 + 产出，必须过
 ```
 
 任何一项不过都不要 commit。
+
+> ⚠️ **`type-check` 实为空跑**：根 `tsconfig.json` 是 `{ "files": [], "references": [...] }`（project references），`tsc --noEmit` 不会进入子项目，所以 `type-check` 几乎永远 0 报错。**真正的类型检查只发生在 `npm run build`（`tsc -b`）**。判断类型是否健康一律以 `build` 为准。
 
 ### 5.2 文档链接 grep
 

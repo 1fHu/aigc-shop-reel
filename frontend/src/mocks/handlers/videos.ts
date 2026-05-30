@@ -4,6 +4,10 @@ import type {
   VideoShot,
   VideoTask,
 } from '@/types';
+import { findMockProject } from './projects';
+
+/** 可真实播放的示例视频（demo 用），让"已完成项目直接播放"看得到效果 */
+const SAMPLE_MP4 = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4';
 
 /**
  * 视频生成 Mock
@@ -97,6 +101,43 @@ function advanceTask(rec: TaskRecord): VideoTask {
 }
 
 export const videoHandlers = [
+  // GET /api/videos?project_id=  —— 取项目「已有的最新视频」（前端进视频页判断是否可直接播放）
+  // ⚠️ Backend coordination：spec 未定义此端点，前端约定形态见 videoService.getLatestByProject。
+  http.get('/api/videos', ({ request }) => {
+    const url = new URL(request.url);
+    const projectId = url.searchParams.get('project_id') || '';
+    const project = findMockProject(projectId);
+
+    // 仅「已完成」项目才有可播放的成片；其余（草稿/生成中）返回 null → 页面回到空闲态
+    if (!project || project.status !== 'completed') {
+      return HttpResponse.json({
+        code: 200, msg: null, total: 0, data: null, traceId: `mock-${Date.now()}`,
+      });
+    }
+
+    const task: VideoTask = {
+      id: `video-of-${projectId}`,
+      project_id: projectId,
+      script_id: 'demo-script-001',
+      render_id: `VC-${Math.floor(10000 + Math.random() * 90000)}-AIGC`,
+      status: 'completed',
+      progress: 100,
+      estimated_remaining: 0,
+      resolution: '1080×1920 (9:16)',
+      quality: '4K UPSCALED',
+      ratio: '9:16',
+      title: project.name,
+      cover_url: project.cover_url,
+      download_url: SAMPLE_MP4,
+      shots: demoShots.map((s) => ({ ...s, status: 'completed', progress: 100 })),
+      created_at: project.updated_at,
+      completed_at: project.updated_at,
+    };
+    return HttpResponse.json({
+      code: 200, msg: null, total: 0, data: task, traceId: `mock-${Date.now()}`,
+    });
+  }),
+
   // POST /api/videos/generate
   http.post('/api/videos/generate', async ({ request }) => {
     const payload = (await request.json().catch(() => ({}))) as GenerateVideoPayload;

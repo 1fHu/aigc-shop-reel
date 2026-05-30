@@ -13,6 +13,11 @@ interface Props {
   renderProgress?: number;
   showMenu?: boolean;
   onDeleted?: () => void;
+  /**
+   * 自定义点击卡片行为。传入时覆盖默认的「跳转到 /video」。
+   * 项目列表用它对已完成项目弹出工作台入口弹框（ProjectEntryModal）。
+   */
+  onOpen?: () => void;
 }
 
 const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string }> = {
@@ -39,6 +44,7 @@ export default function ProjectCard({
   renderProgress,
   showMenu = true,
   onDeleted,
+  onOpen,
 }: Props) {
   const navigate = useNavigate();
   const { modal } = App.useApp();
@@ -75,7 +81,7 @@ export default function ProjectCard({
   return (
     <div
         className={styles.card}
-        onClick={() => navigate(`/projects/${project.id}/video`)}
+        onClick={() => (onOpen ? onOpen() : navigate(`/projects/${project.id}/video`))}
         role="button"
         tabIndex={0}
       >

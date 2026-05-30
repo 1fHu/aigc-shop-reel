@@ -24,6 +24,11 @@ import GeneBank from './pages/GeneBank';
  *   /projects/:id/...           — 项目内子页（直链用，从项目卡片点进去）
  *   /script-studio etc.         — 顶层快捷入口（sidebar 导航用，?projectId= 可选）
  *
+ * 项目列表点击交互：
+ *   - 点击任意「已有项目」→ 弹出工作台入口弹框 ProjectEntryModal
+ *     （素材库 / 分镜编辑·剧本 / 风格·爆款选择 / Video 四个入口，跳转待实现）
+ *   - 仅「新建项目」按钮走原创建流程（NewProjectModal → /projects/:id/product-parse）
+ *
  * 项目级页面同时支持「项目嵌套」和「顶层带 query」两种 URL，
  * 业务代码统一从 useParams / useSearchParams 取项目 id（后续真接入时再细化）。
  */

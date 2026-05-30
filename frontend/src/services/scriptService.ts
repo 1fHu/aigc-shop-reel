@@ -23,6 +23,17 @@ export const scriptService = {
     return api.get(`/scripts/${scriptId}`);
   },
 
+  /**
+   * 取某项目「已有的最新剧本」（进入剧本编辑页时回显，避免每次回到空态）。
+   * scenes 已是前端分镜形状；项目暂无剧本时返回 null。
+   * 端点 GET /api/scripts?project_id= 见后端 script.controller / API 规范 M5。
+   */
+  getLatestByProject(
+    projectId: string,
+  ): Promise<{ id: string; project_id: string; total_duration: number; scenes: Scene[] } | null> {
+    return api.get('/scripts', { params: { project_id: projectId } });
+  },
+
   /** 保存分镜编辑（顺序 / 内容 / 时长） */
   saveStoryboard(scriptId: string, payload: SaveStoryboardPayload): Promise<{ scenes: Scene[] }> {
     return api.put(`/scripts/${scriptId}/storyboard`, payload);

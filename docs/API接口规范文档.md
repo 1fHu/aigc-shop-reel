@@ -89,13 +89,17 @@ AIGC 带货视频生成系统
 | **PUT** | **/api/materials/:id/tags** | 更新素材标签 | P1 |
 | **DELETE** | **/api/materials/:id** | 删除素材（软删除） | P2 |
 | **POST** | **/api/scripts/generate** | 生成剧本（SSE 流式输出） | P0 |
+| **GET** | **/api/scripts?project\_id=** | 获取项目最新剧本（进剧本编辑页回显） | P1 |
 | **GET** | **/api/scripts/:id** | 获取剧本详情与分镜列表 | P0 |
 | **PUT** | **/api/scripts/:id/storyboard** | 保存分镜编辑（顺序/内容/时长） | P0 |
 | **POST** | **/api/scripts/:id/regenerate-shot** | 单分镜重新生成 | P1 |
 | **POST** | **/api/scripts/:id/replace-factor** | 因子局部替换，触发受影响分镜重生成 | P1 |
 | **GET** | **/api/factors** | 获取因子库（维度 + 可选值列表） | P1 |
 | **POST** | **/api/videos/generate** | 提交一键成片任务 | P0 |
+| **GET** | **/api/videos?project\_id=** | 获取项目最新视频（判断是否可直接播放） | P1 |
 | **GET** | **/api/videos/:id/status** | 获取视频 / 分镜生成状态 | P0 |
+| **GET** | **/api/videos/:id/shots** | 获取各分镜真实状态与片段视频（分镜编辑器用） | P1 |
+| **GET** | **/api/videos/:id/shots/:index/file** | 单个分镜片段视频文件（公开，供 `<video>`） | P1 |
 | **POST** | **/api/videos/:id/shots/:index/regenerate** | 单分镜重新生成 | P0 |
 | **PUT** | **/api/videos/:id/settings** | 更新 TTS 配音 / BGM 设置 | P1 |
 | **GET** | **/api/videos/:id/download** | 获取视频下载临时链接 | P1 |
@@ -962,6 +966,42 @@ AIGC 带货视频生成系统
 | --- |
 | v1.2 变更：①事件类型字段从 `event` 改为 `type`（与前端 TypeScript 类型定义对齐）；②新增 `meta` 事件，在流开始时推送 script\_id 和预计分镜数，前端可提前初始化 UI 骨架；③分镜事件从 `shot` 改为 `scene`，payload 统一为完整 Scene 对象。 |
 
+## GET /api/scripts?project_id= 获取项目最新剧本
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+**查询参数**
+
+| **参数** | **类型** | **必填** | **备注** |
+| --- | --- | --- | --- |
+| **project\_id** | String | 是 | 项目 UUID |
+
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data** | Object \| null | 该项目**最新**剧本（按创建时间倒序取第一条）；项目暂无剧本时为 `null` |
+| **data.id** | String | 剧本 UUID |
+| **data.project\_id** | String | 所属项目 UUID |
+| **data.total\_duration** | Number | 总时长（秒） |
+| **data.scenes[]** | Array | 分镜列表，结构与 generate 流式推送的 `scene` 一致（`id`/`index`/`duration`/`thumb_url`/`description`/`camera_motion`/`bgm`/`voiceover`/`subtitle`） |
+
+|  |
+| --- |
+| 用途：前端从项目工作台「分镜编辑 / 剧本」入口进入剧本编辑页时调用，已有剧本则直接回显分镜列表，否则进入「生成剧本」空态。项目不存在返回 404，非本人项目返回 403。 |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 0, "data": { "id": "scrip-001", "project\_id": "proj-001", "total\_duration": 16, "scenes": [ { "id": "scene-0", "index": 0, "duration": 3, "thumb\_url": "https://...", "description": "开场 Hook...", "camera\_motion": "push-in", "bgm": "Modern Beat", "voiceover": "...", "subtitle": "..." } ] }, "traceId": "..." } |
+
+|  |
+| --- |
+| 项目无剧本时：{ "code": 200, "msg": null, "total": 0, "data": null, "traceId": "..." } |
+
 ## GET /api/scripts/:id 获取剧本详情
 
 |  |
@@ -1147,6 +1187,38 @@ AIGC 带货视频生成系统
 | --- |
 | 配额不足时返回 code: 429，msg: '本月配额已耗尽，请升级套餐'。生成任务并发提交至 BullMQ 队列，每个分镜独立调用 Seedance API（携带 HMAC 签名的 callback\_url + traceId）。 |
 
+## GET /api/videos?project_id= 获取项目最新视频
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+**查询参数**
+
+| **参数** | **类型** | **必填** | **备注** |
+| --- | --- | --- | --- |
+| **project\_id** | String | 是 | 项目 UUID |
+
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data** | Object \| null | 该项目**最新**视频任务（按创建时间倒序取第一条）；项目暂无视频时为 `null`。结构与 `GET /api/videos/:id/status` 的 `data` 完全一致（含 `status`/`progress`/`cover_url`/`download_url`/`shots[]` 等，已完成时 `cover_url`/`download_url` 有值）。 |
+
+|  |
+| --- |
+| 用途：前端从项目列表点击已有项目，进入视频页时调用此接口判断是否已有可直接播放的成片——`status=completed` 则直接进播放态，否则进入「开始生成」空闲态。项目不存在返回 404，非本人项目返回 403。 |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 0, "data": { "video\_id": "vid-001", "status": "completed", "progress": 100, "completed\_shots": 5, "total\_shots": 5, "estimated\_remaining": 0, "render\_id": "VC-00123-AIGC", "resolution": "1080×1920 (9:16)", "cover\_url": "https://...", "download\_url": "https://...", "error\_message": null, "shots": [], "trace\_id": "tr-abc123" }, "traceId": "..." } |
+
+|  |
+| --- |
+| 项目无视频时：{ "code": 200, "msg": null, "total": 0, "data": null, "traceId": "..." } |
+
 ## GET /api/videos/:id/status 获取视频生成状态
 
 |  |
@@ -1244,6 +1316,49 @@ AIGC 带货视频生成系统
 |  |
 | --- |
 | { "code": 200, "msg": null, "total": 0, "data": { "video\_id": "vid-001", "tts": { "language": "zh", "voice": "female\_gentle" }, "bgm": { "preset\_id": "bgm-001", "volume": 0.15 } }, "traceId": "..." } |
+
+## GET /api/videos/:id/shots 获取各分镜状态与片段
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+|  |
+| --- |
+| 视频成片由多个分镜逐个生成（每个分镜一个 Seedance 任务）后合成。此接口返回**每个分镜的真实状态与片段视频**，供分镜编辑器逐镜预览/重生/替换参考图。与 `:id/status`（含时间模拟进度）不同，这里的 `status`/`video_url` 为分镜真实状态。 |
+
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data[]** | Array | 按 `index` 升序的分镜列表 |
+| **data[].index** | Integer | 分镜序号（0-based） |
+| **data[].status** | String | 分镜真实状态：`queued` / `processing` / `completed` / `failed` |
+| **data[].description** | String | 画面描述（来自剧本分镜） |
+| **data[].duration** | Number | 分镜时长（秒） |
+| **data[].camera\_motion** | String | 运镜 |
+| **data[].voiceover** | String | 口播文案 |
+| **data[].subtitle** | String | 字幕 |
+| **data[].video\_url** | String \| null | 该分镜片段视频 URL（完成后为 `/api/videos/:id/shots/:index/file`） |
+| **data[].thumbnail\_url** | String \| null | 分镜缩略图 |
+| **data[].reference\_image\_url** | String \| null | 该分镜的参考图（分镜编辑器可设置；当前生成用商品主图兜底） |
+| **data[].error\_msg** | String \| null | 失败原因（status=failed 时） |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 0, "data": [ { "index": 0, "status": "completed", "description": "开场 Hook...", "duration": 3, "camera\_motion": "push-in", "voiceover": "...", "subtitle": "...", "video\_url": "/api/videos/vid-001/shots/0/file", "thumbnail\_url": null, "reference\_image\_url": null, "error\_msg": null } ], "traceId": "..." } |
+
+## GET /api/videos/:id/shots/:index/file 单个分镜片段文件
+
+|  |
+| --- |
+| **公开端点（无需鉴权）**，供前端 `<video>` 直接加载，与 `:id/file` 一致。 |
+
+**路径参数**：`id`（视频 UUID）、`index`（分镜序号）。
+
+**响应**：`video/mp4` 字节流（支持 `Accept-Ranges`）；文件不存在返回 404。
 
 ## GET /api/videos/:id/download 获取视频下载链接
 
@@ -1800,4 +1915,7 @@ socket.io-client 内置自动重连机制。推荐配置：`reconnection: true, 
 | Videos | status 简化 | 4 值枚举：`queued`/`rendering`/`completed`/`failed` |
 | Videos | status 响应增强 | 新增 `render_id`/`resolution`/`cover_url`/`download_url`/`error_message`/`shots[].label` |
 | Videos | 取消端点 | 新增 `POST /api/videos/:id/cancel` |
+| Videos | 项目最新视频 | 新增 `GET /api/videos?project_id=`（取项目最新视频，前端进视频页判断是否可直接播放） |
+| Videos | 逐分镜生成+合成 | 成片改为按真实剧本逐个分镜生成（每分镜一个 Seedance 任务）后 ffmpeg 合成；新增 `GET /api/videos/:id/shots`（各分镜状态+片段）与 `GET /api/videos/:id/shots/:index/file`（分镜片段文件），为分镜编辑器预留 |
+| Scripts | 项目最新剧本 | 新增 `GET /api/scripts?project_id=`（取项目最新剧本，前端进剧本编辑页回显已生成分镜）；剧本生成改由导演 Agent 基于商品信息真实生成并持久化 |
 | WebSocket | 协议补充 | 新增连接认证、订阅机制、`video:progress` 聚合事件 |
