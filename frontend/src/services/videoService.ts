@@ -125,7 +125,15 @@ export const videoService = {
     return api.put(`/videos/${videoId}/settings`, payload);
   },
 
-  /** 获取视频下载临时链接 */
+  /**
+   * 获取视频下载临时链接
+   *
+   * FIXME(download-url-type): 此处 `raw` 实际是 AxiosResponse，`tsc --noEmit` 通过但
+   * `npm run build` 报错（Property 'url'/'download_url'/'expires_at' does not exist on
+   * AxiosResponse）。需对齐后端 GET /videos/:id/download 响应 shape 后修正类型/解包，
+   * 与其它方法一样改成 `.then((raw) => ...(raw as RawXxx))`。
+   * 已与用户约定：暂缓修复，留待后续统一处理。
+   */
   getDownloadUrl(videoId: string): Promise<{ url: string; download_url?: string; expires_at: string }> {
     return api.get(`/videos/${videoId}/download`).then((raw) => ({
       url: raw?.url || raw?.download_url || '',
