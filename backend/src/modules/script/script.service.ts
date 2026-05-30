@@ -1,14 +1,28 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { MockStoreService } from '../../common/mock-store.service';
+import { DirectorAgentService } from './director-agent.service';
 
 @Injectable()
 export class ScriptService {
   private readonly logger = new Logger(ScriptService.name);
 
-  constructor(private readonly store: MockStoreService) {}
+  constructor(
+    private readonly store: MockStoreService,
+    private readonly director: DirectorAgentService,
+  ) {}
 
-  generate(projectId: string, strategyType: string) {
-    return this.store.createScript(projectId, strategyType);
+  /**
+   * 生成剧本：由导演 Agent 基于项目商品信息 + 创作策略生成多分镜，再落库。
+   * 项目不存在抛 404。
+   */
+  async generate(projectId: string, strategyType: string) {
+    const project = this.store.getProject(projectId);
+    if (!project) {
+      throw new NotFoundException('项目不存在');
+    }
+    const productInfo = (project.product_info ?? {}) as Record<string, unknown>;
+    const storyboard = await this.director.generateStoryboard(productInfo, strategyType);
+    return this.store.createScript(projectId, strategyType, storyboard);
   }
 
   getById(id: string) {
