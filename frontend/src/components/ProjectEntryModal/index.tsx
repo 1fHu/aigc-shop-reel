@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Modal, App } from 'antd';
 import {
   PictureOutlined,
@@ -7,6 +9,7 @@ import {
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 
+import { projectService } from '@/services/projectService';
 import type { ProjectListItem } from '@/types';
 import styles from './ProjectEntryModal.module.css';
 
@@ -31,7 +34,11 @@ interface Entry {
  * 从项目列表点击任意 **已有** 项目时弹出，提供四个子模块入口：
  * 素材库 / 分镜编辑·剧本 / 风格·爆款选择 / Video。
  *
- * 注意：四个入口的跳转功能尚未实现，当前仅完成前端设计（见各 onClick 占位）。
+ * 入口跳转：
+ *   - Video：已完成生成 → 视频播放页；否则提示「视频还未生成」。
+ *   - 分镜编辑 / 剧本：拉项目详情，script_count>0 → 剧本编辑页；否则提示「尚未完成」。
+ *   - 风格 / 爆款选择：跳到商品信息上传/解析页（product-parse）。
+ *   - 素材库：跳转尚未实现，先占位提示。
  * 右上角 X（Modal 内置 close）关闭弹框即返回项目列表。
  * 新建项目流程不走此弹框，仍由 NewProjectModal 处理。
  */
@@ -43,13 +50,54 @@ const ENTRIES: Entry[] = [
 ];
 
 export default function ProjectEntryModal({ open, project, onClose }: Props) {
+  const navigate = useNavigate();
   const { message } = App.useApp();
+  // pending：分镜/剧本入口需先拉项目详情判断，期间禁用按钮防重复点击
+  const [pending, setPending] = useState(false);
 
-  // TODO(project-entry): 四个入口的跳转尚未实现，先占位。后续按 key 路由：
-  //   materials → /projects/:id/materials，script → /projects/:id/script，
-  //   video → /projects/:id/video，style → 风格/爆款选择页（待定）。
-  const handleEntry = (entry: Entry) => {
-    message.info(`「${entry.title}」功能开发中`);
+  const handleEntry = async (entry: Entry) => {
+    if (!project || pending) return;
+    const pid = project.id;
+
+    switch (entry.key) {
+      // Video：已完成生成 → 播放页；否则提示未生成
+      case 'video':
+        if (project.status === 'completed') {
+          onClose();
+          navigate(`/projects/${pid}/video`);
+        } else {
+          message.warning('视频还未生成');
+        }
+        return;
+
+      // 风格 / 爆款选择 → 商品信息上传/解析页
+      case 'style':
+        onClose();
+        navigate(`/projects/${pid}/product-parse`);
+        return;
+
+      // 分镜编辑 / 剧本：拉详情看 script_count，已生成 → 剧本编辑页；否则提示未完成
+      case 'script':
+        setPending(true);
+        try {
+          const detail = await projectService.detail(pid);
+          if ((detail.script_count ?? 0) > 0) {
+            onClose();
+            navigate(`/projects/${pid}/script`);
+          } else {
+            message.warning('分镜 / 剧本尚未完成');
+          }
+        } catch {
+          /* 拦截器已 toast */
+        } finally {
+          setPending(false);
+        }
+        return;
+
+      // 其余入口（素材库）跳转尚未实现，先占位
+      default:
+        message.info(`「${entry.title}」功能开发中`);
+    }
   };
 
   return (
@@ -68,6 +116,7 @@ export default function ProjectEntryModal({ open, project, onClose }: Props) {
             key={entry.key}
             type="button"
             className={styles.entry}
+            disabled={pending}
             onClick={() => handleEntry(entry)}
           >
             <span className={styles.entryIcon}>{entry.icon}</span>

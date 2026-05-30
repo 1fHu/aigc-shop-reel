@@ -48,7 +48,18 @@ export default function ProductParse() {
       if (projectId) {
         try {
           await projectService.detail(projectId);
-          if (!cancelled) setEffectiveProjectId(projectId);
+          if (cancelled) return;
+          setEffectiveProjectId(projectId);
+          // 回显：该项目此前若已录入过商品信息，直接进结果态展示，避免每次回到空白输入页
+          try {
+            const existing = await productService.get(projectId);
+            if (!cancelled && existing && existing.name) {
+              setProduct(existing);
+              setStep(3);
+            }
+          } catch {
+            /* 无已存商品或读取失败：保持 Step 1 输入态 */
+          }
         } catch {
           message.error('项目不存在，请先创建项目');
           navigate('/projects', { replace: true });

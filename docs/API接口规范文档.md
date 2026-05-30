@@ -95,6 +95,7 @@ AIGC 带货视频生成系统
 | **POST** | **/api/scripts/:id/replace-factor** | 因子局部替换，触发受影响分镜重生成 | P1 |
 | **GET** | **/api/factors** | 获取因子库（维度 + 可选值列表） | P1 |
 | **POST** | **/api/videos/generate** | 提交一键成片任务 | P0 |
+| **GET** | **/api/videos?project\_id=** | 获取项目最新视频（判断是否可直接播放） | P1 |
 | **GET** | **/api/videos/:id/status** | 获取视频 / 分镜生成状态 | P0 |
 | **POST** | **/api/videos/:id/shots/:index/regenerate** | 单分镜重新生成 | P0 |
 | **PUT** | **/api/videos/:id/settings** | 更新 TTS 配音 / BGM 设置 | P1 |
@@ -1147,6 +1148,38 @@ AIGC 带货视频生成系统
 | --- |
 | 配额不足时返回 code: 429，msg: '本月配额已耗尽，请升级套餐'。生成任务并发提交至 BullMQ 队列，每个分镜独立调用 Seedance API（携带 HMAC 签名的 callback\_url + traceId）。 |
 
+## GET /api/videos?project_id= 获取项目最新视频
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+**查询参数**
+
+| **参数** | **类型** | **必填** | **备注** |
+| --- | --- | --- | --- |
+| **project\_id** | String | 是 | 项目 UUID |
+
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data** | Object \| null | 该项目**最新**视频任务（按创建时间倒序取第一条）；项目暂无视频时为 `null`。结构与 `GET /api/videos/:id/status` 的 `data` 完全一致（含 `status`/`progress`/`cover_url`/`download_url`/`shots[]` 等，已完成时 `cover_url`/`download_url` 有值）。 |
+
+|  |
+| --- |
+| 用途：前端从项目列表点击已有项目，进入视频页时调用此接口判断是否已有可直接播放的成片——`status=completed` 则直接进播放态，否则进入「开始生成」空闲态。项目不存在返回 404，非本人项目返回 403。 |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 0, "data": { "video\_id": "vid-001", "status": "completed", "progress": 100, "completed\_shots": 5, "total\_shots": 5, "estimated\_remaining": 0, "render\_id": "VC-00123-AIGC", "resolution": "1080×1920 (9:16)", "cover\_url": "https://...", "download\_url": "https://...", "error\_message": null, "shots": [], "trace\_id": "tr-abc123" }, "traceId": "..." } |
+
+|  |
+| --- |
+| 项目无视频时：{ "code": 200, "msg": null, "total": 0, "data": null, "traceId": "..." } |
+
 ## GET /api/videos/:id/status 获取视频生成状态
 
 |  |
@@ -1800,4 +1833,5 @@ socket.io-client 内置自动重连机制。推荐配置：`reconnection: true, 
 | Videos | status 简化 | 4 值枚举：`queued`/`rendering`/`completed`/`failed` |
 | Videos | status 响应增强 | 新增 `render_id`/`resolution`/`cover_url`/`download_url`/`error_message`/`shots[].label` |
 | Videos | 取消端点 | 新增 `POST /api/videos/:id/cancel` |
+| Videos | 项目最新视频 | 新增 `GET /api/videos?project_id=`（取项目最新视频，前端进视频页判断是否可直接播放） |
 | WebSocket | 协议补充 | 新增连接认证、订阅机制、`video:progress` 聚合事件 |

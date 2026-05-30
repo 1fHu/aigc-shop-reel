@@ -1,14 +1,21 @@
-import { Body, Controller, Get, Param, Post, Put, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Req, Res, UseGuards } from '@nestjs/common';
 import { Response } from 'express';
 import { join } from 'path';
 import { existsSync } from 'fs';
 import { AuthGuard } from '@nestjs/passport';
 import { VideoService } from './video.service';
 import { ok } from '../../common/api-response';
+import { GetProjectVideoDto } from './dto/get-project-video.dto';
 
 @Controller('api/videos')
 export class VideoController {
   constructor(private readonly videoService: VideoService) {}
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get()
+  getLatestByProject(@Req() request: { user: { id: string } }, @Query() query: GetProjectVideoDto) {
+    return ok(this.videoService.getLatestByProject(query.project_id, request.user.id));
+  }
 
   @UseGuards(AuthGuard('jwt'))
   @Post('generate')

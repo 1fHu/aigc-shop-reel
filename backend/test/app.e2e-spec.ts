@@ -64,6 +64,48 @@ describe('AppController (e2e)', () => {
     expect(productConfirm.body.data.status).toBe('material_pending');
   });
 
+  it('latest video by project flow', async () => {
+    const guestLogin = await request(app.getHttpServer()).post('/api/auth/guest-login');
+    const accessToken = guestLogin.body.data.accessToken as string;
+
+    const projectCreate = await request(app.getHttpServer())
+      .post('/api/projects')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ name: '视频回看项目', description: 'e2e' });
+    const projectId = projectCreate.body.data.id as string;
+
+    // 新项目暂无视频 → data 为 null（前端据此进入"开始生成"空闲态）
+    const before = await request(app.getHttpServer())
+      .get('/api/videos')
+      .query({ project_id: projectId })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(before.body.code).toBe(200);
+    expect(before.body.data).toBeNull();
+
+    // 提交一次生成后 → data 返回该项目最新视频任务
+    await request(app.getHttpServer())
+      .post('/api/videos/generate')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ project_id: projectId, script_id: 'demo-script' });
+
+    const after = await request(app.getHttpServer())
+      .get('/api/videos')
+      .query({ project_id: projectId })
+      .set('Authorization', `Bearer ${accessToken}`)
+      .expect(200);
+    expect(after.body.code).toBe(200);
+    expect(after.body.data).not.toBeNull();
+    expect(typeof after.body.data.video_id).toBe('string');
+
+    // 不存在的项目 → 404
+    const missing = await request(app.getHttpServer())
+      .get('/api/videos')
+      .query({ project_id: '00000000-0000-0000-0000-0000000000ff' })
+      .set('Authorization', `Bearer ${accessToken}`);
+    expect(missing.body.code).toBe(404);
+  });
+
   it('material upload and list flow', async () => {
     const guestLogin = await request(app.getHttpServer()).post('/api/auth/guest-login');
     const accessToken = guestLogin.body.data.accessToken as string;

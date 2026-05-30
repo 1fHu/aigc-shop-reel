@@ -1,4 +1,4 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { pipeline } from 'stream/promises';
@@ -98,6 +98,17 @@ export class VideoService {
     const s = this.store.getVideoStatus(id);
     if (!s) throw new NotFoundException('视频不存在');
     return s;
+  }
+
+  /**
+   * 取某项目「已有的最新视频」（前端进视频页判断是否可直接播放）。
+   * 项目不存在 → 404；非本人项目 → 403；项目暂无视频 → 返回 null。
+   */
+  getLatestByProject(projectId: string, userId: string) {
+    const project = this.store.getProject(projectId);
+    if (!project) throw new NotFoundException('项目不存在');
+    if (project.user_id !== userId) throw new ForbiddenException('无权访问该项目');
+    return this.store.getLatestVideoByProject(projectId) ?? null;
   }
 
   regenerateShot(id: string, index: number, newPrompt?: string) {

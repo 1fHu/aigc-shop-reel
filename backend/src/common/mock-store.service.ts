@@ -1070,6 +1070,18 @@ export class MockStoreService {
     };
   }
 
+  /**
+   * 取某项目「最新的视频任务状态」（按 created_at 倒序取第一条）。
+   * 复用 getVideoStatus 的响应形状，已完成则带 cover_url/download_url；项目无视频时返回 undefined。
+   */
+  getLatestVideoByProject(projectId: string) {
+    const latest = [...this.videos.values()]
+      .filter((video) => video.project_id === projectId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    if (!latest) return undefined;
+    return this.getVideoStatus(latest.id);
+  }
+
   regenerateVideoShot(videoId: string, index: number, newPrompt?: string) {
     const task = [...this.videoTasks.values()].find((entry) => entry.video_id === videoId && entry.shot_index === index);
     if (!task) {
