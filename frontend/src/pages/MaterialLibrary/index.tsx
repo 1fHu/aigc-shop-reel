@@ -145,19 +145,6 @@ export default function MaterialLibrary() {
       <div className={styles.layout}>
         <aside className={styles.sidebar}>
           <div className={styles.filterGroup}>
-            <div className={styles.sectionLabel}>资源类型</div>
-            <label className={styles.filterOption}>
-              <input type="checkbox" defaultChecked /> 实拍视频 <span>14</span>
-            </label>
-            <label className={styles.filterOption}>
-              <input type="checkbox" /> AI 生成 <span>28</span>
-            </label>
-            <label className={styles.filterOption}>
-              <input type="checkbox" /> 产品图像 <span>12</span>
-            </label>
-          </div>
-
-          <div className={styles.filterGroup}>
             <div className={styles.sectionLabel}>上传时间</div>
             <label className={styles.filterOption}>
               <input type="radio" name="time" defaultChecked /> 最近 7 天

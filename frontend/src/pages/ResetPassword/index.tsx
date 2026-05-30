@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Button, Input, App } from 'antd';
 import {
   ThunderboltFilled,
@@ -15,7 +15,6 @@ import styles from './ResetPassword.module.css';
 
 export default function ResetPassword() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { message } = App.useApp();
 
   const token = searchParams.get('token') || '';

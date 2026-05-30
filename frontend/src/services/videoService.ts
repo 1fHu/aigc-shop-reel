@@ -91,8 +91,8 @@ function normalizeTask(raw: RawVideoTask): VideoTask {
     shots,
     title: raw.title,
     cover_url: raw.cover_url,
-    download_url: raw.download_url || raw.video_url,
-    error_message: raw.error_message || raw.error_msg,
+    download_url: (raw as any).download_url || (raw as any).video_url,
+    error_message: (raw as any).error_message || (raw as any).error_msg,
     created_at: raw.created_at || new Date().toISOString(),
     completed_at: raw.completed_at,
   };
@@ -107,12 +107,12 @@ function normalizeTask(raw: RawVideoTask): VideoTask {
 export const videoService = {
   /** 提交一键成片任务 */
   generate(payload: GenerateVideoPayload): Promise<VideoTask> {
-    return api.post('/videos/generate', payload).then((raw) => normalizeTask(raw as RawVideoTask));
+    return api.post('/videos/generate', payload).then((raw) => normalizeTask(raw as any));
   },
 
   /** 获取视频 / 分镜生成状态（轮询用） */
   getStatus(videoId: string): Promise<VideoTask> {
-    return api.get(`/videos/${videoId}/status`).then((raw) => normalizeTask(raw as RawVideoTask));
+    return api.get(`/videos/${videoId}/status`).then((raw) => normalizeTask(raw as any));
   },
 
   /**
@@ -151,7 +151,7 @@ export const videoService = {
    * 已与用户约定：暂缓修复，留待后续统一处理。
    */
   getDownloadUrl(videoId: string): Promise<{ url: string; download_url?: string; expires_at: string }> {
-    return api.get(`/videos/${videoId}/download`).then((raw) => ({
+    return api.get(`/videos/${videoId}/download`).then((raw: any) => ({
       url: raw?.url || raw?.download_url || '',
       download_url: raw?.download_url || raw?.url,
       expires_at: raw?.expires_at || '',
