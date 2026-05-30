@@ -2,7 +2,7 @@ import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nest
 import { createWriteStream, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { pipeline } from 'stream/promises';
-import { MockStoreService } from '../../common/mock-store.service';
+import { MockStoreService, ScriptShot } from '../../common/mock-store.service';
 import { VolcanoApiService } from '../volcano/volcano-api.service';
 
 const VIDEO_DIR = join(process.cwd(), '..', 'uploads', 'videos');
@@ -17,50 +17,78 @@ export class VideoService {
   ) {}
 
   generate(projectId: string, scriptId: string) {
+    // 解析真实剧本：优先用传入的 scriptId；无效（不存在/无分镜）则回退到项目最新剧本。
+    // 这样视频脚本严格来自「前一步 ScriptStudio 生成的剧本」，而非临时由商品信息重编。
+    let script = this.store.getScript(scriptId);
+    if (!script || !script.storyboard?.length) {
+      const latest = this.store.getLatestScriptByProject(projectId);
+      if (latest) {
+        script = latest;
+        scriptId = latest.id;
+      }
+    }
+
     const video = this.store.createVideo(projectId, scriptId);
-    const script = this.store.getScript(scriptId);
     const project = this.store.getProject(projectId);
 
     const productInfo = (project?.product_info || {}) as Record<string, unknown>;
     const productName = (productInfo.name as string) || '商品';
     const coverUrl = (project?.cover_url || (productInfo as any).cover_url || '') as string;
 
-    // 后台异步：AI 生成分镜 → 提交 Seedance
-    this.buildPromptAndSubmit(video.id, script, productName, productInfo, coverUrl);
+    // 后台异步：基于真实剧本分镜 → 提交 Seedance
+    this.buildPromptAndSubmit(video.id, script, productName, coverUrl);
 
     return { video_id: video.id, trace_id: video.trace_id, task_count: 1, status: video.status };
   }
 
+  /**
+   * 第一步：只生成「单个分镜」的视频。
+   * 取剧本的第一个分镜，用其真实内容（画面/口播/字幕/运镜）构建 prompt 提交 Seedance。
+   * 后续步骤会扩展为遍历全部分镜并合成成片。
+   */
   private async buildPromptAndSubmit(
     videoId: string,
     script: ReturnType<MockStoreService['getScript']>,
     productName: string,
-    productInfo: Record<string, unknown>,
     coverUrl: string,
   ) {
-    // 1. AI 生成真实分镜描述
-    const shotDescriptions = await this.volcano.generateShotScript(productInfo);
-    const sceneDesc = shotDescriptions.length > 0
-      ? shotDescriptions.join('；')
-      : (script?.storyboard || []).map((s: { description: string }) => s.description).join('；');
+    const storyboard = (script?.storyboard ?? []) as ScriptShot[];
+    if (storyboard.length === 0) {
+      this.logger.warn(`Video ${videoId}: 关联剧本无分镜，无法生成视频`);
+      this.store.updateVideo(videoId, { status: 'failed' });
+      return;
+    }
 
-    // 2. 构建 prompt（商品信息 + AI 分镜 + 商品图）
-    const prompt = `为TikTok电商带货生成一条15秒以内的竖屏短视频（9:16比例）。商品：${productName}。分镜脚本：${sceneDesc}。要求：画面精美、节奏紧凑、适合社交媒体传播，开头3秒内抓住用户注意力，结尾有明确的行动号召。中文配音，中文字幕风格。`;
+    const shot = storyboard[0];
+    const prompt = this.buildShotPrompt(shot, productName);
+    this.logger.log(`Video ${videoId} 分镜#${shot.index} prompt: ${prompt.slice(0, 150)}...`);
 
-    this.logger.log(`Video ${videoId} prompt: ${prompt.slice(0, 150)}...`);
-
-    // 3. 提交 Seedance（只传真实图片 URL，过滤占位图）
+    // 提交 Seedance（只传真实图片 URL，过滤占位图）
     const realCover = coverUrl && !coverUrl.includes('placehold.co') ? coverUrl : undefined;
     const result = await this.volcano.generateVideo(prompt, realCover);
     if (result) {
       this.store.updateVideo(videoId, { trace_id: result.taskId, status: 'generating' });
-      this.poll(videoId, result.taskId);
+      this.poll(videoId, shot.index, result.taskId);
     } else {
       this.store.updateVideo(videoId, { status: 'completed', video_url: 'https://placehold.co/1080x1920/0B1C30/fff?text=VidCraft' });
     }
   }
 
-  private poll(videoId: string, taskId: string) {
+  /** 用单个分镜的真实剧本内容构建 Seedance 视频 prompt */
+  private buildShotPrompt(shot: ScriptShot, productName: string): string {
+    const parts = [
+      `为TikTok电商带货生成一个约${shot.duration || 3}秒的竖屏短视频分镜（9:16比例）。`,
+      `商品：${productName}。`,
+      `画面内容：${shot.description}。`,
+    ];
+    if (shot.voiceover) parts.push(`口播文案：${shot.voiceover}。`);
+    if (shot.subtitle) parts.push(`字幕：${shot.subtitle}。`);
+    if (shot.camera_motion) parts.push(`运镜：${shot.camera_motion}。`);
+    parts.push('要求：画面精美、节奏紧凑、适合社交媒体传播，中文配音与中文字幕风格。');
+    return parts.join('');
+  }
+
+  private poll(videoId: string, shotIndex: number, taskId: string) {
     const interval = setInterval(async () => {
       const r = await this.volcano.getVideoTaskStatus(taskId);
       if (!r) return;
@@ -68,12 +96,20 @@ export class VideoService {
         clearInterval(interval);
         const localUrl = await this.downloadVideo(videoId, r.videoUrl);
         this.store.updateVideo(videoId, { status: 'completed', video_url: localUrl, generation_cost: 0 });
-        this.logger.log(`Video ${videoId} done, local: ${localUrl}`);
+        this.markShotTask(videoId, shotIndex, { status: 'completed', preview_url: localUrl });
+        this.logger.log(`Video ${videoId} 分镜#${shotIndex} done, local: ${localUrl}`);
       } else if (r.status === 'failed') {
         clearInterval(interval);
         this.store.updateVideo(videoId, { status: 'failed' });
+        this.markShotTask(videoId, shotIndex, { status: 'failed', error_msg: '分镜生成失败' });
       }
     }, 5000);
+  }
+
+  /** 把分镜生成结果写回对应的分镜 task（为后续多分镜成片铺垫） */
+  private markShotTask(videoId: string, shotIndex: number, patch: { status: 'completed' | 'failed'; preview_url?: string; error_msg?: string }) {
+    const task = this.store.getVideoTasks(videoId).find((t) => t.shot_index === shotIndex);
+    if (task) this.store.updateVideoTask(task.id, patch);
   }
 
   private async downloadVideo(videoId: string, remoteUrl?: string): Promise<string> {
