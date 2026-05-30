@@ -61,7 +61,8 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, 10);
     const code = String(Math.floor(100000 + Math.random() * 900000));
     this.store.storeVerificationCode(email, code, passwordHash, nickname);
-    await this.emailService.sendVerificationCode(email, code);
+    // 邮件发送非阻塞，失败也允许继续（开发环境终端可见验证码）
+    this.emailService.sendVerificationCode(email, code);
     return { verifyPending: true, email };
   }
 
@@ -151,25 +152,24 @@ export class AuthService {
 
   async forgotPassword(email: string) {
     const user = this.store.getUserByEmail(email);
-    // 安全：无论用户是否存在都返回成功，防止邮箱枚举
-    if (!user) {
-      return { sent: true };
-    }
-    const token = this.store.issueResetToken(user.id);
-    await this.emailService.sendPasswordReset(email, token);
+    if (!user) return { sent: true };
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    this.store.storePasswordResetCode(email, code);
+    await this.emailService.sendPasswordResetCode(email, code);
     return { sent: true };
   }
 
-  async resetPassword(token: string, newPassword: string) {
-    const userId = this.store.consumeResetToken(token);
-    if (!userId) {
-      throw new BadRequestException('重置链接已失效或无效，请重新申请');
+  async resetPassword(email: string, code: string, newPassword: string) {
+    if (!this.store.consumePasswordResetCode(email, code)) {
+      throw new BadRequestException('验证码错误或已过期');
     }
     if (!newPassword || newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
       throw new BadRequestException('密码至少 8 位，须包含字母与数字');
     }
+    const user = this.store.getUserByEmail(email);
+    if (!user) throw new BadRequestException('用户不存在');
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    this.store.updateUser(userId, { password_hash: passwordHash } as any);
+    this.store.updateUser(user.id, { password_hash: passwordHash } as any);
     return { reset: true };
   }
 }
