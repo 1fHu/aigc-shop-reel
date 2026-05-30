@@ -68,7 +68,7 @@ type MaterialRecord = {
   created_at: string;
 };
 
-type ScriptShot = {
+export type ScriptShot = {
   index: number;
   description: string;
   camera_motion: string;
@@ -815,20 +815,25 @@ export class MockStoreService {
     return results;
   }
 
-  createScript(projectId: string, strategyType: string) {
+  createScript(projectId: string, strategyType: string, storyboard?: ScriptShot[]) {
     const now = new Date().toISOString();
+    // 优先用传入的（导演 Agent 生成的）分镜；缺省时退回内置示例，保证向后兼容
+    const shots: ScriptShot[] = (storyboard && storyboard.length > 0)
+      ? storyboard.map((shot, index) => ({ ...shot, index, reference_image_url: shot.reference_image_url ?? null }))
+      : [
+          { index: 0, description: '开场 Hook：痛点提问', camera_motion: 'push-in', duration: 3, voiceover: '你还在为...', subtitle: '拒绝油腻感', reference_image_url: null },
+          { index: 1, description: '产品外观 + 卖点特写', camera_motion: 'static', duration: 3, voiceover: '这款防晒的重点是...', subtitle: '轻薄不油腻', reference_image_url: null },
+          { index: 2, description: '使用场景演示', camera_motion: 'tracking', duration: 3, voiceover: '户外也能清爽自在', subtitle: '全天候防护', reference_image_url: null },
+          { index: 3, description: '质地/成分细节展示', camera_motion: 'push-in', duration: 3, voiceover: '成分温和，敏感肌适用', subtitle: '温和不刺激', reference_image_url: null },
+          { index: 4, description: '行动号召 CTA', camera_motion: 'static', duration: 3, voiceover: '现在下单立享优惠', subtitle: '立即下单', reference_image_url: null },
+        ];
+    const totalDuration = shots.reduce((sum, shot) => sum + (shot.duration || 0), 0);
     const script: ScriptRecord = {
       id: randomUUID(),
       project_id: projectId,
       strategy_type: strategyType,
       content: '基于商品信息生成的示例剧本',
-      storyboard: [
-        { index: 0, description: '开场 Hook：痛点提问', camera_motion: 'push-in', duration: 3, voiceover: '你还在为...', subtitle: '拒绝油腻感', reference_image_url: null },
-        { index: 1, description: '产品外观 + 卖点特写', camera_motion: 'static', duration: 3, voiceover: '这款防晒的重点是...', subtitle: '轻薄不油腻', reference_image_url: null },
-        { index: 2, description: '使用场景演示', camera_motion: 'tracking', duration: 3, voiceover: '户外也能清爽自在', subtitle: '全天候防护', reference_image_url: null },
-        { index: 3, description: '质地/成分细节展示', camera_motion: 'push-in', duration: 3, voiceover: '成分温和，敏感肌适用', subtitle: '温和不刺激', reference_image_url: null },
-        { index: 4, description: '行动号召 CTA', camera_motion: 'static', duration: 3, voiceover: '现在下单立享优惠', subtitle: '立即下单', reference_image_url: null },
-      ],
+      storyboard: shots,
       factors: {
         visual_style: '轻奢质感风',
         hook_type: '问题式Hook',
@@ -838,7 +843,7 @@ export class MockStoreService {
       },
       factor_history: [],
       status: 'completed',
-      total_duration: 15,
+      total_duration: totalDuration,
       created_at: now,
       updated_at: now,
     };
@@ -853,6 +858,14 @@ export class MockStoreService {
   getScript(id: string) {
     const script = this.scripts.get(id);
     return script ? { ...script, storyboard: script.storyboard.map((shot) => ({ ...shot })), factors: { ...script.factors }, factor_history: script.factor_history.map((entry) => ({ ...entry })) } : undefined;
+  }
+
+  /** 取某项目「最新的剧本」（按 created_at 倒序取第一条）；项目无剧本时返回 undefined */
+  getLatestScriptByProject(projectId: string) {
+    const latest = [...this.scripts.values()]
+      .filter((script) => script.project_id === projectId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    return latest ? this.getScript(latest.id) : undefined;
   }
 
   saveStoryboard(id: string, storyboard: ScriptShot[]) {
@@ -1068,6 +1081,18 @@ export class MockStoreService {
       shots,
       trace_id: video.trace_id,
     };
+  }
+
+  /**
+   * 取某项目「最新的视频任务状态」（按 created_at 倒序取第一条）。
+   * 复用 getVideoStatus 的响应形状，已完成则带 cover_url/download_url；项目无视频时返回 undefined。
+   */
+  getLatestVideoByProject(projectId: string) {
+    const latest = [...this.videos.values()]
+      .filter((video) => video.project_id === projectId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    if (!latest) return undefined;
+    return this.getVideoStatus(latest.id);
   }
 
   regenerateVideoShot(videoId: string, index: number, newPrompt?: string) {

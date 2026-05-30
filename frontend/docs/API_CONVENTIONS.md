@@ -302,6 +302,7 @@ VITE_USE_MOCK=true   # 前端 mock，后端没起也能跑
 
 ### Videos（M6）
 - `POST /api/videos/generate` — 提交一键成片
+- `GET /api/videos?project_id=` — 取项目最新视频（⚠️ 待后端确认；前端 mock 兜底，已完成返回带 `download_url`/`cover_url` 的 task，无则 `null`。用于进视频页判断是否可直接播放）
 - `GET /api/videos/:id/status` — 查任务状态（轮询 / WebSocket）
 - `POST /api/videos/:id/shots/:index/regenerate` — 单镜头重生
 - `PUT /api/videos/:id/settings` — TTS/BGM 配置
