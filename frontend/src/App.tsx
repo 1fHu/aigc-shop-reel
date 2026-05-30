@@ -48,12 +48,7 @@ function App() {
           <Route path="/gene-bank" element={<GeneBank />} />
           <Route path="/viral-library" element={<ViralLibrary />} />
 
-          {/* 项目级页面 —— 顶层入口 */}
-          <Route path="/materials"      element={<MaterialLibrary />} />
-          <Route path="/script-studio"  element={<ScriptStudio />} />
-          <Route path="/video-creation" element={<VideoCreation />} />
-
-          {/* 项目内子页：素材库 → 风格模板 → 视频创作 → 分镜编辑 */}
+          {/* 项目内子页：素材库 → 分镜编辑 → 视频创作 */}
           <Route path="/projects/:id/materials"    element={<MaterialLibrary />} />
           <Route path="/projects/:id/script"       element={<ScriptStudio />} />
           <Route path="/projects/:id/video"        element={<VideoCreation />} />

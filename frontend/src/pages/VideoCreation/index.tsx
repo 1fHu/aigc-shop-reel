@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { App } from 'antd';
+import { Tag, App } from 'antd';
 import { ArrowLeftOutlined, ReloadOutlined, ShareAltOutlined, DownloadOutlined, CaretRightFilled, ThunderboltOutlined } from '@ant-design/icons';
 import { videoService } from '@/services/videoService';
 import { scriptService } from '@/services/scriptService';
-import type { VideoTask } from '@/types';
+import type { VideoShotStatus, VideoTask } from '@/types';
 import styles from './VideoCreation.module.css';
 
 const POLL_MS = 1500;
 // 轮询安全上限：约 10 分钟，避免离开页面（浏览器后退手势）后 setInterval 永久泄漏
 const MAX_POLLS = Math.ceil((10 * 60 * 1000) / POLL_MS);
+
+const STATUS_PILL: Record<VideoShotStatus, string> = {
+  queued: 'default', rendering: 'processing', completed: 'success', failed: 'error',
+};
+const STATUS_LABEL: Record<VideoShotStatus, string> = {
+  queued: '排队中', rendering: '生成中', completed: '完成', failed: '失败',
+};
+const BAR_CLASS: Record<VideoShotStatus, string> = {
+  queued: styles.barQueued, rendering: styles.barRendering, completed: styles.barCompleted, failed: styles.barFailed,
+};
 
 function fmt(sec: number): string {
   const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -157,6 +167,15 @@ export default function VideoCreation() {
         </div>
       )}
 
+      {/* 失败态 */}
+      {!checking && !busy && task && task.status === 'failed' && (
+        <div className={styles.gen}>
+          <p className={styles.genTitle} style={{ color: '#DC2626' }}>视频生成失败</p>
+          <p className={styles.genSub}>{task.error_message || 'AI 视频生成未成功，可能是 Seedance 服务暂不可用'}</p>
+          <button className={styles.genBtn} onClick={handleGenerate}><ReloadOutlined /> 重新生成</button>
+        </div>
+      )}
+
       {/* 渲染中 */}
       {busy && !done && (
         <div className={styles.gen}>
@@ -174,6 +193,33 @@ export default function VideoCreation() {
           </div>
           <p className={styles.genTitle}>AI正在生成您的视频</p>
           <p className={styles.genSub}>正在为您精心制作专属短视频，请稍候片刻</p>
+
+          {/* Shot render queue */}
+          {task && task.shots.length > 0 && (
+            <div className={styles.queueCard}>
+              <div className={styles.queueHead}>
+                <span className={styles.queueTitle}>分镜渲染队列</span>
+                <span className={styles.queueMeta}>共 {task.shots.length} 个分镜</span>
+              </div>
+              {task.shots.map((shot, i) => (
+                <div key={shot.id} className={styles.queueRow}>
+                  <img src={shot.thumb_url} alt={shot.label} className={styles.queueThumb} />
+                  <div className={styles.queueRowBody}>
+                    <div className={styles.queueRowTitle}>
+                      Scene 0{i + 1}
+                      <span className={styles.queueRowMeta}>· {shot.label}</span>
+                    </div>
+                    <div className={styles.queueProgressTrack}>
+                      <div className={`${styles.queueProgressBar} ${BAR_CLASS[shot.status]}`} style={{ width: `${shot.progress}%` }} />
+                    </div>
+                  </div>
+                  <Tag color={STATUS_PILL[shot.status]} style={{ margin: 0, borderRadius: 999 }}>
+                    {STATUS_LABEL[shot.status]}
+                  </Tag>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

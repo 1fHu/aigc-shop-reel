@@ -31,8 +31,20 @@ export class Material {
   @Column({ type: 'varchar', nullable: true })
   embedding: string;
 
-  @Column({ type: 'simple-array', nullable: true })
+  @Column({ type: 'text', array: true, nullable: true, default: '{}' })
   tags: string[];
+
+  @Column({ type: 'varchar', nullable: true, name: 'thumbnail_url' })
+  thumbnailUrl: string;
+
+  @Column({ type: 'varchar', default: 'parsing' })
+  status: string;
+
+  @Column({ type: 'float', nullable: true })
+  duration: number;
+
+  @Column({ type: 'jsonb', nullable: true, default: '[]' })
+  slices: object;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;

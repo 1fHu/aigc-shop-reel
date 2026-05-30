@@ -26,25 +26,25 @@ export class ProductController {
 
   @UseGuards(AuthGuard('jwt'))
   @Put(':project_id')
-  update(@Param('project_id') projectId: string, @Body() body: UpdateProductDto) {
-    return ok(this.productService.updateProjectProduct(projectId, body));
+  async update(@Param('project_id') projectId: string, @Body() body: UpdateProductDto) {
+    return ok(await this.productService.updateProjectProduct(projectId, body));
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Post(':project_id/confirm')
-  confirm(@Param('project_id') projectId: string) {
-    return ok(this.productService.confirm(projectId));
+  async confirm(@Param('project_id') projectId: string) {
+    return ok(await this.productService.confirm(projectId));
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Get(':project_id')
-  getByProjectId(@Param('project_id') projectId: string) {
-    return ok(this.productService.getByProjectId(projectId));
+  async getByProjectId(@Param('project_id') projectId: string) {
+    return ok(await this.productService.getByProjectId(projectId));
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Post('import')
-  import(@Body() body: { target_project_id: string; source_project_id: string }) {
-    return ok(this.productService.importFromProject(body.target_project_id, body.source_project_id));
+  async import(@Body() body: { target_project_id: string; source_project_id: string }) {
+    return ok(await this.productService.importFromProject(body.target_project_id, body.source_project_id));
   }
 }

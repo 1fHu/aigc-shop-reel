@@ -1,9 +1,11 @@
-import { Injectable, Logger, UnauthorizedException, ConflictException } from '@nestjs/common';
-import { BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import bcrypt from 'bcrypt';
-import { MockStoreService, UserRecord } from '../../common/mock-store.service';
+import { MockStoreService } from '../../common/mock-store.service';
 import { EmailService } from './email.service';
+import { User } from '../../database/entities/user.entity';
 
 @Injectable()
 export class AuthService {
@@ -13,114 +15,102 @@ export class AuthService {
     private readonly store: MockStoreService,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    @InjectRepository(User) private readonly userRepo: Repository<User>,
   ) {}
 
   async validateUser(email: string, password: string) {
-    const user = this.store.getUserByEmail(email);
-    if (!user) {
-      return null;
-    }
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
-      return null;
-    }
+    const user = await this.userRepo.findOne({ where: { email } });
+    if (!user) return null;
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) return null;
     return user;
   }
 
-  private issueTokens(user: { id: string; email: string; is_guest: boolean }) {
-    const payload = { sub: user.id, email: user.email, role: user.is_guest ? 'guest' : 'user' };
+  private issueTokens(user: { id: string; email: string; isGuest: boolean }) {
+    const payload = { sub: user.id, email: user.email, role: user.isGuest ? 'guest' : 'user' };
     return {
       accessToken: this.jwtService.sign(payload),
       refreshToken: this.store.issueRefreshToken(user.id),
     };
   }
 
-  private sanitizeUser(user: UserRecord | { id: string; nickname?: string; is_guest?: boolean; video_quota?: number }) {
-    if (!user) return null;
+  private sanitizeUser(user: User) {
     return {
       id: user.id,
-      email: (user as any).email || undefined,
-      nickname: (user as any).nickname || undefined,
-      avatar_url: (user as any).avatar_url || undefined,
-      plan_type: (user as any).plan_type || undefined,
-      video_quota: (user as any).video_quota || undefined,
-      is_guest: (user as any).is_guest || false,
+      email: user.email,
+      nickname: user.nickname,
+      avatar_url: user.avatarUrl,
+      plan_type: user.planType,
+      video_quota: user.videoQuota,
+      is_guest: (user as any).isGuest ?? false,
     };
   }
 
   async register(email: string, password: string, confirmPassword: string, nickname?: string) {
-    if (password !== confirmPassword) {
-      throw new ConflictException('密码不一致');
-    }
-    if (!password || password.length < 8 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+    if (password !== confirmPassword) throw new ConflictException('密码不一致');
+    if (!password || password.length < 8 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password))
       throw new ConflictException('密码至少 8 位，须包含字母与数字');
-    }
-    if (this.store.getUserByEmail(email)) {
-      throw new ConflictException('邮箱已注册');
-    }
-    if (nickname && this.store.getUserByNickname(nickname)) {
-      throw new ConflictException('用户名已被使用');
+    const existing = await this.userRepo.findOne({ where: { email } });
+    if (existing) throw new ConflictException('邮箱已注册');
+    if (nickname) {
+      const nickUser = await this.userRepo.findOne({ where: { nickname } });
+      if (nickUser) throw new ConflictException('用户名已被使用');
     }
     const passwordHash = await bcrypt.hash(password, 10);
     const code = String(Math.floor(100000 + Math.random() * 900000));
     this.store.storeVerificationCode(email, code, passwordHash, nickname);
-    // 邮件发送非阻塞，失败也允许继续（开发环境终端可见验证码）
     this.emailService.sendVerificationCode(email, code);
     return { verifyPending: true, email };
   }
 
   async verifyEmail(email: string, code: string) {
     const pending = this.store.consumeVerificationCode(email, code);
-    if (!pending) {
-      throw new BadRequestException('验证码错误或已过期');
-    }
-    // 实际创建用户
-    const user = this.store.createUser(email, pending.passwordHash, pending.nickname);
-    const tokens = this.issueTokens(user);
-    return { ...tokens, user: this.sanitizeUser(user) };
+    if (!pending) throw new BadRequestException('验证码错误或已过期');
+    const user = this.userRepo.create({
+      email,
+      passwordHash: pending.passwordHash,
+      nickname: pending.nickname || email.split('@')[0],
+      planType: 'free',
+      videoQuota: 3,
+    } as User);
+    const saved = await this.userRepo.save(user);
+    const tokens = this.issueTokens({ id: saved.id, email: saved.email, isGuest: false });
+    return { ...tokens, user: this.sanitizeUser(saved) };
   }
 
   async login(username: string, password: string) {
-    // 支持用户名或邮箱登录
-    let user = this.store.getUserByNickname(username);
-    if (!user) user = this.store.getUserByEmail(username);
-    if (!user) {
-      throw new UnauthorizedException('用户名或密码错误');
-    }
-    const isMatch = await bcrypt.compare(password, user.password_hash);
-    if (!isMatch) {
-      throw new UnauthorizedException('用户名或密码错误');
-    }
-    const tokens = this.issueTokens(user);
+    let user = await this.userRepo.findOne({ where: { nickname: username } });
+    if (!user) user = await this.userRepo.findOne({ where: { email: username } });
+    if (!user) throw new UnauthorizedException('用户名或密码错误');
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    if (!isMatch) throw new UnauthorizedException('用户名或密码错误');
+    const tokens = this.issueTokens({ id: user.id, email: user.email, isGuest: false });
     return { ...tokens, user: this.sanitizeUser(user) };
   }
 
   guestLogin() {
-    const demoUser = this.store.getDemoUser();
     const guestUser = {
-      ...demoUser,
       id: '00000000-0000-0000-0000-000000000001',
+      email: 'demo@vidcraft.icu',
       nickname: '体验用户',
-      is_guest: true,
+      isGuest: true,
       video_quota: 2,
     };
-    const tokens = this.issueTokens(guestUser);
-    return { ...tokens, user: this.sanitizeUser({ id: guestUser.id, nickname: guestUser.nickname, is_guest: true, video_quota: guestUser.video_quota } as any) };
+    const tokens = this.issueTokens(guestUser as any);
+    return { ...tokens, user: { id: guestUser.id, nickname: guestUser.nickname, is_guest: true, video_quota: guestUser.video_quota } };
   }
 
-  refresh(refreshToken: string) {
-    if (this.store.isRefreshTokenBlacklisted(refreshToken)) {
+  async refresh(refreshToken: string) {
+    if (this.store.isRefreshTokenBlacklisted(refreshToken))
       throw new UnauthorizedException('Refresh Token 已失效');
-    }
     const userId = this.store.getUserIdByRefreshToken(refreshToken);
-    if (!userId) {
-      throw new UnauthorizedException('Refresh Token 无效或已过期');
+    if (!userId) throw new UnauthorizedException('Refresh Token 无效或已过期');
+    if (userId.startsWith('00000000')) {
+      return { accessToken: this.jwtService.sign({ sub: userId, email: 'demo@vidcraft.icu', role: 'guest' }) };
     }
-    const user = this.store.getUserById(userId);
-    if (!user) {
-      throw new UnauthorizedException('用户不存在');
-    }
-    return { accessToken: this.jwtService.sign({ sub: user.id, email: user.email, role: user.is_guest ? 'guest' : 'user' }) };
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('用户不存在');
+    return { accessToken: this.jwtService.sign({ sub: user.id, email: user.email, role: 'user' }) };
   }
 
   logout(refreshToken: string) {
@@ -128,35 +118,24 @@ export class AuthService {
     return null;
   }
 
-  profile(userId: string) {
-    const user = this.store.getUserById(userId);
-    if (!user) {
-      throw new UnauthorizedException('用户不存在');
+  async profile(userId: string) {
+    if (userId === '00000000-0000-0000-0000-000000000001') {
+      return { id: userId, email: 'demo@vidcraft.icu', nickname: '体验用户', avatar_url: null, plan_type: 'free', video_quota: 2, is_guest: true };
     }
-    return {
-      id: user.id,
-      email: user.email,
-      nickname: user.nickname,
-      avatar_url: user.avatar_url,
-      plan_type: user.plan_type,
-      video_quota: user.video_quota,
-      is_guest: user.is_guest,
-    };
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('用户不存在');
+    return this.sanitizeUser(user);
   }
 
-  updateProfile(userId: string, nickname?: string, avatarUrl?: string) {
-    const user = this.store.updateUser(userId, {
-      nickname: nickname || undefined,
-      avatar_url: avatarUrl || undefined,
-    });
-    if (!user) {
-      throw new UnauthorizedException('用户不存在');
-    }
-    return { nickname: user.nickname, avatar_url: user.avatar_url };
+  async updateProfile(userId: string, nickname?: string, avatarUrl?: string) {
+    await this.userRepo.update(userId, { nickname, avatarUrl });
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('用户不存在');
+    return { nickname: user.nickname, avatar_url: user.avatarUrl };
   }
 
   async forgotPassword(email: string) {
-    const user = this.store.getUserByEmail(email);
+    const user = await this.userRepo.findOne({ where: { email } });
     if (!user) return { sent: true };
     const code = String(Math.floor(100000 + Math.random() * 900000));
     this.store.storePasswordResetCode(email, code);
@@ -165,16 +144,12 @@ export class AuthService {
   }
 
   async resetPassword(email: string, code: string, newPassword: string) {
-    if (!this.store.consumePasswordResetCode(email, code)) {
+    if (!this.store.consumePasswordResetCode(email, code))
       throw new BadRequestException('验证码错误或已过期');
-    }
-    if (!newPassword || newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+    if (!newPassword || newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword))
       throw new BadRequestException('密码至少 8 位，须包含字母与数字');
-    }
-    const user = this.store.getUserByEmail(email);
-    if (!user) throw new BadRequestException('用户不存在');
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    this.store.updateUser(user.id, { password_hash: passwordHash } as any);
+    await this.userRepo.update({ email }, { passwordHash });
     return { reset: true };
   }
 }

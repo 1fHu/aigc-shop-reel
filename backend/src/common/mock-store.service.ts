@@ -729,7 +729,7 @@ export class MockStoreService {
       .map((material) => ({ ...material, analysis: { ...material.analysis }, slices: material.slices.map((slice) => ({ ...slice })) }));
   }
 
-  createMaterials(projectId: string, files: Array<{ originalname?: string; mimetype?: string; size?: number }>) {
+  createMaterials(projectId: string, files: Array<{ originalname?: string; mimetype?: string; size?: number; fileUrl?: string; thumbnailUrl?: string }>) {
     const now = new Date().toISOString();
     const created = files.map((file, index) => {
       const fileType = file.mimetype?.startsWith('video/') ? 'video' : 'image';
@@ -738,14 +738,14 @@ export class MockStoreService {
       const material: MaterialRecord = {
         id: randomUUID(),
         project_id: projectId,
-        file_url: `https://example.com/materials/${index + 1}-${file.originalname || 'upload'}`,
+        file_url: file.fileUrl || `https://example.com/materials/${index + 1}-${file.originalname || 'upload'}`,
         file_type: fileType,
         file_name: file.originalname || `upload-${index + 1}`,
         file_size: file.size || 1024,
         analysis: {},
         embedding: '',
         tags: [],
-        thumbnail_url: `https://example.com/materials/${index + 1}-thumb.jpg`,
+        thumbnail_url: file.thumbnailUrl || `https://example.com/materials/${index + 1}-thumb.jpg`,
         status: 'parsing',
         duration: null,
         slices: [],
@@ -803,6 +803,35 @@ export class MockStoreService {
 
   deleteMaterial(id: string) {
     return this.materials.delete(id);
+  }
+
+  /** 为已 AI 解析的商品图片创建素材记录，返回 material ID */
+  createAnalyzedMaterial(projectId: string, data: {
+    fileName: string;
+    fileType?: 'image' | 'video';
+    analysis: Record<string, unknown>;
+    tags: string[];
+    thumbnailUrl?: string;
+  }): string {
+    const now = new Date().toISOString();
+    const material: MaterialRecord = {
+      id: randomUUID(),
+      project_id: projectId,
+      file_url: data.thumbnailUrl || '',
+      file_type: data.fileType || 'image',
+      file_name: data.fileName,
+      file_size: 0,
+      analysis: data.analysis,
+      embedding: '[]',
+      tags: data.tags,
+      thumbnail_url: data.thumbnailUrl || '',
+      status: 'ready',
+      duration: null,
+      slices: [],
+      created_at: now,
+    };
+    this.materials.set(material.id, material);
+    return material.id;
   }
 
   searchMaterials(projectId: string, q = '', tags = '', level = 'material') {

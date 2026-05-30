@@ -5,11 +5,14 @@ export type MaterialFileType = 'image' | 'video';
 export interface MaterialListItem {
   id: string;
   file_type: MaterialFileType;
+  file_name: string;
+  file_size: number;
   thumbnail_url: string;
   status: MaterialStatus;
   tags: string[];
   duration: number | null;
   created_at: string;
+  analysis: Record<string, unknown>;
 }
 
 /** POST /api/materials/upload 返回条目 */

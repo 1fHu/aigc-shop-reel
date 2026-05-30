@@ -18,7 +18,8 @@ CREATE TABLE users (
     plan_type VARCHAR(20) DEFAULT 'free',
     video_quota INTEGER DEFAULT 3,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW()
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    is_guest BOOLEAN DEFAULT false
 );
 
 -- 2. projects
@@ -29,7 +30,15 @@ CREATE TABLE projects (
     description TEXT,
     product_url VARCHAR(500),
     product_info JSONB,
+    cover_url VARCHAR(500),
     status VARCHAR(20) DEFAULT 'draft',
+    material_count INTEGER DEFAULT 0,
+    script_count INTEGER DEFAULT 0,
+    video_count INTEGER DEFAULT 0,
+    views INTEGER DEFAULT 0,
+    render_progress INTEGER DEFAULT 0,
+    tiktok_ready BOOLEAN DEFAULT false,
+    is_guest BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -45,6 +54,10 @@ CREATE TABLE materials (
     analysis JSONB,
     embedding vector(1024),
     tags TEXT[],
+    thumbnail_url VARCHAR(500),
+    status VARCHAR(20) DEFAULT 'parsing',
+    duration FLOAT,
+    slices JSONB DEFAULT '[]',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

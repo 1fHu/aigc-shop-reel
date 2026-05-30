@@ -28,6 +28,9 @@ export class VideoTask {
   @Column({ type: 'text', nullable: true, name: 'error_msg' })
   errorMsg: string;
 
+  @Column({ type: 'varchar', nullable: true, name: 'preview_url' })
+  previewUrl: string;
+
   @Column({ type: 'varchar', nullable: true, name: 'trace_id' })
   traceId: string;
 

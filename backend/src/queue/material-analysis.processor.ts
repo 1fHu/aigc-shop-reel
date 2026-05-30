@@ -2,6 +2,7 @@ import { Processor, Process } from '@nestjs/bull';
 import { Job } from 'bull';
 import { Logger } from '@nestjs/common';
 import { MockStoreService } from '../common/mock-store.service';
+import { MinioStorageService } from '../common/minio-storage.service';
 import { VolcanoApiService } from '../modules/volcano/volcano-api.service';
 
 type MaterialAnalysisJob = { materialId: string };
@@ -13,6 +14,7 @@ export class MaterialAnalysisProcessor {
   constructor(
     private readonly store: MockStoreService,
     private readonly volcano: VolcanoApiService,
+    private readonly minio: MinioStorageService,
   ) {}
 
   @Process()
@@ -24,10 +26,21 @@ export class MaterialAnalysisProcessor {
       return;
     }
     try {
+      // Download file buffer from MinIO
+      let buffer: Buffer;
+      try {
+        buffer = await this.minio.downloadFile(material.file_url);
+      } catch (err) {
+        this.logger.warn(`MinIO download failed for ${material.file_url}, using empty buffer: ${(err as Error).message}`);
+        buffer = Buffer.alloc(0);
+      }
+
       const result = await this.volcano.analyzeMaterial({
         fileType: material.file_type as 'image' | 'video',
         fileName: material.file_name as string,
+        buffer,
       });
+
       this.store.updateMaterialAnalysis(materialId, {
         status: 'ready',
         analysis: result.analysis,
@@ -35,7 +48,6 @@ export class MaterialAnalysisProcessor {
         embedding: result.embedding,
         duration: result.duration,
       });
-      // TODO(video): 视频素材交 Python FastAPI 做 FFmpeg 场景切片，回写 slices（见 TDD 3.5.1）。
       this.logger.log(`素材 ${materialId} AI 解析完成，status=ready`);
     } catch (err) {
       this.store.updateMaterialAnalysis(materialId, { status: 'failed' });
