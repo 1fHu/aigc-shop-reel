@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Table, Tag, Skeleton } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
 import {
@@ -10,6 +9,7 @@ import {
 
 import ProjectCard from '@/components/ProjectCard';
 import NewProjectModal from '@/components/NewProjectModal';
+import ProjectEntryModal from '@/components/ProjectEntryModal';
 import { projectService } from '@/services/projectService';
 import type { ProjectListItem, ProjectStatus } from '@/types';
 import styles from './Projects.module.css';
@@ -42,12 +42,19 @@ function relativeTime(iso: string): string {
 }
 
 export default function Projects() {
-  const navigate = useNavigate();
   const [view, setView] = useState<ViewMode>('grid');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
+  // 已完成项目点击后弹出的工作台入口弹框；null 表示未打开
+  const [entryProject, setEntryProject] = useState<ProjectListItem | null>(null);
+
+  // 点击任意「已有项目」→ 弹出工作台入口弹框（素材库/分镜/风格/Video 四入口）。
+  // 仅「新建项目」按钮走原创建流程（NewProjectModal → materials），不进此弹框。
+  const openProject = (p: ProjectListItem) => {
+    setEntryProject(p);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -113,7 +120,7 @@ export default function Projects() {
         <button
           onClick={(e) => {
             e.stopPropagation();
-            navigate(`/projects/${p.id}/video`);
+            openProject(p);
           }}
           style={{
             background: 'none', border: 'none', color: '#4648D4',
@@ -215,6 +222,8 @@ export default function Projects() {
               key={p.id}
               project={p}
               renderProgress={p.status === 'in_progress' ? 75 : undefined}
+              onOpen={() => openProject(p)}
+              onDeleted={() => setProjects((cur) => cur.filter((item) => item.id !== p.id))}
             />
           ))}
 
@@ -239,7 +248,7 @@ export default function Projects() {
           rowKey="id"
           pagination={false}
           onRow={(record) => ({
-            onClick: () => navigate(`/projects/${record.id}/video`),
+            onClick: () => openProject(record),
             style: { cursor: 'pointer' },
           })}
           style={{ background: '#fff', borderRadius: 16, overflow: 'hidden' }}
@@ -260,6 +269,13 @@ export default function Projects() {
         onCreated={(p) => {
           setProjects((cur) => [p, ...cur]);
         }}
+      />
+
+      {/* 已完成项目的工作台入口弹框；右上角 X 关闭即返回项目列表 */}
+      <ProjectEntryModal
+        open={entryProject !== null}
+        project={entryProject}
+        onClose={() => setEntryProject(null)}
       />
     </div>
   );

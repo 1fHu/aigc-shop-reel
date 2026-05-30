@@ -22,7 +22,7 @@ export interface User {
 }
 
 export interface LoginPayload {
-  email: string;
+  username: string;
   password: string;
 }
 

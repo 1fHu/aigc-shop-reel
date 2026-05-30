@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Input, Upload, Tag, Skeleton, App } from 'antd';
 import {
@@ -13,6 +13,8 @@ import {
 import type { RcFile } from 'antd/es/upload';
 
 import { productService } from '@/services/productService';
+import { projectService } from '@/services/projectService';
+import { scriptService } from '@/services/scriptService';
 import ManualProductFormModal from '@/components/ManualProductFormModal';
 import { categoryLabel, type ParsedProduct } from '@/types';
 import styles from './ProductParse.module.css';
@@ -30,15 +32,62 @@ export default function ProductParse() {
   const { id: projectId } = useParams<{ id: string }>();
   const { message } = App.useApp();
 
-  // 顶层 /product-parse（无项目上下文）时用占位 id，方便 demo 演示
-  const effectiveProjectId = projectId || 'demo-project';
+  const [effectiveProjectId, setEffectiveProjectId] = useState<string | null>(projectId ?? null);
 
   const [step, setStep] = useState<Step>(1);
   const [url, setUrl] = useState('');
   const [product, setProduct] = useState<ParsedProduct | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
+  const hasProject = Boolean(effectiveProjectId);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const ensureProject = async () => {
+      if (projectId) {
+        try {
+          await projectService.detail(projectId);
+          if (cancelled) return;
+          setEffectiveProjectId(projectId);
+          // 回显：该项目此前若已录入过商品信息，直接进结果态展示，避免每次回到空白输入页
+          try {
+            const existing = await productService.get(projectId);
+            if (!cancelled && existing && existing.name) {
+              setProduct(existing);
+              setStep(3);
+            }
+          } catch {
+            /* 无已存商品或读取失败：保持 Step 1 输入态 */
+          }
+        } catch {
+          message.error('项目不存在，请先创建项目');
+          navigate('/projects', { replace: true });
+        }
+        return;
+      }
+
+      try {
+        const project = await projectService.create({ name: '未命名项目' });
+        if (cancelled) return;
+        setEffectiveProjectId(project.id);
+        navigate(`/projects/${project.id}/product-parse`, { replace: true });
+      } catch {
+        message.error('无法创建项目，请稍后重试');
+      }
+    };
+
+    ensureProject();
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId, navigate, message]);
 
   const handleParseUrl = async () => {
+    if (!effectiveProjectId) {
+      message.warning('项目初始化中，请稍候');
+      return;
+    }
     if (!url.trim()) {
       message.warning('请先输入商品链接');
       return;
@@ -57,18 +106,29 @@ export default function ProductParse() {
   };
 
   const handleParseImage = async (file: RcFile) => {
+    if (!effectiveProjectId) {
+      message.warning('项目初始化中，请稍候');
+      return false;
+    }
+    setPreviewUrl(URL.createObjectURL(file));
     setStep(2);
     try {
       const result = await productService.parseImage(effectiveProjectId, file);
       setProduct(result);
       setStep(3);
-    } catch {
+    } catch (err) {
+      message.error('AI 解析失败，请重试');
+      console.error('parseImage error:', err);
       setStep(1);
     }
-    return false; // 阻止 Antd 自动上传
+    return false;
   };
 
   const handleNext = async () => {
+    if (!effectiveProjectId) {
+      message.warning('项目初始化中，请稍候');
+      return;
+    }
     try {
       await productService.confirm(effectiveProjectId);
       message.success('商品信息已确认，进入剧本阶段');
@@ -166,7 +226,13 @@ export default function ProductParse() {
             <div style={{ textAlign: 'center' }}>
               <button
                 type="button"
-                onClick={() => setManualOpen(true)}
+                onClick={() => {
+                  if (!hasProject) {
+                    message.warning('项目初始化中，请稍候');
+                    return;
+                  }
+                  setManualOpen(true);
+                }}
                 style={{
                   background: 'none',
                   border: 'none',
@@ -221,28 +287,25 @@ export default function ProductParse() {
         <div className={styles.card}>
           <div className={styles.resultHead}>
             <div className={styles.resultCover}>
-              {/* cover_url 兜底：手动填写没图时，用 picsum 按名字哈希出稳定占位图 */}
               <img
-                src={product.cover_url || `https://picsum.photos/seed/${encodeURIComponent(product.name)}/300/300`}
+                src={previewUrl || product.cover_url || `https://placehold.co/300x300/E2E8F0/475569?text=${encodeURIComponent(product.name.slice(0, 4))}`}
                 alt={product.name}
               />
             </div>
             <div className={styles.resultInfo}>
-              <div className={styles.resultInfoHead}>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <h3 className={styles.resultTitle}>{product.name}</h3>
-                  <div className={styles.resultTags}>
-                    <Tag color="processing" style={{ margin: 0, borderRadius: 999 }}>
-                      {categoryLabel(product.category)}
-                    </Tag>
-                    <Tag color="cyan" style={{ margin: 0, borderRadius: 999 }}>2024 新品</Tag>
-                  </div>
-                  <p className={styles.resultDesc}>
-                    经过 AI 视觉 + LLM 综合解析得出的产品定位与卖点摘要。
-                  </p>
-                </div>
-                <div className={styles.resultPrice}>{product.price_anchor}</div>
+              <h3 className={styles.resultTitle}>{product.name}</h3>
+              <div className={styles.resultTags}>
+                <Tag color="processing" style={{ margin: 0, borderRadius: 999 }}>
+                  {categoryLabel(product.category)}
+                </Tag>
+                <Tag color="cyan" style={{ margin: 0, borderRadius: 999 }}>AI 解析</Tag>
               </div>
+              <p className={styles.resultDesc}>
+                经过 AI 视觉 + LLM 综合解析得出的产品定位与卖点摘要。
+              </p>
+              {product.price_anchor && product.price_anchor !== '待 AI 解析' && product.price_anchor !== '未知' && (
+                <div className={styles.resultPrice}>{product.price_anchor}</div>
+              )}
             </div>
           </div>
 
@@ -287,24 +350,47 @@ export default function ProductParse() {
                 ✏️ 手动调整
               </button>
             </div>
-            <button type="button" className={styles.nextBtn} onClick={handleNext}>
-              下一步：生成剧本 <ArrowRightOutlined />
-            </button>
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button type="button" className={styles.nextBtn} onClick={handleNext}>
+                编辑剧本 <ArrowRightOutlined />
+              </button>
+              <button type="button" className={styles.nextBtn}
+                onClick={async () => {
+                  if (!effectiveProjectId) {
+                    message.warning('项目初始化中，请稍候');
+                    return;
+                  }
+                  await productService.confirm(effectiveProjectId);
+                  // 快速生成剧本后直接跳视频创作
+                  for await (const e of scriptService.generate({ project_id: effectiveProjectId, strategy_type: 'pain_point' })) {
+                    if (e.type === 'done') {
+                      const target = projectId ? `/projects/${projectId}/video?scriptId=${e.script_id}` : `/video-creation?scriptId=${e.script_id}`;
+                      navigate(target);
+                      return;
+                    }
+                  }
+                }}
+                style={{ background: 'linear-gradient(135deg, #0EA5E9, #4648D4)' }}>
+                🎬 直接生成视频
+              </button>
+            </div>
           </div>
         </div>
       )}
 
       {/* 手动填写 Modal —— 提交后跳到结果展示态 (step 3) */}
-      <ManualProductFormModal
-        open={manualOpen}
-        projectId={effectiveProjectId}
-        initialValue={product}
-        onClose={() => setManualOpen(false)}
-        onSaved={(saved) => {
-          setProduct(saved);
-          setStep(3);
-        }}
-      />
+      {effectiveProjectId && (
+        <ManualProductFormModal
+          open={manualOpen}
+          projectId={effectiveProjectId}
+          initialValue={product}
+          onClose={() => setManualOpen(false)}
+          onSaved={(saved) => {
+            setProduct(saved);
+            setStep(3);
+          }}
+        />
+      )}
     </div>
   );
 }

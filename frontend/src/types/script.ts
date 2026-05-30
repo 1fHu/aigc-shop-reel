@@ -96,9 +96,10 @@ export interface ReplaceFactorResult {
 /** POST /api/scripts/generate 请求体 */
 export interface GenerateScriptPayload {
   project_id: string;
-  mode: ScriptMode;
-  reference_video_id?: string;       // 爆款仿写模式
-  template_id?: string;              // 灵感模板模式
+  strategy_type?: string;
+  mode?: ScriptMode;
+  reference_video_id?: string;
+  template_id?: string;
 }
 
 /** SSE 流式生成的事件类型 */

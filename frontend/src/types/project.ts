@@ -18,6 +18,21 @@ export interface ProjectListItem {
 }
 
 /**
+ * 项目详情（GET /api/projects/:id 返回结构）
+ * 对齐《API 接口规范文档》第 3 章详情端点
+ */
+export interface ProjectDetail {
+  id: string;
+  name: string;
+  description?: string;
+  status: ProjectStatus;
+  product_info?: Record<string, unknown> | null;
+  material_count: number;
+  script_count: number;
+  video_count: number;
+}
+
+/**
  * 创建项目请求参数（POST /api/projects）
  */
 export interface CreateProjectPayload {

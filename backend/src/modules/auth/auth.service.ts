@@ -1,7 +1,9 @@
 import { Injectable, Logger, UnauthorizedException, ConflictException } from '@nestjs/common';
+import { BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import bcrypt from 'bcrypt';
 import { MockStoreService, UserRecord } from '../../common/mock-store.service';
+import { EmailService } from './email.service';
 
 @Injectable()
 export class AuthService {
@@ -10,6 +12,7 @@ export class AuthService {
   constructor(
     private readonly store: MockStoreService,
     private readonly jwtService: JwtService,
+    private readonly emailService: EmailService,
   ) {}
 
   async validateUser(email: string, password: string) {
@@ -45,23 +48,48 @@ export class AuthService {
     };
   }
 
-  async register(email: string, password: string, confirmPassword: string) {
+  async register(email: string, password: string, confirmPassword: string, nickname?: string) {
     if (password !== confirmPassword) {
       throw new ConflictException('密码不一致');
+    }
+    if (!password || password.length < 8 || !/[a-zA-Z]/.test(password) || !/[0-9]/.test(password)) {
+      throw new ConflictException('密码至少 8 位，须包含字母与数字');
     }
     if (this.store.getUserByEmail(email)) {
       throw new ConflictException('邮箱已注册');
     }
+    if (nickname && this.store.getUserByNickname(nickname)) {
+      throw new ConflictException('用户名已被使用');
+    }
     const passwordHash = await bcrypt.hash(password, 10);
-    const user = this.store.createUser(email, passwordHash);
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    this.store.storeVerificationCode(email, code, passwordHash, nickname);
+    // 邮件发送非阻塞，失败也允许继续（开发环境终端可见验证码）
+    this.emailService.sendVerificationCode(email, code);
+    return { verifyPending: true, email };
+  }
+
+  async verifyEmail(email: string, code: string) {
+    const pending = this.store.consumeVerificationCode(email, code);
+    if (!pending) {
+      throw new BadRequestException('验证码错误或已过期');
+    }
+    // 实际创建用户
+    const user = this.store.createUser(email, pending.passwordHash, pending.nickname);
     const tokens = this.issueTokens(user);
     return { ...tokens, user: this.sanitizeUser(user) };
   }
 
-  async login(email: string, password: string) {
-    const user = await this.validateUser(email, password);
+  async login(username: string, password: string) {
+    // 支持用户名或邮箱登录
+    let user = this.store.getUserByNickname(username);
+    if (!user) user = this.store.getUserByEmail(username);
     if (!user) {
-      throw new UnauthorizedException('邮箱或密码错误');
+      throw new UnauthorizedException('用户名或密码错误');
+    }
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      throw new UnauthorizedException('用户名或密码错误');
     }
     const tokens = this.issueTokens(user);
     return { ...tokens, user: this.sanitizeUser(user) };
@@ -125,5 +153,28 @@ export class AuthService {
       throw new UnauthorizedException('用户不存在');
     }
     return { nickname: user.nickname, avatar_url: user.avatar_url };
+  }
+
+  async forgotPassword(email: string) {
+    const user = this.store.getUserByEmail(email);
+    if (!user) return { sent: true };
+    const code = String(Math.floor(100000 + Math.random() * 900000));
+    this.store.storePasswordResetCode(email, code);
+    await this.emailService.sendPasswordResetCode(email, code);
+    return { sent: true };
+  }
+
+  async resetPassword(email: string, code: string, newPassword: string) {
+    if (!this.store.consumePasswordResetCode(email, code)) {
+      throw new BadRequestException('验证码错误或已过期');
+    }
+    if (!newPassword || newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+      throw new BadRequestException('密码至少 8 位，须包含字母与数字');
+    }
+    const user = this.store.getUserByEmail(email);
+    if (!user) throw new BadRequestException('用户不存在');
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    this.store.updateUser(user.id, { password_hash: passwordHash } as any);
+    return { reset: true };
   }
 }

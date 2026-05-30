@@ -40,8 +40,8 @@ export default function NewProjectModal({ open, onClose, onCreated }: Props) {
       onCreated?.(project);
       form.resetFields();
       onClose();
-      // 创建后进入商品解析阶段
-      navigate(`/projects/${project.id}/product-parse`);
+      // 创建后进入素材库
+      navigate(`/projects/${project.id}/materials`);
     } catch (err) {
       // 表单校验错误或拦截器已 toast 网络错误
       if (!(err instanceof Error)) return;
@@ -72,6 +72,7 @@ export default function NewProjectModal({ open, onClose, onCreated }: Props) {
           label="项目名称"
           rules={[
             { required: true, message: '请输入项目名称' },
+            { min: 2, message: '项目名称至少 2 个字符' },
             { max: 60, message: '不超过 60 个字符' },
           ]}
         >

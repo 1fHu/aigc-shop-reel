@@ -68,7 +68,7 @@ type MaterialRecord = {
   created_at: string;
 };
 
-type ScriptShot = {
+export type ScriptShot = {
   index: number;
   description: string;
   camera_motion: string;
@@ -102,6 +102,7 @@ type VideoRecord = {
   status: 'pending' | 'generating' | 'composing' | 'completed' | 'failed';
   trace_id: string | null;
   generation_cost: number | null;
+  mock_render?: boolean;
   settings: {
     tts: { language: string; voice: string };
     bgm: { preset_id: string | null; custom_url: string | null; volume: number };
@@ -198,13 +199,16 @@ export class MockStoreService {
   private readonly factors = new Map<string, FactorDefinitionRecord>();
   private readonly refreshTokenBlacklist = new Set<string>();
   private readonly refreshTokenStore = new Map<string, string>(); // token → userId
+  private readonly resetTokens = new Map<string, { userId: string; expiresAt: number }>();
+  private readonly pendingRegistrations = new Map<string, { code: string; expiresAt: number; passwordHash: string; nickname?: string }>();
+  private readonly passwordResetCodes = new Map<string, { code: string; expiresAt: number }>();
 
   constructor() {
     const now = new Date().toISOString();
     const demoUser: UserRecord = {
       id: '00000000-0000-0000-0000-000000000001',
       email: 'demo@vidcraft.icu',
-      password_hash: '$2b$10$OGE1TqfiNXe7MExEJ9HpWOuShMo7Mg6sGaEbdf93AKvzXHLNBzmau',
+      password_hash: '$2b$10$Kgi184mPfw5dFWhhYicFQ.qm1Q.YHrvcvxTOP2ffr0s/hOGscVfVi',
       nickname: '体验用户',
       avatar_url: null,
       plan_type: 'free',
@@ -214,6 +218,20 @@ export class MockStoreService {
       updated_at: now,
     };
     this.users.set(demoUser.id, demoUser);
+
+    const adminUser: UserRecord = {
+      id: '00000000-0000-0000-0000-000000000002',
+      email: '3051225284@qq.com',
+      password_hash: '$2b$10$tyAs98aRRPAsY9tKDMCjqufWnZXgc5akchBjzYrVE/pBJGrcwjmeK',
+      nickname: 'admin',
+      avatar_url: null,
+      plan_type: 'free',
+      video_quota: 999,
+      is_guest: false,
+      created_at: now,
+      updated_at: now,
+    };
+    this.users.set(adminUser.id, adminUser);
 
     const demoProject: ProjectRecord = {
       id: 'proj-demo-001',
@@ -491,6 +509,11 @@ export class MockStoreService {
     return user ? { ...user } : undefined;
   }
 
+  getUserByNickname(nickname: string): UserRecord | undefined {
+    const user = [...this.users.values()].find((entry) => entry.nickname === nickname);
+    return user ? { ...user } : undefined;
+  }
+
   createUser(email: string, passwordHash: string, nickname?: string, isGuest = false): UserRecord {
     const now = new Date().toISOString();
     const user: UserRecord = {
@@ -617,7 +640,7 @@ export class MockStoreService {
       target_audience: '18-30岁都市女性',
       usage_scene: '社媒种草',
       price_anchor: '原价¥199，现¥89',
-      cover_url: `https://example.com/uploads/${encodeURIComponent(imageName || 'image.jpg')}`,
+      cover_url: `https://placehold.co/400x600/E2E8F0/475569?text=${encodeURIComponent(imageName || 'Product')}`,
     };
   }
 
@@ -643,6 +666,53 @@ export class MockStoreService {
     return this.refreshTokenStore.get(token);
   }
 
+  issueResetToken(userId: string): string {
+    const token = `pwr-${randomUUID()}`;
+    this.resetTokens.set(token, { userId, expiresAt: Date.now() + 30 * 60 * 1000 });
+    return token;
+  }
+
+  consumeResetToken(token: string): string | undefined {
+    const entry = this.resetTokens.get(token);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.resetTokens.delete(token);
+      return undefined;
+    }
+    this.resetTokens.delete(token);
+    return entry.userId;
+  }
+
+  // 密码重置验证码
+  storePasswordResetCode(email: string, code: string): void {
+    this.passwordResetCodes.set(email.toLowerCase(), { code, expiresAt: Date.now() + 10 * 60 * 1000 });
+  }
+  consumePasswordResetCode(email: string, code: string): boolean {
+    const entry = this.passwordResetCodes.get(email.toLowerCase());
+    if (!entry) return false;
+    if (Date.now() > entry.expiresAt) { this.passwordResetCodes.delete(email.toLowerCase()); return false; }
+    if (entry.code !== code) return false;
+    this.passwordResetCodes.delete(email.toLowerCase());
+    return true;
+  }
+
+  // 邮箱验证码（注册流程）
+  storeVerificationCode(email: string, code: string, passwordHash: string, nickname?: string): void {
+    this.pendingRegistrations.set(email.toLowerCase(), { code, expiresAt: Date.now() + 10 * 60 * 1000, passwordHash, nickname });
+  }
+
+  consumeVerificationCode(email: string, code: string): { passwordHash: string; nickname?: string } | undefined {
+    const entry = this.pendingRegistrations.get(email.toLowerCase());
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.pendingRegistrations.delete(email.toLowerCase());
+      return undefined;
+    }
+    if (entry.code !== code) return undefined;
+    this.pendingRegistrations.delete(email.toLowerCase());
+    return { passwordHash: entry.passwordHash, nickname: entry.nickname };
+  }
+
   blacklistRefreshToken(token: string): void {
     this.refreshTokenBlacklist.add(token);
     this.refreshTokenStore.delete(token);
@@ -663,6 +733,8 @@ export class MockStoreService {
     const now = new Date().toISOString();
     const created = files.map((file, index) => {
       const fileType = file.mimetype?.startsWith('video/') ? 'video' : 'image';
+      // 新建即为「待解析」状态：analysis/tags/embedding/duration/slices 留空，
+      // 由 material-analysis 队列的异步 AI 解析完成后回填（见 updateMaterialAnalysis）。
       const material: MaterialRecord = {
         id: randomUUID(),
         project_id: projectId,
@@ -670,17 +742,13 @@ export class MockStoreService {
         file_type: fileType,
         file_name: file.originalname || `upload-${index + 1}`,
         file_size: file.size || 1024,
-        analysis: {
-          summary: fileType === 'video' ? '视频素材解析中' : '图片素材解析中',
-          tags: fileType === 'video' ? ['视频', '素材'] : ['图片', '素材'],
-          duration: fileType === 'video' ? 45.2 : null,
-        },
-        embedding: '[0.1,0.2,0.3]',
-        tags: fileType === 'video' ? ['视频', '素材'] : ['图片', '素材'],
+        analysis: {},
+        embedding: '',
+        tags: [],
         thumbnail_url: `https://example.com/materials/${index + 1}-thumb.jpg`,
         status: 'parsing',
-        duration: fileType === 'video' ? 45.2 : null,
-        slices: fileType === 'video' ? [{ id: randomUUID(), start_sec: 0, end_sec: 5.5, thumbnail_url: 'https://example.com/materials/slice-thumb.jpg', tags: ['开场镜头'] }] : [],
+        duration: null,
+        slices: [],
         created_at: now,
       };
       this.materials.set(material.id, material);
@@ -691,6 +759,28 @@ export class MockStoreService {
       this.updateProject(projectId, { material_count: project.material_count + created.length, status: 'material_pending' });
     }
     return created;
+  }
+
+  /** 异步 AI 解析回填：填入 analysis/tags/embedding/duration 并把 status 翻成 ready / failed。 */
+  updateMaterialAnalysis(
+    id: string,
+    patch: { status: 'ready' | 'failed'; analysis?: Record<string, unknown>; tags?: string[]; embedding?: string; duration?: number | null; slices?: Array<Record<string, unknown>> },
+  ) {
+    const current = this.materials.get(id);
+    if (!current) {
+      return undefined;
+    }
+    const updated: MaterialRecord = {
+      ...current,
+      status: patch.status,
+      analysis: patch.analysis ?? current.analysis,
+      tags: patch.tags ?? current.tags,
+      embedding: patch.embedding ?? current.embedding,
+      duration: patch.duration !== undefined ? patch.duration : current.duration,
+      slices: patch.slices ?? current.slices,
+    };
+    this.materials.set(id, updated);
+    return { ...updated };
   }
 
   getMaterial(id: string) {
@@ -739,17 +829,25 @@ export class MockStoreService {
     return results;
   }
 
-  createScript(projectId: string, strategyType: string) {
+  createScript(projectId: string, strategyType: string, storyboard?: ScriptShot[]) {
     const now = new Date().toISOString();
+    // 优先用传入的（导演 Agent 生成的）分镜；缺省时退回内置示例，保证向后兼容
+    const shots: ScriptShot[] = (storyboard && storyboard.length > 0)
+      ? storyboard.map((shot, index) => ({ ...shot, index, reference_image_url: shot.reference_image_url ?? null }))
+      : [
+          { index: 0, description: '开场 Hook：痛点提问', camera_motion: 'push-in', duration: 3, voiceover: '你还在为...', subtitle: '拒绝油腻感', reference_image_url: null },
+          { index: 1, description: '产品外观 + 卖点特写', camera_motion: 'static', duration: 3, voiceover: '这款防晒的重点是...', subtitle: '轻薄不油腻', reference_image_url: null },
+          { index: 2, description: '使用场景演示', camera_motion: 'tracking', duration: 3, voiceover: '户外也能清爽自在', subtitle: '全天候防护', reference_image_url: null },
+          { index: 3, description: '质地/成分细节展示', camera_motion: 'push-in', duration: 3, voiceover: '成分温和，敏感肌适用', subtitle: '温和不刺激', reference_image_url: null },
+          { index: 4, description: '行动号召 CTA', camera_motion: 'static', duration: 3, voiceover: '现在下单立享优惠', subtitle: '立即下单', reference_image_url: null },
+        ];
+    const totalDuration = shots.reduce((sum, shot) => sum + (shot.duration || 0), 0);
     const script: ScriptRecord = {
       id: randomUUID(),
       project_id: projectId,
       strategy_type: strategyType,
       content: '基于商品信息生成的示例剧本',
-      storyboard: [
-        { index: 0, description: '开场 Hook', camera_motion: 'push-in', duration: 3, voiceover: '你还在为...', subtitle: '拒绝油腻感', reference_image_url: null },
-        { index: 1, description: '产品展示', camera_motion: 'static', duration: 4, voiceover: '这款防晒的重点是...', subtitle: '轻薄不油腻', reference_image_url: null },
-      ],
+      storyboard: shots,
       factors: {
         visual_style: '轻奢质感风',
         hook_type: '问题式Hook',
@@ -759,7 +857,7 @@ export class MockStoreService {
       },
       factor_history: [],
       status: 'completed',
-      total_duration: 7,
+      total_duration: totalDuration,
       created_at: now,
       updated_at: now,
     };
@@ -774,6 +872,14 @@ export class MockStoreService {
   getScript(id: string) {
     const script = this.scripts.get(id);
     return script ? { ...script, storyboard: script.storyboard.map((shot) => ({ ...shot })), factors: { ...script.factors }, factor_history: script.factor_history.map((entry) => ({ ...entry })) } : undefined;
+  }
+
+  /** 取某项目「最新的剧本」（按 created_at 倒序取第一条）；项目无剧本时返回 undefined */
+  getLatestScriptByProject(projectId: string) {
+    const latest = [...this.scripts.values()]
+      .filter((script) => script.project_id === projectId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    return latest ? this.getScript(latest.id) : undefined;
   }
 
   saveStoryboard(id: string, storyboard: ScriptShot[]) {
@@ -832,6 +938,7 @@ export class MockStoreService {
       status: 'generating',
       trace_id: randomUUID(),
       generation_cost: 2.4,
+      mock_render: false,
       settings: {
         tts: { language: 'zh', voice: 'female_gentle' },
         bgm: { preset_id: 'bgm-001', custom_url: null, volume: 0.15 },
@@ -870,31 +977,136 @@ export class MockStoreService {
     return video ? { ...video, settings: { tts: { ...video.settings.tts }, bgm: { ...video.settings.bgm } } } : undefined;
   }
 
+  getVideoTask(taskId: string) {
+    const task = this.videoTasks.get(taskId);
+    return task ? { ...task } : undefined;
+  }
+
+  getVideoTasks(videoId: string) {
+    return [...this.videoTasks.values()].filter((t) => t.video_id === videoId).map((t) => ({ ...t }));
+  }
+
+  updateVideoTask(taskId: string, patch: Partial<VideoTaskRecord>) {
+    const task = this.videoTasks.get(taskId);
+    if (!task) return;
+    Object.assign(task, patch, { updated_at: new Date().toISOString() });
+    this.videoTasks.set(taskId, task);
+  }
+
+  updateVideo(videoId: string, patch: Partial<VideoRecord>) {
+    const video = this.videos.get(videoId);
+    if (!video) return;
+    Object.assign(video, patch, { updated_at: new Date().toISOString() });
+    this.videos.set(videoId, video);
+  }
+
   getVideoStatus(id: string) {
     const video = this.videos.get(id);
     if (!video) {
       return undefined;
     }
-    const tasks = [...this.videoTasks.values()].filter((task) => task.video_id === id).map((task) => ({ ...task }));
-    const completedShots = tasks.filter((task) => task.status === 'completed').length;
-    const totalShots = tasks.length;
+    const tasks = [...this.videoTasks.values()]
+      .filter((task) => task.video_id === id)
+      .map((task) => ({ ...task }))
+      .sort((a, b) => a.shot_index - b.shot_index);
+    const script = this.scripts.get(video.script_id || '');
+
+    const totalShots = Math.max(tasks.length, script?.storyboard.length || 0, 1);
+    const durationSec = Math.max(15, Math.round(video.duration || script?.total_duration || 15));
+    const startAt = new Date(video.created_at).getTime();
+    const elapsed = Math.max(0, (Date.now() - startAt) / 1000);
+    const shotDuration = durationSec / totalShots;
+    const rawProgress = Math.min(100, (elapsed / durationSec) * 100);
+
+    let progress = Math.round(rawProgress);
+    if (video.status === 'completed') {
+      progress = 100;
+    } else if (video.status === 'failed') {
+      progress = Math.min(progress, 95);
+    } else if (!video.mock_render) {
+      progress = Math.min(progress, 95);
+    }
+
+    if (video.mock_render && rawProgress >= 100 && video.status !== 'completed' && video.status !== 'failed') {
+      const fallbackUrl = `https://placehold.co/1080x1920/0B1C30/FFFFFF?text=VidCraft`;
+      this.updateVideo(video.id, { status: 'completed', video_url: video.video_url || fallbackUrl });
+      video.status = 'completed';
+      progress = 100;
+    }
+
+    const currentShot = Math.min(totalShots - 1, Math.floor(Math.min(elapsed, durationSec - 0.001) / shotDuration));
+
+    const shots = Array.from({ length: totalShots }).map((_, i) => {
+      const task = tasks.find((t) => t.shot_index === i);
+      const shotLabel = script?.storyboard.find((s) => s.index === i)?.description || `Scene ${String(i + 1).padStart(2, '0')}`;
+      let status: VideoTaskRecord['status'] = task?.status || 'queued';
+      let shotProgress = 0;
+
+      if (video.status === 'completed') {
+        status = 'completed';
+        shotProgress = 100;
+      } else if (video.status === 'failed') {
+        status = status === 'completed' ? 'completed' : 'failed';
+        shotProgress = status === 'completed' ? 100 : 0;
+      } else {
+        if (i < currentShot) {
+          status = 'completed';
+          shotProgress = 100;
+        } else if (i === currentShot) {
+          status = 'processing';
+          shotProgress = Math.max(0, Math.min(99, Math.round(((elapsed - i * shotDuration) / shotDuration) * 100)));
+        } else {
+          status = 'queued';
+          shotProgress = 0;
+        }
+      }
+
+      return {
+        index: i,
+        label: shotLabel,
+        status,
+        retry_count: task?.retry_count || 0,
+        error_msg: task?.error_msg || null,
+        thumbnail_url: task?.thumbnail_url || `https://placehold.co/200x200/E2E8F0/94A3B8?text=Scene+${i + 1}`,
+        preview_url: task?.preview_url || null,
+        progress: shotProgress,
+      };
+    });
+
+    const completedShots = shots.filter((shot) => shot.status === 'completed').length;
+
+    const estimatedRemaining = (video.status === 'completed' || video.status === 'failed')
+      ? 0
+      : Math.max(0, Math.round(durationSec - elapsed));
+
     return {
       video_id: video.id,
-      status: video.status,
-      progress: totalShots === 0 ? 0 : Math.round((completedShots / totalShots) * 100),
+      status: video.status === 'generating' || video.status === 'composing' ? 'rendering' : video.status,
+      progress,
       completed_shots: completedShots,
       total_shots: totalShots,
-      estimated_seconds: 90,
-      shots: tasks.map((task) => ({
-        index: task.shot_index,
-        status: task.status,
-        retry_count: task.retry_count,
-        error_msg: task.error_msg,
-        thumbnail_url: task.thumbnail_url,
-        preview_url: task.preview_url,
-      })),
+      estimated_remaining: estimatedRemaining,
+      estimated_seconds: estimatedRemaining,
+      render_id: video.trace_id,
+      resolution: video.resolution || '1080×1920 (9:16)',
+      cover_url: video.status === 'completed' ? video.video_url : null,
+      download_url: video.video_url,
+      error_message: video.status === 'failed' ? '视频生成失败' : null,
+      shots,
       trace_id: video.trace_id,
     };
+  }
+
+  /**
+   * 取某项目「最新的视频任务状态」（按 created_at 倒序取第一条）。
+   * 复用 getVideoStatus 的响应形状，已完成则带 cover_url/download_url；项目无视频时返回 undefined。
+   */
+  getLatestVideoByProject(projectId: string) {
+    const latest = [...this.videos.values()]
+      .filter((video) => video.project_id === projectId)
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+    if (!latest) return undefined;
+    return this.getVideoStatus(latest.id);
   }
 
   regenerateVideoShot(videoId: string, index: number, newPrompt?: string) {

@@ -1,6 +1,7 @@
 import api from './api';
 import type {
   CreateProjectPayload,
+  ProjectDetail,
   ProjectListItem,
   ProjectListQuery,
 } from '@/types';
@@ -19,8 +20,8 @@ export const projectService = {
     return api.get('/projects', { params: query });
   },
 
-  /** 获取项目详情 */
-  detail(id: string): Promise<ProjectListItem> {
+  /** 获取项目详情（含 material_count / script_count / video_count 等阶段进度） */
+  detail(id: string): Promise<ProjectDetail> {
     return api.get(`/projects/${id}`);
   },
 
@@ -29,8 +30,8 @@ export const projectService = {
     return api.post('/projects', payload);
   },
 
-  /** 删除项目（请求体带 confirm_name 二次确认） */
-  remove(id: string, confirmName: string): Promise<void> {
-    return api.delete(`/projects/${id}`, { data: { confirm_name: confirmName } });
+  /** 删除项目 */
+  remove(id: string): Promise<void> {
+    return api.delete(`/projects/${id}`);
   },
 };
