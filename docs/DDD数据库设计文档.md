@@ -218,11 +218,18 @@ RETURNING video_quota;
 | `description` | `TEXT` | ✅ | NULL | ≤ 200 字符 | 项目说明 |
 | `product_url` | `VARCHAR(500)` | ✅ | NULL | — | 商品页 URL，M3 解析来源 |
 | `product_info` | `JSONB` | ✅ | NULL | 见 3.1 | 解析或手填的结构化商品信息 |
+| `cover_url` | `VARCHAR(500)` | ✅ | NULL | — | 项目封面图（首张商品图 / 成片封面）URL，卡片展示用 |
 | `status` | `VARCHAR(20)` | ❌ | `'draft'` | 枚举：见 6.2 | 工作流状态 |
+| `material_count` | `INTEGER` | ❌ | `0` | — | 素材数量（**实现采用去规范化冗余列**，非子查询，写素材时维护） |
+| `script_count` | `INTEGER` | ❌ | `0` | — | 剧本数量（去规范化冗余列） |
+| `video_count` | `INTEGER` | ❌ | `0` | — | 视频数量（去规范化冗余列） |
 | `views` | `INTEGER` | ❌ | `0` | — | 该项目下视频累计播放量 |
 | `render_progress` | `INTEGER` | ❌ | `0` | 0–100 | 渲染进度百分比，状态为 in\_progress 时进度条用 |
 | `tiktok_ready` | `BOOLEAN` | ❌ | `FALSE` | — | 是否达到 TikTok 发布标准 |
+| `is_guest` | `BOOLEAN` | ❌ | `FALSE` | — | 是否游客会话创建的项目 |
 | `created_at` / `updated_at` | `TIMESTAMPTZ` | ❌ | `NOW()` | — | — |
+
+> **v1.2 实现对齐**：`material_count` / `script_count` / `video_count` 在实现中为**去规范化冗余列**（实体 `Project` + `init-db.sql` 均含），由业务侧在增删子资源时维护；下方「典型 SQL」用子查询算 `video_count` 仅为示意，实际列表查询直接读冗余列。
 
 **索引**
 
@@ -359,12 +366,12 @@ LIMIT 5;
 | --- | --- | --- | --- | --- | --- |
 | `id` | `UUID` | ❌ | `uuid_generate_v4()` | **PK** | — |
 | `project_id` | `UUID` | ❌ | — | **FK → `projects.id`** `ON DELETE CASCADE` | 所属项目 |
-| `mode` | `VARCHAR(20)` | ❌ | `'auto'` | 枚举：`reference` / `template` / `auto` | 生成模式（v1.2 新增） |
+| `mode` | `VARCHAR(20)` | ❌ | `'auto'` | 枚举：`reference` / `template` / `auto` | 生成模式（v1.2 设计，**⚠️ 尚未实现**：实体/init-db.sql/线上库暂无此列） |
 | `strategy_type` | `VARCHAR(50)` | ❌ | — | 枚举：见 6.3 | 痛点共鸣型 / 产品测评型 / 情感故事型 / 限时促销型 / 爆款仿写 / 模板融合 |
 | `content` | `TEXT` | ✅ | NULL | — | 剧本概述（首屏一句话/旁白叙事） |
 | `storyboard` | `JSONB` | ✅ | NULL | 见 3.2 | 分镜数组 + 因子快照 |
 | `factor_history` | `JSONB` | ✅ | `'[]'::jsonb` | 见 3.3 | 因子替换历史（SCRP-010 撤销/重做依赖此字段） |
-| `version` | `INTEGER` | ❌ | `1` | — | 剧本版本号，因子替换或重生成时自增（v1.2 新增） |
+| `version` | `INTEGER` | ❌ | `1` | — | 剧本版本号，因子替换或重生成时自增（v1.2 设计，**⚠️ 尚未实现**：实体/init-db.sql/线上库暂无此列） |
 | `status` | `VARCHAR(20)` | ❌ | `'draft'` | 枚举：见 6.3 | `draft` / `generating` / `completed` / `archived` |
 | `created_at` / `updated_at` | `TIMESTAMPTZ` | ❌ | `NOW()` | — | — |
 
@@ -443,13 +450,13 @@ RETURNING storyboard, factor_history, version;
 | `id` | `UUID` | ❌ | `uuid_generate_v4()` | **PK** | — |
 | `project_id` | `UUID` | ❌ | — | **FK → `projects.id`** `ON DELETE CASCADE` | — |
 | `script_id` | `UUID` | ✅ | NULL | **FK → `scripts.id`** `ON DELETE SET NULL` | 允许剧本删除后保留视频 |
-| `render_id` | `VARCHAR(20)` | ✅ | NULL | — | 渲染任务编号，格式 `VC-XXXXX-AIGC`（v1.2 新增，前端展示用） |
+| `render_id` | `VARCHAR(20)` | ✅ | NULL | — | 渲染任务编号，格式 `VC-XXXXX-AIGC`（v1.2 设计，**⚠️ 尚未实现**：实体/init-db.sql/线上库暂无此列；前端 `normalizeTask` 已 fallback 到 `trace_id`） |
 | `video_url` | `VARCHAR(500)` | ✅ | NULL | — | 成片在 MinIO 中的对象 URL |
-| `cover_url` | `VARCHAR(500)` | ✅ | NULL | — | 视频封面图 URL，completed 时生成（v1.2 新增） |
+| `cover_url` | `VARCHAR(500)` | ✅ | NULL | — | 视频封面图 URL，completed 时生成（v1.2 设计，**⚠️ 尚未实现**：实体/init-db.sql/线上库暂无此列；前端已在消费） |
 | `duration` | `FLOAT` | ✅ | NULL | ≤ 15s | 实际时长 |
 | `resolution` | `VARCHAR(50)` | ✅ | NULL | — | 分辨率描述字符串，如 `"1080×1920 (9:16)"`（v1.2：从枚举改为描述字符串） |
-| `status` | `VARCHAR(20)` | ❌ | `'queued'` | 枚举：见 6.4 | `queued`/`rendering`/`completed`/`failed`（v1.2 简化） |
-| `error_message` | `TEXT` | ✅ | NULL | — | 失败原因描述，status=failed 时有值（v1.2 新增） |
+| `status` | `VARCHAR(20)` | ❌ | `'queued'` | 枚举：见 6.4 | `queued`/`rendering`/`completed`/`failed`（v1.2 简化；**⚠️ 实现默认值仍为 `'pending'`，枚举尚未对齐**） |
+| `error_message` | `TEXT` | ✅ | NULL | — | 失败原因描述，status=failed 时有值（v1.2 设计，**⚠️ 尚未实现**：实体/init-db.sql/线上库暂无此列；前端已在消费） |
 | `trace_id` | `VARCHAR(36)` | ✅ | NULL | — | 全局 OpenTelemetry traceId（UUID v4 字符串），打穿 NestJS → BullMQ → FastAPI → Seedance |
 | `generation_cost` | `FLOAT` | ✅ | NULL | 单位 元（CNY）或美元 | 火山引擎 API 用量结算 |
 | `created_at` / `updated_at` | `TIMESTAMPTZ` | ❌ | `NOW()` | — | — |

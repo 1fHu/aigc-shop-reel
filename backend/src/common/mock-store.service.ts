@@ -29,6 +29,7 @@ export type ProjectRecord = {
   views: number;
   render_progress: number;
   tiktok_ready: boolean;
+  is_guest: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -173,6 +174,7 @@ type ViralLibraryRecord = {
   status: 'pending' | 'analyzing' | 'completed' | 'failed';
   performance_score: number | null;
   analysis_report: Record<string, unknown>;
+  embedding: string;
   created_at: string;
 };
 
@@ -255,6 +257,7 @@ export class MockStoreService {
       views: 4200,
       render_progress: 100,
       tiktok_ready: true,
+      is_guest: false,
       created_at: now,
       updated_at: now,
     };
@@ -424,6 +427,7 @@ export class MockStoreService {
         cta: '限时优惠',
         style_tags: ['自然日系', '真实测评'],
       },
+      embedding: '[0.1,0.2,0.3]',
       created_at: now,
     };
     this.viralLibrary.set(demoLibrary.id, demoLibrary);
@@ -563,6 +567,7 @@ export class MockStoreService {
       views: 0,
       render_progress: 0,
       tiktok_ready: false,
+      is_guest: false,
       created_at: now,
       updated_at: now,
     };
@@ -1274,6 +1279,7 @@ export class MockStoreService {
         cta: '待分析',
         style_tags: [],
       },
+      embedding: '',
       created_at: new Date().toISOString(),
     };
     this.viralLibrary.set(item.id, item);
@@ -1298,6 +1304,7 @@ export class MockStoreService {
         cta: '待分析',
         style_tags: [],
       },
+      embedding: '',
       created_at: new Date().toISOString(),
     };
     this.viralLibrary.set(item.id, item);
