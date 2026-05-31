@@ -34,26 +34,36 @@ export class MaterialController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get('search')
-  search(@Query('project_id') projectId: string, @Query('q') q = '', @Query('tags') tags = '', @Query('level') level = 'material') {
-    const results = this.materialService.search(projectId, q, tags, level);
+  async search(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('project_id') projectId: string,
+    @Query('q') q = '',
+    @Query('tags') tags = '',
+    @Query('level') level = 'material',
+  ) {
+    const results = await this.materialService.search(user.id, projectId, q, tags, level);
     return ok(results, results.length);
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Get(':id')
-  async getById(@Param('id') id: string) {
-    return ok(await this.materialService.getById(id));
+  async getById(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return ok(await this.materialService.getById(id, user.id));
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Put(':id/tags')
-  updateTags(@Param('id') id: string, @Body() body: { tags: string[] }) {
-    return ok(this.materialService.updateTags(id, body.tags));
+  async updateTags(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+    @Body() body: { tags: string[] },
+  ) {
+    return ok(await this.materialService.updateTags(id, user.id, body.tags));
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Delete(':id')
-  async delete(@Param('id') id: string) {
-    return ok(await this.materialService.delete(id));
+  async delete(@CurrentUser() user: AuthenticatedUser, @Param('id') id: string) {
+    return ok(await this.materialService.delete(id, user.id));
   }
 }

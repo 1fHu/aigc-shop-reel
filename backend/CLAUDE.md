@@ -14,7 +14,7 @@ VidCraft 是一个面向 TikTok 电商的 AIGC 带货视频生成系统。本目
 | **未迁移 → Mock 内存** | `MockStoreService` | `analytics` / `dashboard` / `gene-bank` / `viral-library` / `user`。仍是 seed 出来的 demo 数据，**重启即丢**。 |
 | **Mock 兜底的临时态** | `MockStoreService` | 即便已迁移的 `auth`，其 **Refresh Token 黑名单、邮箱验证码、找回密码验证码**仍存在 Mock（这些没有实体/表，是设计上的内存态）。 |
 
-> ⚠️ **已知孤儿路径**：`queue/material-analysis.processor.ts` 仍读写 `MockStore`（`store.getMaterial` / `store.updateMaterialAnalysis`），但素材现已落 Postgres，且**素材上传端点已移除**（见下），所以该 processor 当前无人入队、形同废弃。要恢复异步解析需把它改成走 `materialRepo`。
+> ℹ️ **休眠队列**：`queue/material-analysis.processor.ts` 已对齐 Postgres（注入 `materialRepo`，`QueueModule` 加了 `forFeature([Material])`），但素材现由 `product.parseImage` **同步**解析并落库（status=ready），**无人向该队列入队** → 处于休眠状态，保留以备恢复「上传后异步解析」链路时直接复用。
 
 **改动数据模型时仍要保持「实体 + SQL」同步，否则迁移/重建库会漂移：**
 1. `src/database/entities/<name>.entity.ts` 实体定义（属性 camelCase + `@Column({ name: 'snake_case' })`）。
@@ -50,7 +50,7 @@ VidCraft 是一个面向 TikTok 电商的 AIGC 带货视频生成系统。本目
 - **鉴权**：JWT（`@nestjs/jwt` + `passport-jwt`），`AuthGuard('jwt')`
 - **校验**：`class-validator` + `class-transformer`，全局 `ValidationPipe({ transform: true, whitelist: true })`
 - **持久层（已接入）**：TypeORM 0.3 + `pg`（PostgreSQL，含 pgvector）。`DatabaseModule` 已建立真实连接，已迁移模块走 Repository（见第一红线）。
-- **队列**：`@nestjs/bull`（底层 `bull` v4，**不是** bullmq）+ Redis。`material-analysis` 队列已注册但当前无人入队（孤儿，见第一红线）；`video-generation` processor 仍是空 TODO，视频生成实际在 Service 内同步跑。
+- **队列**：`@nestjs/bull`（底层 `bull` v4，**不是** bullmq）+ Redis。`material-analysis` 队列已注册、processor 已对齐 Postgres，但当前无人入队（休眠，见第一红线）；`video-generation` processor 仍是空 TODO，视频生成实际在 Service 内同步跑。
 - **对象存储（已接入）**：MinIO，`common/minio-storage.service.ts`（`@Global`，自动建桶 + public-read 策略）。由 `product.service`（parse-image 落图）与 `material-analysis.processor`（下载文件）使用。
 - **文件上传**：`multer`（`FilesInterceptor` / `FileInterceptor`，依赖已就绪）
 - **可观测性**：OpenTelemetry（`src/tracing/tracing.ts`，启动时 `initTracing()`）
@@ -81,7 +81,7 @@ backend/src/
 │   └── migrations/             # TypeORM 迁移
 ├── modules/<feature>/          # 业务模块：controller + service + module (+ dto/)
 │   └── auth/jwt.strategy.ts    # AuthenticatedUser 类型来源
-├── queue/                      # material-analysis（孤儿）/ video-generation（空 TODO）
+├── queue/                      # material-analysis（休眠）/ video-generation（空 TODO）
 ├── redis/                      # Redis 客户端（@Global）
 └── tracing/                    # OpenTelemetry 初始化
 
@@ -266,8 +266,8 @@ POST /api/videos/generate
 前端轮询 GET /api/videos/:id/status 观察逐镜进度（暂无 WebSocket 推送，video.gateway.ts 仍是 TODO）。
 ```
 
-**残留的孤儿队列**（保留以备恢复，当前不在主链路）：
-- `queue/material-analysis.processor.ts`：`@nestjs/bull`（底层 `bull` v4，**非 bullmq**），`@Process()` 里 `store.getMaterial` + `minio.downloadFile` + `volcano.analyzeMaterial` + `store.updateMaterialAnalysis`。**它读写 Mock 而非 Postgres，且已无端点入队** → 形同废弃；恢复异步解析需改成走 `materialRepo` 并重新接入入队点。
+**休眠 / 空置队列**（不在主链路）：
+- `queue/material-analysis.processor.ts`：`@nestjs/bull`（底层 `bull` v4，**非 bullmq**），`@Process()` 里 `materialRepo.findOne` + `minio.downloadFile` + `volcano.analyzeMaterial` + `materialRepo.update`。已对齐 Postgres，但**无端点入队** → 休眠；恢复异步解析时重新接入入队点即可。
 - `queue/video-generation.processor.ts`：空 `TODO`，视频生成实为 Service 内同步执行。
 
 ## 待办 / 已知未实现（Roadmap）
@@ -276,12 +276,11 @@ POST /api/videos/generate
 
 **仍未完成 / 已知缺口：**
 - **未迁移到 Postgres 的模块**：`analytics` / `dashboard` / `gene-bank` / `viral-library` / `user` 仍走 Mock Store，重启丢数据，需逐个迁到 Repository。
-- **孤儿队列**：`material-analysis.processor` 读写 Mock 且无人入队（见上节）；`video-generation.processor` 为空 TODO。两者要么修复要么删。
+- **休眠/空置队列**：`material-analysis.processor` 已对齐 Postgres 但无人入队（休眠）；`video-generation.processor` 为空 TODO。
 - **AI 诊断未实现**：`analytics/analyst-agent.service.ts` 整段 TODO，视频效果诊断目前返回 Mock 数据。
 - **实时进度推送**：`video.gateway.ts` WebSocket 推送是 TODO，前端仍靠轮询 `GET /api/videos/:id/status`。
 - **Python worker 未集成**：`worker/`（FFmpeg 合成/场景切片的独立 Python 服务）存在，但 backend 自己 inline 调 ffmpeg，worker 当前未被调用；`material_slices` 场景切片也未生成。
-- **`material.service` 占位方法**：`search()` 返回 `[]`、`updateTags()` 仅回显入参，均为桩。
-- **`videoService.getDownloadUrl` 类型 build 报错**：前端侧遗留，用户要求暂缓后修（注意前端 `type-check` 是空跑，须 `npm run build` 验证）。
+- **素材向量检索未接入**：`material.service.search()` 已实现 keyword + tag 过滤（score 返回 null），但 `vector`/`hybrid` 模式与 `slice` 粒度仍待补（依赖 pgvector 与 `material_slices`）。
 - **文本素材**（产品已决定「先记入待办，暂不做」）：允许上传纯文本（卖点/评价/话术）。建议新增 `file_type: 'text'`、文本存 `content` 列、跳过 Vision 直接走 Embedding。落地前先扩展 `docs/API接口规范文档.md` 契约，并同步 entity/SQL 与前端 UI。
 
 ---

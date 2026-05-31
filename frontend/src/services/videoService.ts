@@ -23,6 +23,15 @@ type RawVideoTask = Partial<VideoTask> & {
   shots?: RawVideoShot[];
 };
 
+type RawDownload = {
+  id?: string;
+  video_url?: string | null;
+  status?: string;
+  url?: string;
+  download_url?: string;
+  expires_at?: string;
+};
+
 const STATUS_MAP: Record<string, VideoTaskStatus> = {
   queued: 'queued',
   rendering: 'rendering',
@@ -142,20 +151,20 @@ export const videoService = {
   },
 
   /**
-   * 获取视频下载临时链接
-   *
-   * FIXME(download-url-type): 此处 `raw` 实际是 AxiosResponse，`tsc --noEmit` 通过但
-   * `npm run build` 报错（Property 'url'/'download_url'/'expires_at' does not exist on
-   * AxiosResponse）。需对齐后端 GET /videos/:id/download 响应 shape 后修正类型/解包，
-   * 与其它方法一样改成 `.then((raw) => ...(raw as RawXxx))`。
-   * 已与用户约定：暂缓修复，留待后续统一处理。
+   * 获取视频下载链接。
+   * 后端 GET /api/videos/:id/download 返回 `{ id, video_url, status }`（成片为静态文件 URL，无过期时间），
+   * 这里归一成 `{ url, download_url, expires_at }` 供页面消费。
    */
   getDownloadUrl(videoId: string): Promise<{ url: string; download_url?: string; expires_at: string }> {
-    return api.get(`/videos/${videoId}/download`).then((raw: any) => ({
-      url: raw?.url || raw?.download_url || '',
-      download_url: raw?.download_url || raw?.url,
-      expires_at: raw?.expires_at || '',
-    }));
+    return api.get(`/videos/${videoId}/download`).then((data) => {
+      const raw = data as unknown as RawDownload;
+      const url = raw.url || raw.download_url || raw.video_url || '';
+      return {
+        url,
+        download_url: raw.download_url || raw.video_url || url,
+        expires_at: raw.expires_at || '',
+      };
+    });
   },
 
   /** 触发指定画幅 / 分辨率的导出 */
