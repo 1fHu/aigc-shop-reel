@@ -63,8 +63,9 @@ export default function Login() {
     try {
       await login({ username: form.username, password: form.password });
       message.success('登录成功');
-    } catch {
-      // 拦截器已统一 toast
+    } catch (err: any) {
+      const msg = err?.response?.data?.msg || err?.message || '登录失败，请重试';
+      message.error(msg);
     }
   };
 

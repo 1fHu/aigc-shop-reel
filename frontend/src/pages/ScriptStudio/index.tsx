@@ -70,12 +70,13 @@ export default function ScriptStudio() {
 
   // ---- handlers ----
   const handleGenerate = useCallback(async () => {
-    setScenes([]);
     setGenerating(true);
+    let cleared = false;
     try {
       const pid = projectId || '';
       for await (const event of scriptService.generate({ project_id: pid, strategy_type: 'pain_point' })) {
         if (event.type === 'scene') {
+          if (!cleared) { setScenes([]); cleared = true; }
           setScenes((prev) => [...prev, event.scene]);
         } else if (event.type === 'done') {
           setScriptId(event.script_id);
@@ -103,21 +104,23 @@ export default function ScriptStudio() {
   }, []);
 
   const handleAddShot = useCallback(() => {
-    const newIndex = scenes.length;
-    const newScene: Scene = {
-      id: `scene-${newIndex}-${Date.now()}`,
-      index: newIndex,
-      ...DEFAULT_SCENE,
-      thumb_url: `https://placehold.co/400x240/8B5CF6/fff?text=Scene+${newIndex + 1}`,
-    };
-    setScenes((prev) => [...prev, newScene]);
-    setSelectedIndex(newIndex);
+    setScenes((prev) => {
+      const newIndex = prev.length;
+      const newScene: Scene = {
+        id: `scene-${newIndex}-${Date.now()}`,
+        index: newIndex,
+        ...DEFAULT_SCENE,
+        thumb_url: `https://placehold.co/400x240/8B5CF6/fff?text=Scene+${newIndex + 1}`,
+      };
+      return [...prev, newScene];
+    });
+    setSelectedIndex(() => scenes.length);
   }, [scenes.length]);
 
   const handleDeleteShot = useCallback((index: number) => {
     setScenes((prev) => {
-      const next = prev.filter((s) => s.index !== index).map((s, i) => ({ ...s, index: i, id: `scene-${i}` }));
-      return next;
+      const filtered = prev.filter((s) => s.index !== index);
+      return filtered.map((s, i) => ({ ...s, index: i }));
     });
     setSelectedIndex((prev) => {
       if (prev === index) return Math.max(0, index - 1);
@@ -130,11 +133,13 @@ export default function ScriptStudio() {
     if (!scriptId) return;
     setRegenerating(true);
     try {
+      const token = localStorage.getItem('vidcraft_access_token');
       const resp = await fetch(`/api/scripts/${scriptId}/regenerate-shot`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('vidcraft_access_token')}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ shot_index: index }),
       });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       const result = data.data || data;
       if (result?.shot) {
@@ -149,15 +154,18 @@ export default function ScriptStudio() {
   }, [scriptId, message]);
 
   const handleFactorChange = useCallback(async (key: FactorKey, value: string) => {
+    const previousValue = factorState[key];
     setFactorState((prev) => ({ ...prev, [key]: value }));
     if (!scriptId) return;
     setApplyingFactor(true);
     try {
+      const token = localStorage.getItem('vidcraft_access_token');
       const resp = await fetch(`/api/scripts/${scriptId}/replace-factor`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('vidcraft_access_token')}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ dimension: key, new_value: value }),
       });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       const result = data.data || data;
       if (result?.affected_shots) {
@@ -170,11 +178,12 @@ export default function ScriptStudio() {
         }, ...prev]);
       }
     } catch {
+      setFactorState((prev) => ({ ...prev, [key]: previousValue }));
       message.error('因子替换失败');
     } finally {
       setApplyingFactor(false);
     }
-  }, [scriptId, factors, message]);
+  }, [scriptId, factors, factorState, message]);
 
   const handleGenerateVideo = useCallback(() => {
     const target = projectId
