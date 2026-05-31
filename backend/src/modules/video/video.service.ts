@@ -6,6 +6,7 @@ import { join } from 'path';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import { VolcanoApiService } from '../volcano/volcano-api.service';
+import { MinioStorageService } from '../../common/minio-storage.service';
 import { Video } from '../../database/entities/video.entity';
 import { VideoTask } from '../../database/entities/video-task.entity';
 import { Project } from '../../database/entities/project.entity';
@@ -26,6 +27,7 @@ export class VideoService {
 
   constructor(
     private readonly volcano: VolcanoApiService,
+    private readonly minio: MinioStorageService,
     @InjectRepository(Video) private readonly videoRepo: Repository<Video>,
     @InjectRepository(VideoTask) private readonly taskRepo: Repository<VideoTask>,
     @InjectRepository(Project) private readonly projectRepo: Repository<Project>,
@@ -206,11 +208,14 @@ export class VideoService {
       await this.videoRepo.update(videoId, { status: 'failed' });
       return;
     }
+    // 参考图：公网 URL 直接透传；本地地址（localhost/内网，火山云端拉不到）才下载转 base64 内联
+    const refImages = await this.prepareReferenceImages(imageUrls);
+    console.log(`[VideoService] reference images prepared: ${imageUrls.length} -> ${refImages.length}`);
     try {
     const results: Array<{ index: number; localPath: string }> = [];
     for (const s of storyboard) {
       console.log(`[VideoService] Generating shot ${s.index}...`);
-      const r = await this.generateShot(videoId, s, productName, imageUrls);
+      const r = await this.generateShot(videoId, s, productName, refImages);
       results.push(r);
       console.log(`[VideoService] Shot ${s.index} result: ${r.localPath ? 'OK' : 'FAIL'}`);
     }
@@ -226,6 +231,55 @@ export class VideoService {
       console.error(`[VideoService] buildPromptAndSubmit FAILED: ${(err as Error).message}`, (err as Error).stack);
       await this.videoRepo.update(videoId, { status: 'failed' });
     }
+  }
+
+  /**
+   * 准备传给 Seedance 的参考图。
+   * Seedance 在云端按 URL 下载参考图：
+   *  - 公网可达的 URL（上线后 MinIO/CDN 为公网域名）→ 直接透传，云端自行下载，最高效；
+   *  - 本地 / 内网地址（http://localhost:9000/... 等，云端拉不到，报 "resource download failed"）
+   *    → 从 MinIO 取回字节内联成 base64 data URI，绕开公网可达性要求。
+   * 下载失败的图片直接跳过（不阻断生成）。
+   */
+  private async prepareReferenceImages(imageUrls: string[]): Promise<string[]> {
+    const out: string[] = [];
+    for (const url of imageUrls) {
+      if (!url || url.includes('placehold.co')) continue;
+      if (url.startsWith('data:')) { out.push(url); continue; }
+
+      let host = '';
+      try { host = new URL(url).hostname; } catch { /* 非标准 URL，按本地处理 */ }
+
+      // 公网地址：直接透传
+      if (host && !this.isLocalHost(host)) { out.push(url); continue; }
+
+      // 本地 / 内网地址：下载后内联
+      try {
+        const buf = await this.minio.downloadFile(url);
+        if (!buf?.length) continue;
+        const lower = url.toLowerCase();
+        const mime = lower.endsWith('.png') ? 'image/png'
+          : lower.endsWith('.webp') ? 'image/webp' : 'image/jpeg';
+        out.push(`data:${mime};base64,${buf.toString('base64')}`);
+      } catch (err) {
+        this.logger.warn(`参考图下载失败，跳过：${url} — ${(err as Error).message}`);
+      }
+    }
+    return out;
+  }
+
+  /** 判断 host 是否为本地 / 内网地址（火山云端无法访问，需改为内联传图） */
+  private isLocalHost(host: string): boolean {
+    return (
+      host === 'localhost' ||
+      host === '127.0.0.1' ||
+      host === '0.0.0.0' ||
+      host === '::1' ||
+      host.endsWith('.local') ||
+      host.startsWith('192.168.') ||
+      host.startsWith('10.') ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(host)
+    );
   }
 
   private buildShotPrompt(shot: ScriptShot, productName: string): string {

@@ -208,7 +208,8 @@ export class MockStoreService {
   constructor() {
     const now = new Date().toISOString();
     const demoUser: UserRecord = {
-      id: '00000000-0000-0000-0000-000000000001',
+      // 与 Postgres seed（seed-demo-data.sql）及游客 GUEST_USER_ID 对齐，全系统统一 demo 用户 id
+      id: 'a0000000-0000-0000-0000-000000000001',
       email: 'demo@vidcraft.icu',
       password_hash: '$2b$10$Kgi184mPfw5dFWhhYicFQ.qm1Q.YHrvcvxTOP2ffr0s/hOGscVfVi',
       nickname: '体验用户',
@@ -654,7 +655,7 @@ export class MockStoreService {
   }
 
   getDemoUser(): UserRecord {
-    const demoUser = this.getUserById('00000000-0000-0000-0000-000000000001');
+    const demoUser = this.getUserById('a0000000-0000-0000-0000-000000000001');
     if (!demoUser) {
       throw new Error('Demo user not seeded');
     }

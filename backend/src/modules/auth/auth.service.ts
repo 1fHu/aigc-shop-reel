@@ -7,6 +7,12 @@ import { MockStoreService } from '../../common/mock-store.service';
 import { EmailService } from './email.service';
 import { User } from '../../database/entities/user.entity';
 
+/**
+ * 游客 / 演示模式复用 Postgres 中预置的 demo 用户行（见 seed-demo-data.sql 与 DDD §2.1）。
+ * 必须与库里真实存在的 users.id 一致，否则游客创建项目会触发 projects_user_id_fkey 外键失败。
+ */
+export const GUEST_USER_ID = 'a0000000-0000-0000-0000-000000000001';
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -90,7 +96,7 @@ export class AuthService {
 
   guestLogin() {
     const guestUser = {
-      id: '00000000-0000-0000-0000-000000000001',
+      id: GUEST_USER_ID,
       email: 'demo@vidcraft.icu',
       nickname: '体验用户',
       isGuest: true,
@@ -105,7 +111,7 @@ export class AuthService {
       throw new UnauthorizedException('Refresh Token 已失效');
     const userId = this.store.getUserIdByRefreshToken(refreshToken);
     if (!userId) throw new UnauthorizedException('Refresh Token 无效或已过期');
-    if (userId.startsWith('00000000')) {
+    if (userId === GUEST_USER_ID) {
       return { accessToken: this.jwtService.sign({ sub: userId, email: 'demo@vidcraft.icu', role: 'guest' }) };
     }
     const user = await this.userRepo.findOne({ where: { id: userId } });
@@ -119,7 +125,7 @@ export class AuthService {
   }
 
   async profile(userId: string) {
-    if (userId === '00000000-0000-0000-0000-000000000001') {
+    if (userId === GUEST_USER_ID) {
       return { id: userId, email: 'demo@vidcraft.icu', nickname: '体验用户', avatar_url: null, plan_type: 'free', video_quota: 2, is_guest: true };
     }
     const user = await this.userRepo.findOne({ where: { id: userId } });
