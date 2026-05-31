@@ -12,6 +12,7 @@ export type ScriptShot = {
   duration: number;
   voiceover: string;
   subtitle: string;
+  bgm: string;
   reference_image_url: string | null;
 };
 
@@ -84,7 +85,7 @@ export class ScriptService {
       thumb_url: `https://placehold.co/400x240/8B5CF6/fff?text=Scene+${shot.index + 1}`,
       description: shot.description,
       camera_motion: shot.camera_motion || 'static',
-      bgm: 'Modern Beat',
+      bgm: shot.bgm || 'Modern Beat',
       voiceover: shot.voiceover || '',
       subtitle: shot.subtitle || '',
     };
