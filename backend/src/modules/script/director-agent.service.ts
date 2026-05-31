@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { ScriptShot } from '../../common/mock-store.service';
+import type { ScriptShot } from './script.service';
 
 /** 允许的运镜方式（AI 越界时归一化到 static） */
 const CAMERA_MOTIONS = ['push-in', 'static', 'tracking', 'pan', 'zoom-out', 'handheld'];
@@ -106,6 +106,7 @@ export class DirectorAgentService {
           duration,
           voiceover: typeof s.voiceover === 'string' ? s.voiceover : '',
           subtitle: typeof s.subtitle === 'string' ? s.subtitle : '',
+          bgm: typeof s.bgm === 'string' ? s.bgm : 'Modern Beat',
           reference_image_url: null,
         };
       });
@@ -136,6 +137,7 @@ export class DirectorAgentService {
         duration: 3,
         voiceover: hook,
         subtitle: '别划走',
+        bgm: 'Modern Beat',
         reference_image_url: null,
       },
       {
@@ -144,6 +146,7 @@ export class DirectorAgentService {
         duration: 3,
         voiceover: points[0] ? `它最大的亮点就是${points[0]}` : `${name} 的设计很有诚意`,
         subtitle: points[0] || '核心卖点',
+        bgm: 'Modern Beat',
         reference_image_url: null,
       },
       {
@@ -152,6 +155,7 @@ export class DirectorAgentService {
         duration: 3,
         voiceover: `${scene}，用起来格外顺手`,
         subtitle: scene,
+        bgm: 'Modern Beat',
         reference_image_url: null,
       },
       {
@@ -160,6 +164,7 @@ export class DirectorAgentService {
         duration: 3,
         voiceover: points[1] ? `而且${points[1]}` : `特别适合${audience}`,
         subtitle: points[1] || audience,
+        bgm: 'Modern Beat',
         reference_image_url: null,
       },
       {
@@ -168,6 +173,7 @@ export class DirectorAgentService {
         duration: 3,
         voiceover: cta,
         subtitle: cta,
+        bgm: 'Modern Beat',
         reference_image_url: null,
       },
     ];
