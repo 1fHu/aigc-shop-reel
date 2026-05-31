@@ -18,8 +18,7 @@ CREATE TABLE users (
     plan_type VARCHAR(20) DEFAULT 'free',
     video_quota INTEGER DEFAULT 3,
     created_at TIMESTAMPTZ DEFAULT NOW(),
-    updated_at TIMESTAMPTZ DEFAULT NOW(),
-    is_guest BOOLEAN DEFAULT false
+    updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 2. projects
@@ -110,6 +109,7 @@ CREATE TABLE video_tasks (
     status VARCHAR(20) DEFAULT 'queued',
     retry_count INTEGER DEFAULT 0,
     error_msg TEXT,
+    preview_url VARCHAR(500),
     trace_id VARCHAR(36),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

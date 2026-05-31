@@ -29,6 +29,7 @@ export type ProjectRecord = {
   views: number;
   render_progress: number;
   tiktok_ready: boolean;
+  is_guest: boolean;
   created_at: string;
   updated_at: string;
 };
@@ -173,6 +174,7 @@ type ViralLibraryRecord = {
   status: 'pending' | 'analyzing' | 'completed' | 'failed';
   performance_score: number | null;
   analysis_report: Record<string, unknown>;
+  embedding: string;
   created_at: string;
 };
 
@@ -206,7 +208,8 @@ export class MockStoreService {
   constructor() {
     const now = new Date().toISOString();
     const demoUser: UserRecord = {
-      id: '00000000-0000-0000-0000-000000000001',
+      // 与 Postgres seed（seed-demo-data.sql）及游客 GUEST_USER_ID 对齐，全系统统一 demo 用户 id
+      id: 'a0000000-0000-0000-0000-000000000001',
       email: 'demo@vidcraft.icu',
       password_hash: '$2b$10$Kgi184mPfw5dFWhhYicFQ.qm1Q.YHrvcvxTOP2ffr0s/hOGscVfVi',
       nickname: '体验用户',
@@ -255,6 +258,7 @@ export class MockStoreService {
       views: 4200,
       render_progress: 100,
       tiktok_ready: true,
+      is_guest: false,
       created_at: now,
       updated_at: now,
     };
@@ -424,6 +428,7 @@ export class MockStoreService {
         cta: '限时优惠',
         style_tags: ['自然日系', '真实测评'],
       },
+      embedding: '[0.1,0.2,0.3]',
       created_at: now,
     };
     this.viralLibrary.set(demoLibrary.id, demoLibrary);
@@ -563,6 +568,7 @@ export class MockStoreService {
       views: 0,
       render_progress: 0,
       tiktok_ready: false,
+      is_guest: false,
       created_at: now,
       updated_at: now,
     };
@@ -649,7 +655,7 @@ export class MockStoreService {
   }
 
   getDemoUser(): UserRecord {
-    const demoUser = this.getUserById('00000000-0000-0000-0000-000000000001');
+    const demoUser = this.getUserById('a0000000-0000-0000-0000-000000000001');
     if (!demoUser) {
       throw new Error('Demo user not seeded');
     }
@@ -1274,6 +1280,7 @@ export class MockStoreService {
         cta: '待分析',
         style_tags: [],
       },
+      embedding: '',
       created_at: new Date().toISOString(),
     };
     this.viralLibrary.set(item.id, item);
@@ -1298,6 +1305,7 @@ export class MockStoreService {
         cta: '待分析',
         style_tags: [],
       },
+      embedding: '',
       created_at: new Date().toISOString(),
     };
     this.viralLibrary.set(item.id, item);
