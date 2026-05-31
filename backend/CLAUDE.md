@@ -4,21 +4,24 @@ VidCraft 是一个面向 TikTok 电商的 AIGC 带货视频生成系统。本目
 
 ---
 
-## ⚠️ 第一红线：当前是 Mock 数据库，两份数据存储格式必须同步更新
+## ⚠️ 第一红线：数据层已部分迁移到 PostgreSQL，Mock 与真实库并存
 
-项目目前**没有连接真实数据库**，所有业务数据都存放在内存 Mock 存储中。但代码里**同时保留了未来要迁移到的真实数据库定义**。这意味着任何涉及数据结构的改动（新增字段、改字段名、改类型、新增实体等）**必须同时改两个地方，否则迁移时会出现 schema 漂移**：
+项目**已接入真实 PostgreSQL**（`DatabaseModule` 用 `TypeOrmModule.forRootAsync` 连接，`synchronize: false`，已注册实体 `User / Project / Material / Script / Video / VideoTask`）。但迁移**只完成了一半**，目前是「真实库 + 内存 Mock」混合态：
 
-| 数据形态 | 位置 | 说明 |
+| 模块 | 主存储 | 说明 |
 | --- | --- | --- |
-| **当前生效：Mock 存储** | `src/common/mock-store.service.ts` | 内存 `Map` + `XxxRecord` 类型定义 + CRUD 方法。所有 Service 现在都依赖它。字段命名为 **snake_case**（与 API 对外字段一致）。 |
-| **未来生效：真实数据库** | `src/database/entities/*.entity.ts` + `scripts/init-db.sql` + `scripts/seed-demo-data.sql` | TypeORM 实体（属性 camelCase、`@Column({ name: 'snake_case' })` 映射列名）+ Postgres 建表 SQL + 种子数据。 |
+| **已迁移 → PostgreSQL** | TypeORM Repository | `auth`(User) / `project` / `product` / `material` / `script` / `video`。Service 注入 `@InjectRepository(...)`，数据真正落库、重启不丢。 |
+| **未迁移 → Mock 内存** | `MockStoreService` | `analytics` / `dashboard` / `gene-bank` / `viral-library` / `user`。仍是 seed 出来的 demo 数据，**重启即丢**。 |
+| **Mock 兜底的临时态** | `MockStoreService` | 即便已迁移的 `auth`，其 **Refresh Token 黑名单、邮箱验证码、找回密码验证码**仍存在 Mock（这些没有实体/表，是设计上的内存态）。 |
 
-**规则：改动数据模型时，按以下三处同步修改并保持字段一致：**
-1. `mock-store.service.ts` 里对应的 `XxxRecord` 类型 + 相关 CRUD 方法（含构造函数里的 seed 示例数据）。
-2. `src/database/entities/<name>.entity.ts` 实体定义。
-3. `scripts/init-db.sql`（表结构）与 `scripts/seed-demo-data.sql`（如涉及种子数据）。
+> ⚠️ **已知孤儿路径**：`queue/material-analysis.processor.ts` 仍读写 `MockStore`（`store.getMaterial` / `store.updateMaterialAnalysis`），但素材现已落 Postgres，且**素材上传端点已移除**（见下），所以该 processor 当前无人入队、形同废弃。要恢复异步解析需把它改成走 `materialRepo`。
 
-> 注意：当前两份定义**已经存在漂移**（例如 `Material` 实体缺少 mock 里有的 `thumbnail_url`/`status`/`duration`/`slices` 字段）。新增字段时优先把缺的补齐，不要扩大漂移。提交前自检：mock 的 `XxxRecord` 字段集合 ⊆/= 实体+SQL 的列集合。
+**改动数据模型时仍要保持「实体 + SQL」同步，否则迁移/重建库会漂移：**
+1. `src/database/entities/<name>.entity.ts` 实体定义（属性 camelCase + `@Column({ name: 'snake_case' })`）。
+2. `scripts/init-db.sql`（表结构）与 `scripts/seed-demo-data.sql`（如涉及种子数据）。
+3. 若该模块**仍在 Mock**（analytics/dashboard/gene-bank/viral-library/user）或涉及 Mock 兜底态，还要同步 `mock-store.service.ts` 的 `XxxRecord` 字段与 CRUD。
+
+> 历史漂移已修复：`Material` 实体/`init-db.sql` 已补上 `thumbnail_url` / `status` / `duration` / `slices`（连同 `embedding`）列。提交前自检：实体字段集合 = SQL 列集合（仍在 Mock 的模块再加一份 mock 同步）。
 
 ---
 
@@ -46,9 +49,9 @@ VidCraft 是一个面向 TikTok 电商的 AIGC 带货视频生成系统。本目
 - **语言**：TypeScript 5.4（`tsc --noEmit` 做类型检查）
 - **鉴权**：JWT（`@nestjs/jwt` + `passport-jwt`），`AuthGuard('jwt')`
 - **校验**：`class-validator` + `class-transformer`，全局 `ValidationPipe({ transform: true, whitelist: true })`
-- **持久层（未来）**：TypeORM 0.3 + `pg`（PostgreSQL，含 pgvector）
-- **队列（已配置，尚未接入业务）**：`@nestjs/bull` + `bullmq` + Redis
-- **对象存储（已配置，尚未接入业务）**：MinIO（`src/config/minio.config.ts`，未注册为 provider）
+- **持久层（已接入）**：TypeORM 0.3 + `pg`（PostgreSQL，含 pgvector）。`DatabaseModule` 已建立真实连接，已迁移模块走 Repository（见第一红线）。
+- **队列**：`@nestjs/bull`（底层 `bull` v4，**不是** bullmq）+ Redis。`material-analysis` 队列已注册但当前无人入队（孤儿，见第一红线）；`video-generation` processor 仍是空 TODO，视频生成实际在 Service 内同步跑。
+- **对象存储（已接入）**：MinIO，`common/minio-storage.service.ts`（`@Global`，自动建桶 + public-read 策略）。由 `product.service`（parse-image 落图）与 `material-analysis.processor`（下载文件）使用。
 - **文件上传**：`multer`（`FilesInterceptor` / `FileInterceptor`，依赖已就绪）
 - **可观测性**：OpenTelemetry（`src/tracing/tracing.ts`，启动时 `initTracing()`）
 - **API 文档**：Swagger（`/api`）
@@ -63,25 +66,27 @@ backend/src/
 ├── app.module.ts               # 根模块，聚合所有业务模块
 ├── common/
 │   ├── api-response.ts         # ok() 响应包装器 + ApiResponse 类型
-│   ├── mock-store.service.ts   # ★当前数据库（内存 Map）★
+│   ├── mock-store.service.ts   # 未迁移模块的内存存储 + auth 临时态（详见第一红线）
 │   ├── mock-store.module.ts    # @Global，全局注入 MockStoreService
+│   ├── minio-storage.service.ts# ★对象存储（MinIO，@Global，自动建桶+public-read）★
+│   ├── minio-storage.module.ts # @Global，全局注入 MinioStorageService
 │   ├── decorators/             # @CurrentUser / @AllowGuest / @Roles / @TraceId
 │   ├── guards/                 # jwt-auth / guest / roles
 │   ├── filters/                # http-exception.filter.ts（统一错误响应）
 │   └── interceptors/           # transform（统一成功响应）/ logging
 ├── config/                     # configuration / database / jwt / minio / redis / volcano 配置
 ├── database/
-│   ├── database.module.ts      # 目前为空壳（未接入真实 TypeORM 连接）
-│   ├── entities/*.entity.ts    # ★未来数据库实体★
+│   ├── database.module.ts      # ★已接入真实 Postgres（forRootAsync + forFeature）★
+│   ├── entities/*.entity.ts    # ★TypeORM 实体（已迁移模块的主存储）★
 │   └── migrations/             # TypeORM 迁移
 ├── modules/<feature>/          # 业务模块：controller + service + module (+ dto/)
 │   └── auth/jwt.strategy.ts    # AuthenticatedUser 类型来源
-├── queue/                      # BullMQ 队列与 processor（material-analysis / video-generation，均为 TODO 桩）
+├── queue/                      # material-analysis（孤儿）/ video-generation（空 TODO）
 ├── redis/                      # Redis 客户端（@Global）
 └── tracing/                    # OpenTelemetry 初始化
 
-scripts/init-db.sql             # ★未来数据库建表 SQL★
-scripts/seed-demo-data.sql      # ★未来数据库种子数据★
+scripts/init-db.sql             # ★Postgres 建表 SQL★
+scripts/seed-demo-data.sql      # ★Postgres 种子数据★
 docs/                           # ★需求与接口契约文档★
 ```
 
@@ -89,8 +94,8 @@ docs/                           # ★需求与接口契约文档★
 ```
 modules/<feature>/
 ├── <feature>.controller.ts   # 路由 + 鉴权 + 调 service，薄层
-├── <feature>.service.ts      # 业务逻辑 + 校验，依赖 MockStoreService
-├── <feature>.module.ts       # 装配 controller/service
+├── <feature>.service.ts      # 业务逻辑 + 校验；已迁移模块注入 Repository，未迁移模块注入 MockStoreService
+├── <feature>.module.ts       # 装配 controller/service（迁移后需 TypeOrmModule.forFeature([...])）
 └── dto/                      # 请求参数 DTO（class-validator）
 ```
 
@@ -154,21 +159,22 @@ return { items, total };
 
 ---
 
-## 当前数据层：Mock Store（`common/mock-store.service.ts`）
+## 主数据层：TypeORM + PostgreSQL（已迁移模块）
 
-- 是一个 `@Global` 单例，用多个 `Map<id, XxxRecord>` 存数据；构造函数里 seed 了一套 demo 数据（demo 用户 `00000000-0000-0000-0000-000000000001`、demo 项目/素材/剧本/视频等）。
-- **数据进程内存活，重启即丢失**（Refresh Token、上传记录等都是内存态）。
-- 所有 Service 通过它读写数据；新增数据操作时在这里加 `XxxRecord` 字段 + CRUD 方法，**并记得同步实体与 SQL（见第一红线）**。
-- 返回值习惯做浅拷贝（`{ ...record }`）避免外部改到内部状态。
+- 实体在 `src/database/entities/`，建表在 `scripts/init-db.sql`，种子在 `scripts/seed-demo-data.sql`。
+- `DatabaseModule` 已用 `TypeOrmModule.forRootAsync`（配置见 `config/database.config.ts` / `DATABASE_URL`）建立真实连接，`synchronize: false`（不自动改表，靠 `init-db.sql`/迁移）。已注册实体：`User / Project / Material / Script / Video / VideoTask`。
+- 已迁移模块（auth/project/product/material/script/video）的 Service 注入 `@InjectRepository(Entity)`，模块里 `TypeOrmModule.forFeature([...])`。
+- 内部实体属性是 camelCase，**映射 / 返回给前端时仍要转回 snake_case**（见各 service 的 `toApiShape`/map 写法），对外字段以 API 文档为准。
+- 初始化/种子命令（在仓库根目录）：`npm run db:init` / `npm run db:seed`。跑业务需 Postgres 在线（`npm run dev:infra`）。
 
 ---
 
-## 未来数据层：TypeORM + PostgreSQL
+## 残留数据层：Mock Store（`common/mock-store.service.ts`）
 
-- 实体在 `src/database/entities/`，建表在 `scripts/init-db.sql`，种子在 `scripts/seed-demo-data.sql`。
-- `DatabaseModule` 目前是空壳，**尚未建立真实连接**——所以现在改实体只是“为迁移做准备”，不影响运行时（运行时只认 Mock Store）。
-- 迁移到真实库时：在 `DatabaseModule` 接入 `TypeOrmModule.forRootAsync`（配置见 `config/database.config.ts`），各模块注册 `TypeOrmModule.forFeature([...])`，把 Service 从 `MockStoreService` 切到 Repository。
-- 初始化/种子命令（在仓库根目录）：`npm run db:init` / `npm run db:seed`。
+- `@Global` 单例，多个 `Map<id, XxxRecord>` + 构造函数 seed 的 demo 数据（demo 用户 `00000000-0000-0000-0000-000000000001` 等）。**数据进程内存活，重启即丢失。**
+- 仍在用它的地方：**未迁移模块** `analytics` / `dashboard` / `gene-bank` / `viral-library` / `user`；以及 `auth` 的**临时态**（Refresh Token 黑名单、邮箱验证码、找回密码验证码——这些无实体/表）。
+- 这些模块的 Service 通过它读写；新增数据操作时在这里加 `XxxRecord` 字段 + CRUD 方法。**把某个 Mock 模块迁到 Postgres 时**：补/改实体 + `init-db.sql`，模块加 `forFeature`，Service 从 `store.*` 改成 Repository，再从 mock 里清掉对应 seed。
+- 返回值习惯做浅拷贝（`{ ...record }`）避免外部改到内部状态。
 
 ---
 
@@ -177,11 +183,11 @@ return { items, total };
 1. **读文档**：在 `docs/API接口规范文档.md` 找到对应端点，确认路径、方法、鉴权、请求字段、响应字段、分页、错误码、枚举值。涉及数据结构再读 `DDD数据库设计文档.md`。
 2. **DTO**：在 `modules/<feature>/dto/` 写请求 DTO，字段名/校验规则按文档（snake_case、必填/可选、长度/枚举）。
 3. **数据层**：若需要新数据操作——
-   - 在 `mock-store.service.ts` 加/改 `XxxRecord` 字段与 CRUD 方法；
-   - **同步**更新 `entities/<name>.entity.ts`、`scripts/init-db.sql`（必要时 `seed-demo-data.sql`）。
-4. **Service**：写业务逻辑——归属校验（NotFound/Forbidden）、业务校验（BadRequest）、调用 store、把内部记录映射成**文档规定的响应字段形状**；列表返回 `{ items, total }`。
+   - **已迁移模块**：改 `entities/<name>.entity.ts` + `scripts/init-db.sql`（必要时 `seed-demo-data.sql`），Service 用 `materialRepo`/`projectRepo` 等 Repository。
+   - **未迁移模块（analytics/dashboard/gene-bank/viral-library/user）或 auth 临时态**：在 `mock-store.service.ts` 加/改 `XxxRecord` 字段与 CRUD，并同步实体 + SQL（为后续迁移留好对应）。
+4. **Service**：写业务逻辑——归属校验（NotFound/Forbidden）、业务校验（BadRequest）、调用 Repository 或 store、把内部记录映射成**文档规定的响应字段形状**（camelCase→snake_case）；列表返回 `{ items, total }`。
 5. **Controller**：加 `@UseGuards(AuthGuard('jwt'))`、`@CurrentUser()`、`@Body()/@Query()/@Param()` + DTO，调用 service，`ok(...)` 输出。文件上传见下节。
-6. **Module**：确保 controller/service 已在模块里装配（MockStoreService 因 `@Global` 无需 import）。
+6. **Module**：确保 controller/service 已在模块里装配；用 Repository 的模块需 `TypeOrmModule.forFeature([Entity, ...])`（MockStoreService / MinioStorageService 因 `@Global` 无需 import）。
 7. **校验质量**：`npm run type-check` + `npm run lint`（见命令）。
 8. **测试**：在 `backend/test/app.e2e-spec.ts` 加端到端流程（含正常路径 + 关键错误路径），按下节方式跑。
 9. **自检红线**：① mock 与实体/SQL 字段是否同步；② 响应字段是否与文档逐字一致；③ 错误码是否正确。
@@ -192,9 +198,10 @@ return { items, total };
 
 - 用 `@UseInterceptors(FilesInterceptor('files'))`（多文件）或 `FileInterceptor('field')`（单文件），配 `@UploadedFiles()` / `@UploadedFile()`，类型 `Express.Multer.File`。
 - 非文件字段（如 `project_id`）仍走 `@Body() dto`，全局 ValidationPipe 会校验。
-- **大小/类型/数量限制在 Service 层校验并抛 `BadRequestException`**（给出含文件名的中文提示），不要只依赖 multer 的 limits（multer 抛的错不是 HttpException，会变 500）。素材上传限制示例见 `material.service.ts`（≤20 个文件，图片 JPG/PNG/WEBP ≤20MB，视频 MP4/MOV/AVI ≤500MB）。
-- 真实存储（MinIO）目前是**桩**：文件 URL 用占位，未真正落盘。接入真实存储时按 `TDD技术设计文档.md` 落地。
-- 异步 AI 解析已接成**编排骨架**（见下节），但底层 Doubao 调用仍是降级桩。
+- **大小/类型/数量限制在 Service 层校验并抛 `BadRequestException`**（给出含文件名的中文提示），不要只依赖 multer 的 limits（multer 抛的错不是 HttpException，会变 500）。
+- **真实存储（MinIO）已接入**：`MinioStorageService`（`@Global`，自动建桶 + public-read）。`product.service.parseImage()` 会把商品图 `putObject` 落盘并返回真实 URL；processor 用 `minio.downloadFile()` 取回 buffer。新增上传落盘时注入 `MinioStorageService` 即可。
+- **底层 Doubao 调用已接入真实 API**（`volcano-api.service.ts`）：Vision 打标、Embedding 向量、Seedance 视频生成都已是真实 HTTP 调用，仅在 API Key / endpoint 缺失时降级到桩/模板。
+- ⚠️ **素材已无独立上传端点**：`material.controller` 只剩 list/search/get/tags/delete，**没有 `POST /api/materials/upload`**。素材现由商品图解析流程（`POST /api/products/:project_id/parse-image` → `product.service` 同步调 Doubao Vision + 落 MinIO + `materialRepo.save`）创建。下节「异步 AI 解析」描述的旧上传链路已废弃。
 
 ---
 
@@ -223,39 +230,59 @@ npm run db:seed       # 灌入种子数据（scripts/seed-demo-data.sql）
 
 - e2e 测试在 `backend/test/app.e2e-spec.ts`，用 supertest 打真实 HTTP；文件上传用 `.field(...)` + `.attach('files', Buffer, { filename, contentType })`。
 - **已知坑：e2e 测试结束后 jest 不会自动退出**——因为 Redis/BullMQ/OpenTelemetry 等句柄未关闭（测试也没调 `app.close()`）。跑的时候用 `npx jest --config ./test/jest-e2e.json --forceExit`（必要时加 `--runInBand`），否则进程会挂住。
-- e2e 启动会加载整个 `AppModule`：需要 Redis 在线（`npm run dev:infra`）。`DatabaseModule` 是空壳，所以**不需要 Postgres 也能跑通**业务逻辑（数据走 Mock Store）。
+- e2e 启动会加载整个 `AppModule`：现在 `DatabaseModule` 已连真实 Postgres，所以**需要 Postgres + Redis 同时在线**（`npm run dev:infra` 一并起好），否则已迁移模块（auth/project/material/...）会因连不上库而失败；未迁移模块仍走 Mock Store。库表/种子用 `npm run db:init` / `npm run db:seed` 准备。
 - UI/前端联调类改动：本目录只负责后端；按 `docs/VidCraft_前端期望后端补充_v1.0.md` 对齐字段后，由前端联调验证。
 
 ---
 
-## 异步 AI 解析（素材）—— 当前为编排骨架
+## AI 调用（Doubao / Seedance）—— 已接入真实 API
 
-素材上传后的解析是异步的，链路已接通（真实 Doubao 调用待补）：
+所有 AI 能力集中在 `modules/volcano/volcano-api.service.ts`，均为真实 HTTP 调用（`https://ark.cn-beijing.volces.com/api/v3/...`），**仅在 `VOLCANO_ACCESS_KEY` / endpoint 环境变量缺失时降级**：
 
+| 方法 | 用途 | 降级行为 |
+| --- | --- | --- |
+| `analyzeProductImage()` / `callDoubaoVision()` | 商品图 → 结构化商品信息 | 无 Key 时返回桩结果 |
+| `analyzeMaterial()` | 素材 → Vision 打标 + Embedding(1024 维) 向量 | 无 Key 时返回桩 |
+| `generateScript()` | 商品 → 分镜脚本（配合 `script/director-agent.service.ts`，无 Key 时走「商品感知模板」降级） | 见 director-agent |
+| `generateVideo()`（Seedance 1.5 Pro，支持多参考图）+ `getVideoTaskStatus()` | 分镜 prompt + 参考图 → 视频任务，轮询取片 | 无 Key 时 mock |
+
+**素材的实际创建路径（注意：旧的 `/api/materials/upload` 异步链路已废弃）：**
 ```
-POST /api/materials/upload
-  └─ MaterialService.upload(): 校验 → store.createMaterials()（status=parsing，analysis/tags 留空）
-        └─ 每个素材投递一条 job 到 BullMQ 队列 'material-analysis'（fire-and-forget，入队失败仅记日志，不阻断上传）
-              └─ MaterialAnalysisProcessor.process()（queue/material-analysis.processor.ts）
-                    ├─ VolcanoApiService.analyzeMaterial()  ← ★降级桩，TODO 接 Doubao Vision + Embedding★
-                    └─ store.updateMaterialAnalysis(): 回填 analysis/tags/embedding/duration，status → ready/failed
-前端通过轮询 GET /api/materials 观察 status 从 parsing → ready（暂无 WebSocket 推送）。
+POST /api/products/:project_id/parse-image  （multipart 商品图）
+  └─ ProductService.parseImage(): minio.putObject 落盘
+        ├─ volcano.analyzeProductImage()      ← 真实 Doubao Vision（同步）
+        └─ materialRepo.save()                ← 素材直接落 Postgres（status=ready）
+```
+即素材解析现在是**同步**在 parse-image 里完成并落库，不再经队列。
+
+**视频生成链路（同步，不走队列）：**
+```
+POST /api/videos/generate
+  └─ VideoService.generate(): 取 ready 素材 → 建 Video + 每镜 VideoTask(queued)
+        └─（service 内逐镜顺序执行，非 BullMQ）
+              ├─ volcano.generateVideo() 提交 Seedance → 轮询 getVideoTaskStatus()（MAX_SHOT_POLLS=120）
+              ├─ downloadShot() 下载片段 → 每镜 status=completed + previewUrl
+              └─ composite(): ffmpeg concat 拼接所有片段 → 成片 videoUrl，Video.status=completed
+前端轮询 GET /api/videos/:id/status 观察逐镜进度（暂无 WebSocket 推送，video.gateway.ts 仍是 TODO）。
 ```
 
-关键约束：
-- 队列连接依赖 **Redis 在线**（`npm run dev:infra`）。Redis 挂掉时 `queue.add` 会失败，素材会停在 `parsing`。
-- `@nestjs/bull` 用的是 **`bull`（v4）**，不是 `bullmq`；注入队列用 `@InjectQueue('material-analysis')`，类型从 `'bull'` 导入。`material.module.ts` 必须 `BullModule.registerQueue({ name: 'material-analysis' })`，processor 所在的 `QueueModule` 需 `imports: [VolcanoModule]` 才能注入 `VolcanoApiService`。
-- processor 在 **API 进程内**运行（非独立 worker 进程），直接读写同一份内存 Mock Store。
-- 要接真实 AI：在 `VolcanoApiService.analyzeMaterial()` 里换成 Doubao Vision 打标 + Doubao Embedding(1024 维) 调用即可，processor / 队列 / 状态机均无需改动。
+**残留的孤儿队列**（保留以备恢复，当前不在主链路）：
+- `queue/material-analysis.processor.ts`：`@nestjs/bull`（底层 `bull` v4，**非 bullmq**），`@Process()` 里 `store.getMaterial` + `minio.downloadFile` + `volcano.analyzeMaterial` + `store.updateMaterialAnalysis`。**它读写 Mock 而非 Postgres，且已无端点入队** → 形同废弃；恢复异步解析需改成走 `materialRepo` 并重新接入入队点。
+- `queue/video-generation.processor.ts`：空 `TODO`，视频生成实为 Service 内同步执行。
 
 ## 待办 / 已知未实现（Roadmap）
 
-- **文本素材**（产品已决定「先记入待办，暂不做」）：允许商家在素材库上传纯文本（卖点文案/买家评价/话术）。实现方式建议：新增 `file_type: 'text'`、文本存 `content` 列、跳过 Vision 直接走 Embedding。落地前需先扩展 `docs/API接口规范文档.md` 契约，并同步 mock/entity/SQL 与前端 UI。
-- **真实 Doubao 调用**：`VolcanoApiService.analyzeMaterial()` 目前是降级桩。
-- **MinIO 真实存储**：上传文件未真正落盘，`file_url`/`thumbnail_url` 为占位。
-- **视频切片**：`material_slices`（FFmpeg 场景切片）未生成，processor 留了 TODO。
-- **素材 `status` 列漂移**：API/mock 有 `status`，但 `material.entity.ts` 与 `init-db.sql` 暂无该列，迁移真实库前需补上（连同 `thumbnail_url`/`duration`/`slices`）。
-- **素材状态推送**：当前靠前端轮询，未来可加 WebSocket（参考 `video.gateway.ts`）。
+**✅ 已完成（原 Roadmap 项）**：真实 Doubao Vision/Embedding/Seedance 调用、MinIO 真实存储、`Material` 实体/SQL 补齐 `status`/`thumbnail_url`/`duration`/`slices` 列（漂移已修）。
+
+**仍未完成 / 已知缺口：**
+- **未迁移到 Postgres 的模块**：`analytics` / `dashboard` / `gene-bank` / `viral-library` / `user` 仍走 Mock Store，重启丢数据，需逐个迁到 Repository。
+- **孤儿队列**：`material-analysis.processor` 读写 Mock 且无人入队（见上节）；`video-generation.processor` 为空 TODO。两者要么修复要么删。
+- **AI 诊断未实现**：`analytics/analyst-agent.service.ts` 整段 TODO，视频效果诊断目前返回 Mock 数据。
+- **实时进度推送**：`video.gateway.ts` WebSocket 推送是 TODO，前端仍靠轮询 `GET /api/videos/:id/status`。
+- **Python worker 未集成**：`worker/`（FFmpeg 合成/场景切片的独立 Python 服务）存在，但 backend 自己 inline 调 ffmpeg，worker 当前未被调用；`material_slices` 场景切片也未生成。
+- **`material.service` 占位方法**：`search()` 返回 `[]`、`updateTags()` 仅回显入参，均为桩。
+- **`videoService.getDownloadUrl` 类型 build 报错**：前端侧遗留，用户要求暂缓后修（注意前端 `type-check` 是空跑，须 `npm run build` 验证）。
+- **文本素材**（产品已决定「先记入待办，暂不做」）：允许上传纯文本（卖点/评价/话术）。建议新增 `file_type: 'text'`、文本存 `content` 列、跳过 Vision 直接走 Embedding。落地前先扩展 `docs/API接口规范文档.md` 契约，并同步 entity/SQL 与前端 UI。
 
 ---
 
