@@ -106,8 +106,11 @@ export default function VideoCreation() {
       .catch(() => { setBusy(false); });
   };
 
-  // 进页面：一次性读取该项目「已有的最新视频」。已完成 → 直接进播放态；
-  // 否则保持空闲态（"开始生成"），用户触发生成的路径不受影响。
+  // 进页面：一次性读取该项目「已有的最新视频」并按状态恢复对应视图：
+  //   - completed → 播放态；
+  //   - rendering / queued（生成中）→ 恢复进度展示并继续轮询（从项目卡片点进来时直达进度）；
+  //   - failed → 失败态（可重试）；
+  //   - 无视频 → 空闲态（"开始生成"）。
   // 注意：这是单次 GET（非自动提交生成），不会重现之前的双调问题。
   useEffect(() => {
     let cancelled = false;
@@ -115,12 +118,20 @@ export default function VideoCreation() {
     const load = pid ? videoService.getLatestByProject(pid) : Promise.resolve(null);
     load
       .then((existing) => {
-        if (cancelled) return;
-        if (existing && existing.status === 'completed') setTask(existing);
+        if (cancelled || !existing) return;
+        if (existing.status === 'completed' || existing.status === 'failed') {
+          setTask(existing);
+        } else if (existing.status === 'rendering' || existing.status === 'queued') {
+          // 正在生成：恢复进度展示并继续轮询（getStatus 回填分镜队列与百分比）
+          setBusy(true);
+          startPolling(existing.id, existing);
+        }
       })
       .catch(() => { /* 拦截器已 toast；当作"无已有视频"处理 */ })
       .finally(() => { if (!cancelled) setChecking(false); });
     return () => { cancelled = true; };
+    // startPolling 为组件内闭包，仅需在 pid 变化时按最新视频状态恢复一次，无需作为依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid]);
 
   // 卸载时兜底清理轮询，防止离开页面后 setInterval 泄漏

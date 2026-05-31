@@ -10,6 +10,7 @@ import {
 import type { ReactNode } from 'react';
 
 import { projectService } from '@/services/projectService';
+import { videoService } from '@/services/videoService';
 import type { ProjectListItem } from '@/types';
 import styles from './ProjectEntryModal.module.css';
 
@@ -35,9 +36,10 @@ interface Entry {
  * 素材库 / 分镜编辑·剧本 / 风格·爆款选择 / Video。
  *
  * 入口跳转：
- *   - Video：已完成生成 → 视频播放页；否则提示「视频还未生成」。
+ *   - 视频创作：查项目最新视频任务——有任务（生成中/已完成/失败）→ 视频页（页面按状态显示
+ *     播放 / 渲染进度 / 失败重试）；无任务 → 提示「还没有视频任务」。
+ *   - 风格模板：跳到剧本生成页（ScriptStudio）。
  *   - 分镜编辑 / 剧本：拉项目详情，script_count>0 → 剧本编辑页；否则提示「尚未完成」。
- *   - 风格 / 爆款选择：跳到风格模板（Gene Bank，占位）。
  *   - 素材库：进入项目素材库。
  * 右上角 X（Modal 内置 close）关闭弹框即返回项目列表。
  * 新建项目流程不走此弹框，仍由 NewProjectModal 处理。
@@ -60,13 +62,21 @@ export default function ProjectEntryModal({ open, project, onClose }: Props) {
     const pid = project.id;
 
     switch (entry.key) {
-      // Video：已完成生成 → 播放页；否则提示未生成
+      // 视频创作：查最新视频任务——有任务（生成中/已完成/失败）→ 视频页；无任务 → 提示
       case 'video':
-        if (project.status === 'completed') {
-          onClose();
-          navigate(`/projects/${pid}/video`);
-        } else {
-          message.warning('视频还未生成');
+        setPending(true);
+        try {
+          const latest = await videoService.getLatestByProject(pid);
+          if (!latest) {
+            message.warning('还没有视频任务');
+          } else {
+            onClose();
+            navigate(`/projects/${pid}/video`);
+          }
+        } catch {
+          /* 拦截器已 toast */
+        } finally {
+          setPending(false);
         }
         return;
 
@@ -75,10 +85,10 @@ export default function ProjectEntryModal({ open, project, onClose }: Props) {
         navigate(`/projects/${pid}/materials`);
         return;
 
-      // 风格模板 → Gene Bank（占位）
+      // 风格模板 → 剧本生成页
       case 'style':
         onClose();
-        navigate('/gene-bank');
+        navigate(`/projects/${pid}/script`);
         return;
 
       // 分镜编辑 / 剧本：拉详情看 script_count，已生成 → 剧本编辑页；否则提示未完成
