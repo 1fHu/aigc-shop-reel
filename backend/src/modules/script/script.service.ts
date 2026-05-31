@@ -2,6 +2,16 @@ import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nest
 import { MockStoreService, ScriptShot } from '../../common/mock-store.service';
 import { DirectorAgentService } from './director-agent.service';
 
+export type ScriptShot = {
+  index: number;
+  description: string;
+  camera_motion: string;
+  duration: number;
+  voiceover: string;
+  subtitle: string;
+  bgm: string;
+  reference_image_url: string | null;
+};
 @Injectable()
 export class ScriptService {
   private readonly logger = new Logger(ScriptService.name);
@@ -67,7 +77,7 @@ export class ScriptService {
       thumb_url: `https://placehold.co/400x240/8B5CF6/fff?text=Scene+${shot.index + 1}`,
       description: shot.description,
       camera_motion: shot.camera_motion || 'static',
-      bgm: 'Modern Beat',
+      bgm: shot.bgm || 'Modern Beat',
       voiceover: shot.voiceover || '',
       subtitle: shot.subtitle || '',
     };

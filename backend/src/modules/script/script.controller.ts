@@ -31,7 +31,7 @@ export class ScriptController {
         thumb_url: `https://placehold.co/400x240/8B5CF6/fff?text=Scene+${shot.index + 1}`,
         description: shot.description,
         camera_motion: shot.camera_motion || 'static',
-        bgm: 'Modern Beat',
+        bgm: (shot.bgm as string) || 'Modern Beat',
         voiceover: shot.voiceover || '',
         subtitle: shot.subtitle || '',
       };
@@ -49,8 +49,8 @@ export class ScriptController {
 
   @UseGuards(AuthGuard('jwt'))
   @Put(':id/storyboard')
-  saveStoryboard(@Param('id') id: string, @Body() body: { storyboard: Array<{ index: number; description: string; camera_motion: string; duration: number; voiceover: string; subtitle: string; reference_image_url: string | null }> }) {
-    return ok(this.scriptService.saveStoryboard(id, body.storyboard));
+  async saveStoryboard(@Param('id') id: string, @Body() body: { storyboard: Array<{ index: number; description: string; camera_motion: string; duration: number; voiceover: string; subtitle: string; bgm: string; reference_image_url: string | null }> }) {
+    return ok(await this.scriptService.saveStoryboard(id, body.storyboard));
   }
 
   @UseGuards(AuthGuard('jwt'))
