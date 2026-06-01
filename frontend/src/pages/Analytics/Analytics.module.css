@@ -1,0 +1,434 @@
+.page {
+  padding: 32px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* ============ Header ============ */
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 24px;
+}
+
+.titleRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.title {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 28px;
+  color: #111827;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.titlePill {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #EEF2FF 0%, #DBEAFE 100%);
+  color: #4648D4;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: #6B7280;
+  margin-top: 6px;
+}
+
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rangeBtn {
+  height: 36px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid #E5E7EB;
+  background: #ffffff;
+  color: #374151;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.rangeBtn:hover {
+  background: #F8FAFC;
+  border-color: #C7D2FE;
+}
+
+.exportBtn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8B5CF6 0%, #4648D4 50%, #0EA5E9 100%);
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.exportBtn:hover {
+  opacity: 0.94;
+}
+
+/* ============ KPI row ============ */
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* ============ Main body 2-column ============ */
+.body {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+/* ============ Heatmap card ============ */
+.heatCard {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.heatHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.heatTitle {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: #111827;
+}
+
+.heatLegend {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11px;
+  color: #6B7280;
+}
+
+.legendItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+/* Heatmap table */
+.heatTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.heatTable thead th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  color: #9CA3AF;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 8px 12px;
+  text-align: center;
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.heatTable thead th:first-child {
+  text-align: left;
+  width: 38%;
+}
+
+.heatTable tbody tr {
+  border-top: 1px solid #F1F5F9;
+}
+
+.heatTable tbody td {
+  padding: 8px 12px;
+}
+
+.heatFactorCell {
+  font-size: 13px;
+  color: #111827;
+  font-weight: 500;
+}
+
+.heatCellWrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.heatCell {
+  width: 64px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+/* Heatmap intensity levels (0-6) */
+.heat0 { background: #F8FAFC; color: #9CA3AF; }
+.heat1 { background: #E0E7FF; color: #6366F1; }
+.heat2 { background: #C7D2FE; color: #4338CA; }
+.heat3 { background: #A5B4FC; color: #ffffff; }
+.heat4 { background: #818CF8; color: #ffffff; }
+.heat5 { background: #6366F1; color: #ffffff; }
+.heat6 { background: #4648D4; color: #ffffff; }
+
+/* ============ Diagnosis card ============ */
+.diagCard {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.diagHead {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 2px;
+}
+
+.diagIconBox {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8B5CF6 0%, #4648D4 100%);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 12px rgba(70, 72, 212, 0.3);
+}
+
+.diagTitle {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: #111827;
+}
+
+.diagIssueBox {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 10px;
+  padding: 12px;
+}
+
+.diagIssueLabel {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #B91C1C;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+
+.diagIssueTitle {
+  font-size: 13px;
+  font-weight: 600;
+  color: #991B1B;
+  margin: 0 0 6px;
+}
+
+.diagIssueDesc {
+  font-size: 12px;
+  color: #7F1D1D;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.diagSuggestionList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.diagSuggestion {
+  display: flex;
+  gap: 8px;
+}
+
+.diagSuggestionNum {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #EEF2FF;
+  color: #4648D4;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1px;
+}
+
+.diagSuggestionBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.diagSuggestionTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0 0 2px;
+}
+
+.diagSuggestionDesc {
+  font-size: 11px;
+  color: #6B7280;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.diagCta {
+  margin-top: auto;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #8B5CF6 0%, #4648D4 50%, #0EA5E9 100%);
+  color: #ffffff;
+  border: none;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.diagCta:hover {
+  opacity: 0.94;
+}
+
+/* ============ Video list ============ */
+.videoCard {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.videoCardHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.videoCardTitle {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  color: #111827;
+}
+
+.videoThumbCell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.videoThumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  background: #F1F5F9;
+}
+
+.videoNameStack {
+  display: flex;
+  flex-direction: column;
+}
+
+.videoName {
+  font-size: 13px;
+  font-weight: 500;
+  color: #111827;
+}
+
+.videoMeta {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #9CA3AF;
+}
+
+.metricMono {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #374151;
+}
+
+.gmvCell {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4648D4;
+}
+
+.detailLink {
+  font-size: 12px;
+  color: #4648D4;
+  cursor: pointer;
+  font-weight: 500;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+.detailLink:hover {
+  text-decoration: underline;
+}
+
+/* ============ Loading ============ */
+.skelGrid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
