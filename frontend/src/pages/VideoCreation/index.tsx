@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Tag, App } from 'antd';
+import { Switch, Tag, App } from 'antd';
 import { ArrowLeftOutlined, ReloadOutlined, ShareAltOutlined, DownloadOutlined, CaretRightFilled, ThunderboltOutlined } from '@ant-design/icons';
 import { videoService } from '@/services/videoService';
 import { scriptService } from '@/services/scriptService';
@@ -35,6 +35,7 @@ export default function VideoCreation() {
   const { message } = App.useApp();
 
   const [task, setTask] = useState<VideoTask | null>(null);
+  const [subtitleEnabled, setSubtitleEnabled] = useState(true);
   // busy: 已提交、正在生成/渲染中（从点击触发直到 completed/failed）
   const [busy, setBusy] = useState(false);
   // checking: 进页面后一次性查「项目是否已有完成视频」，期间显示加载、避免空闲态闪现
@@ -91,7 +92,7 @@ export default function VideoCreation() {
       return;
     }
 
-    videoService.generate({ project_id: projectId, script_id: scriptId })
+    videoService.generate({ project_id: projectId, script_id: scriptId, subtitle_enabled: subtitleEnabled })
       .then((t) => {
         const videoId = t.id;
         if (!videoId) {
@@ -174,6 +175,10 @@ export default function VideoCreation() {
         <div className={styles.gen}>
           <p className={styles.genTitle}>准备生成您的带货视频</p>
           <p className={styles.genSub}>点击下方按钮，AI 将根据当前脚本为您生成专属短视频</p>
+          <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <span style={{ color: '#6B7280', fontSize: 14 }}>烧录字幕</span>
+            <Switch checked={subtitleEnabled} onChange={setSubtitleEnabled} />
+          </div>
           <button className={styles.genBtn} onClick={handleGenerate}><ThunderboltOutlined /> 开始生成视频</button>
         </div>
       )}
