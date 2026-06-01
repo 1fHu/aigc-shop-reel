@@ -14,7 +14,7 @@ VidCraft 是一个面向 TikTok 电商的 AIGC 带货视频生成系统。本目
 | **未迁移 → Mock 内存** | `MockStoreService` | `analytics` / `dashboard` / `gene-bank` / `viral-library` / `user`。仍是 seed 出来的 demo 数据，**重启即丢**。 |
 | **Mock 兜底的临时态** | `MockStoreService` | 即便已迁移的 `auth`，其 **Refresh Token 黑名单、邮箱验证码、找回密码验证码**仍存在 Mock（这些没有实体/表，是设计上的内存态）。 |
 
-> ℹ️ **休眠队列**：`queue/material-analysis.processor.ts` 已对齐 Postgres（注入 `materialRepo`，`QueueModule` 加了 `forFeature([Material])`），但素材现由 `product.parseImage` **同步**解析并落库（status=ready），**无人向该队列入队** → 处于休眠状态，保留以备恢复「上传后异步解析」链路时直接复用。
+> ℹ️ **已激活的异步队列**：`queue/material-analysis.processor.ts` 已对齐 Postgres（注入 `materialRepo`，`QueueModule` 加了 `forFeature([Material])`），并由 `POST /api/materials/upload`（`MaterialService.upload()` 入队）驱动 → 上传图片素材后**异步**解析（Vision 打标 + Embedding，status: parsing→ready/failed）。⚠️ 注意：商品主图走 `product.parseImage` 仍是**同步**解析，且**目前仍会顺带 `materialRepo.save` 造一条素材**（两条链路尚未解耦，product 代码暂不动）。
 
 **改动数据模型时仍要保持「实体 + SQL」同步，否则迁移/重建库会漂移：**
 1. `src/database/entities/<name>.entity.ts` 实体定义（属性 camelCase + `@Column({ name: 'snake_case' })`）。
@@ -50,8 +50,8 @@ VidCraft 是一个面向 TikTok 电商的 AIGC 带货视频生成系统。本目
 - **鉴权**：JWT（`@nestjs/jwt` + `passport-jwt`），`AuthGuard('jwt')`
 - **校验**：`class-validator` + `class-transformer`，全局 `ValidationPipe({ transform: true, whitelist: true })`
 - **持久层（已接入）**：TypeORM 0.3 + `pg`（PostgreSQL，含 pgvector）。`DatabaseModule` 已建立真实连接，已迁移模块走 Repository（见第一红线）。
-- **队列**：`@nestjs/bull`（底层 `bull` v4，**不是** bullmq）+ Redis。`material-analysis` 队列已注册、processor 已对齐 Postgres，但当前无人入队（休眠，见第一红线）；`video-generation` processor 仍是空 TODO，视频生成实际在 Service 内同步跑。
-- **对象存储（已接入）**：MinIO，`common/minio-storage.service.ts`（`@Global`，自动建桶 + public-read 策略）。由 `product.service`（parse-image 落图）与 `material-analysis.processor`（下载文件）使用。
+- **队列**：`@nestjs/bull`（底层 `bull` v4，**不是** bullmq）+ Redis。`material-analysis` 队列已注册、processor 已对齐 Postgres，**已由 `POST /api/materials/upload` 入队驱动（图片素材异步解析）**；`video-generation` processor 仍是空 TODO，视频生成实际在 Service 内同步跑。
+- **对象存储（已接入）**：MinIO，`common/minio-storage.service.ts`（`@Global`，自动建桶 + public-read 策略）。由 `product.service`（parse-image 落图）、`material.service`（upload 落素材）与 `material-analysis.processor`（下载文件）使用。
 - **文件上传**：`multer`（`FilesInterceptor` / `FileInterceptor`，依赖已就绪）
 - **可观测性**：OpenTelemetry（`src/tracing/tracing.ts`，启动时 `initTracing()`）
 - **API 文档**：Swagger（`/api`）
@@ -81,7 +81,7 @@ backend/src/
 │   └── migrations/             # TypeORM 迁移
 ├── modules/<feature>/          # 业务模块：controller + service + module (+ dto/)
 │   └── auth/jwt.strategy.ts    # AuthenticatedUser 类型来源
-├── queue/                      # material-analysis（休眠）/ video-generation（空 TODO）
+├── queue/                      # material-analysis（已激活：素材上传异步解析）/ video-generation（空 TODO）
 ├── redis/                      # Redis 客户端（@Global）
 └── tracing/                    # OpenTelemetry 初始化
 
@@ -199,9 +199,9 @@ return { items, total };
 - 用 `@UseInterceptors(FilesInterceptor('files'))`（多文件）或 `FileInterceptor('field')`（单文件），配 `@UploadedFiles()` / `@UploadedFile()`，类型 `Express.Multer.File`。
 - 非文件字段（如 `project_id`）仍走 `@Body() dto`，全局 ValidationPipe 会校验。
 - **大小/类型/数量限制在 Service 层校验并抛 `BadRequestException`**（给出含文件名的中文提示），不要只依赖 multer 的 limits（multer 抛的错不是 HttpException，会变 500）。
-- **真实存储（MinIO）已接入**：`MinioStorageService`（`@Global`，自动建桶 + public-read）。`product.service.parseImage()` 会把商品图 `putObject` 落盘并返回真实 URL；processor 用 `minio.downloadFile()` 取回 buffer。新增上传落盘时注入 `MinioStorageService` 即可。
+- **真实存储（MinIO）已接入**：`MinioStorageService`（`@Global`，自动建桶 + public-read）。`product.service.parseImage()` 会把商品图 `putObject` 落盘并返回真实 URL；`material.service.upload()` 把素材图落盘；processor 用 `minio.downloadFile()` 取回 buffer。新增上传落盘时注入 `MinioStorageService` 即可。
 - **底层 Doubao 调用已接入真实 API**（`volcano-api.service.ts`）：Vision 打标、Embedding 向量、Seedance 视频生成都已是真实 HTTP 调用，仅在 API Key / endpoint 缺失时降级到桩/模板。
-- ⚠️ **素材已无独立上传端点**：`material.controller` 只剩 list/search/get/tags/delete，**没有 `POST /api/materials/upload`**。素材现由商品图解析流程（`POST /api/products/:project_id/parse-image` → `product.service` 同步调 Doubao Vision + 落 MinIO + `materialRepo.save`）创建。下节「异步 AI 解析」描述的旧上传链路已废弃。
+- ✅ **素材独立上传端点已恢复**：`POST /api/materials/upload`（`FilesInterceptor('files', 20)` + `UploadMaterialDto`，`MaterialService.upload()`）。**目前仅支持图片**（JPG/PNG/WEBP ≤20MB、单次 ≤20 个，Service 层整批校验，任一不合法整批 `BadRequestException`）：落 MinIO → 建 `status='parsing'` 行 → 入 `material-analysis` 队列 → processor 后台 Vision+Embedding（→ready/failed）。**视频上传暂被显式拒绝**（缺 FFmpeg 切片链路，见 Roadmap）。素材链路与商品主图（`product.parseImage` 只写 `product_info`）已解耦：素材库 = 喂给 AIGC 的图/视频片段，商品主图 = `projects.cover_url`。
 
 ---
 
@@ -246,14 +246,28 @@ npm run db:seed       # 灌入种子数据（scripts/seed-demo-data.sql）
 | `generateScript()` | 商品 → 分镜脚本（配合 `script/director-agent.service.ts`，无 Key 时走「商品感知模板」降级） | 见 director-agent |
 | `generateVideo()`（Seedance 1.5 Pro，支持多参考图）+ `getVideoTaskStatus()` | 分镜 prompt + 参考图 → 视频任务，轮询取片 | 无 Key 时 mock |
 
-**素材的实际创建路径（注意：旧的 `/api/materials/upload` 异步链路已废弃）：**
+**素材的创建路径（图片素材上传，异步解析）：**
+```
+POST /api/materials/upload  （multipart: project_id + files[]，仅图片）
+  └─ MaterialService.upload(): 归属校验 + 整批类型/大小/数量校验
+        ├─ minio.uploadFile()                 ← 图片落盘，拿真实 URL
+        ├─ materialRepo.save(status='parsing')← 先落库占位
+        └─ analysisQueue.add({ materialId })  ← 入 material-analysis 队列
+              └─ MaterialAnalysisProcessor（异步）
+                    ├─ minio.downloadFile() 取回 buffer
+                    ├─ volcano.analyzeMaterial()  ← Doubao Vision 打标 + Embedding
+                    └─ materialRepo.update(status='ready', analysis/tags/embedding) ｜失败→'failed'
+前端轮询 GET /api/materials 看 status: parsing → ready。
+```
+
+**商品主图解析路径（同步；⚠️ 当前仍会顺带造一条素材）：**
 ```
 POST /api/products/:project_id/parse-image  （multipart 商品图）
-  └─ ProductService.parseImage(): minio.putObject 落盘
-        ├─ volcano.analyzeProductImage()      ← 真实 Doubao Vision（同步）
-        └─ materialRepo.save()                ← 素材直接落 Postgres（status=ready）
+  └─ ProductService.parseImage(): minio 落盘 + volcano.analyzeProductImage()（同步）
+        ├─ 更新 projects.product_info + cover_url
+        └─ materialRepo.save(status='ready')   ← ⚠️ 目前仍会建一条素材记录
 ```
-即素材解析现在是**同步**在 parse-image 里完成并落库，不再经队列。
+> 解耦待办：理想形态是 parse-image 只写 `product_info`、不造素材，素材统一走 `/api/materials/upload`。当前**尚未解耦**（product 代码暂不动），所以素材库里会混入商品主图。
 
 **视频生成链路（同步，不走队列）：**
 ```
@@ -266,17 +280,19 @@ POST /api/videos/generate
 前端轮询 GET /api/videos/:id/status 观察逐镜进度（暂无 WebSocket 推送，video.gateway.ts 仍是 TODO）。
 ```
 
-**休眠 / 空置队列**（不在主链路）：
-- `queue/material-analysis.processor.ts`：`@nestjs/bull`（底层 `bull` v4，**非 bullmq**），`@Process()` 里 `materialRepo.findOne` + `minio.downloadFile` + `volcano.analyzeMaterial` + `materialRepo.update`。已对齐 Postgres，但**无端点入队** → 休眠；恢复异步解析时重新接入入队点即可。
+**异步 / 空置队列：**
+- `queue/material-analysis.processor.ts`：`@nestjs/bull`（底层 `bull` v4，**非 bullmq**），`@Process()` 里 `materialRepo.findOne` + `minio.downloadFile` + `volcano.analyzeMaterial` + `materialRepo.update`。**已激活**，由 `MaterialService.upload()` 入队（图片素材异步解析）。
 - `queue/video-generation.processor.ts`：空 `TODO`，视频生成实为 Service 内同步执行。
 
 ## 待办 / 已知未实现（Roadmap）
 
-**✅ 已完成（原 Roadmap 项）**：真实 Doubao Vision/Embedding/Seedance 调用、MinIO 真实存储、`Material` 实体/SQL 补齐 `status`/`thumbnail_url`/`duration`/`slices` 列（漂移已修）。
+**✅ 已完成（原 Roadmap 项）**：真实 Doubao Vision/Embedding/Seedance 调用、MinIO 真实存储、`Material` 实体/SQL 补齐 `status`/`thumbnail_url`/`duration`/`slices` 列（漂移已修）、**`POST /api/materials/upload` 图片素材上传 + `material-analysis` 队列异步解析（已激活）**。
 
 **仍未完成 / 已知缺口：**
 - **未迁移到 Postgres 的模块**：`analytics` / `dashboard` / `gene-bank` / `viral-library` / `user` 仍走 Mock Store，重启丢数据，需逐个迁到 Repository。
-- **休眠/空置队列**：`material-analysis.processor` 已对齐 Postgres 但无人入队（休眠）；`video-generation.processor` 为空 TODO。
+- **视频素材上传**：`/api/materials/upload` 目前**仅收图片**，视频被显式拒绝；缺 FFmpeg 抽首帧/取时长/场景切片链路与 `material_slices` 入库（方案见本仓库 `docs/` 或对话方案）。
+- **空置队列**：`video-generation.processor` 为空 TODO，视频生成实为 Service 内同步执行。
+- **商品主图与素材未解耦**：`product.parseImage` 仍 `materialRepo.save` 造素材，商品主图会混进素材库；待把素材统一收敛到 `/api/materials/upload`（product 代码暂不动）。
 - **AI 诊断未实现**：`analytics/analyst-agent.service.ts` 整段 TODO，视频效果诊断目前返回 Mock 数据。
 - **实时进度推送**：`video.gateway.ts` WebSocket 推送是 TODO，前端仍靠轮询 `GET /api/videos/:id/status`。
 - **Python worker 未集成**：`worker/`（FFmpeg 合成/场景切片的独立 Python 服务）存在，但 backend 自己 inline 调 ffmpeg，worker 当前未被调用；`material_slices` 场景切片也未生成。
