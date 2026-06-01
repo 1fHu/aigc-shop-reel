@@ -7,3 +7,4 @@ export * from './script';
 export * from './video';
 export * from './material';
 export * from './analytics';
+export * from './genebank';
