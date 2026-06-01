@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { Material } from '../database/entities/material.entity';
 import { VideoGenerationProcessor } from './video-generation.processor';
 import { MaterialAnalysisProcessor } from './material-analysis.processor';
 import { VolcanoModule } from '../modules/volcano/volcano.module';
@@ -8,6 +10,7 @@ import { VolcanoModule } from '../modules/volcano/volcano.module';
 @Module({
   imports: [
     VolcanoModule,
+    TypeOrmModule.forFeature([Material]),
     BullModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
