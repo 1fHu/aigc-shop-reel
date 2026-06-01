@@ -110,6 +110,10 @@ CREATE TABLE video_tasks (
     retry_count INTEGER DEFAULT 0,
     error_msg TEXT,
     preview_url VARCHAR(500),
+    thumbnail_url VARCHAR(500),
+    tts_audio_url VARCHAR(500),
+    tts_duration NUMERIC(5,2),
+    tts_subtitle_url VARCHAR(500),
     trace_id VARCHAR(36),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

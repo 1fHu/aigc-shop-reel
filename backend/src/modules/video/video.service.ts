@@ -1,12 +1,13 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, writeFileSync } from 'fs';
+import { copyFileSync, createWriteStream, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
 import { join } from 'path';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
-import { VolcanoApiService } from '../volcano/volcano-api.service';
+import { VolcanoApiService, TTSResult } from '../volcano/volcano-api.service';
 import { MinioStorageService } from '../../common/minio-storage.service';
+import { wordsToASS, getTTSDuration } from '../../common/subtitle';
 import { Video } from '../../database/entities/video.entity';
 import { VideoTask } from '../../database/entities/video-task.entity';
 import { Project } from '../../database/entities/project.entity';
@@ -201,34 +202,64 @@ export class VideoService {
   // ---- private: video generation (Seedance + ffmpeg) ----
 
   private async buildPromptAndSubmit(videoId: string, script: Script | null, productName: string, imageUrls: string[]) {
-    console.log(`[VideoService] buildPromptAndSubmit START videoId=${videoId} shots=${(script?.storyboard as unknown[])?.length || 0} images=${imageUrls.length}`);
     const storyboard = (script?.storyboard as ScriptShot[]) || [];
     if (storyboard.length === 0) {
-      console.log('[VideoService] No storyboard, marking failed');
       await this.videoRepo.update(videoId, { status: 'failed' });
       return;
     }
-    // 参考图：公网 URL 直接透传；本地地址（localhost/内网，火山云端拉不到）才下载转 base64 内联
+
     const refImages = await this.prepareReferenceImages(imageUrls);
-    console.log(`[VideoService] reference images prepared: ${imageUrls.length} -> ${refImages.length}`);
+    const useTTS = this.volcano.isTTSConfigured();
+
     try {
-    const results: Array<{ index: number; localPath: string }> = [];
-    for (const s of storyboard) {
-      console.log(`[VideoService] Generating shot ${s.index}...`);
-      const r = await this.generateShot(videoId, s, productName, refImages);
-      results.push(r);
-      console.log(`[VideoService] Shot ${s.index} result: ${r.localPath ? 'OK' : 'FAIL'}`);
-    }
-    const clips = results.filter((r) => r.localPath).sort((a, b) => a.index - b.index).map((r) => r.localPath);
-    if (clips.length === 0) {
-      await this.videoRepo.update(videoId, { status: 'failed' });
-      return;
-    }
-    const finalUrl = await this.composite(videoId, clips);
-    console.log(`[VideoService] Video ${videoId} completed: ${finalUrl}`);
-    await this.videoRepo.update(videoId, { status: 'completed', videoUrl: finalUrl });
+      // 阶段 1：并行 TTS（所有分镜同时跑）
+      const ttsResults = new Map<number, TTSResult | null>();
+      if (useTTS) {
+        this.logger.log(`[TTS] Starting parallel TTS for ${storyboard.length} shots`);
+        const ttsPromises = storyboard.map(async (s) => {
+          const result = await this.volcano.synthesizeSpeech(s.voiceover || s.description || '');
+          return { index: s.index, result };
+        });
+        const ttsAll = await Promise.all(ttsPromises);
+        for (const { index, result } of ttsAll) {
+          ttsResults.set(index, result);
+        }
+        this.logger.log(`[TTS] Completed: ${[...ttsResults.values()].filter(Boolean).length}/${storyboard.length}`);
+      }
+
+      // 阶段 2：顺序 Seedance + 逐镜合成
+      const compositedClips: string[] = [];
+      for (const shot of storyboard) {
+        const tts = ttsResults.get(shot.index) || null;
+        const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
+
+        // 生成 Seedance 视频
+        await this.taskRepo.update({ videoId, shotIndex: shot.index }, { status: 'processing' });
+        const shotPath = await this.generateShot(videoId, shot, productName, refImages, targetDuration);
+
+        // 合成：画面 + TTS 音频 + 字幕
+        if (shotPath) {
+          const composited = await this.compositeShot(videoId, shot.index, shotPath, tts);
+          if (composited) {
+            compositedClips.push(composited);
+            await this.taskRepo.update({ videoId, shotIndex: shot.index }, { status: 'completed', previewUrl: `/api/videos/${videoId}/shots/${shot.index}/file` });
+          } else {
+            compositedClips.push(shotPath); // 合成失败用原始片段
+          }
+        }
+      }
+
+      if (compositedClips.length === 0) {
+        await this.videoRepo.update(videoId, { status: 'failed' });
+        return;
+      }
+
+      // 阶段 3：拼接所有已合成片段
+      const finalUrl = await this.composite(videoId, compositedClips);
+      await this.videoRepo.update(videoId, { status: 'completed', videoUrl: finalUrl });
+      this.logger.log(`Video ${videoId} completed: ${finalUrl}`);
     } catch (err) {
-      console.error(`[VideoService] buildPromptAndSubmit FAILED: ${(err as Error).message}`, (err as Error).stack);
+      this.logger.error(`buildPromptAndSubmit FAILED: ${(err as Error).message}`, (err as Error).stack);
       await this.videoRepo.update(videoId, { status: 'failed' });
     }
   }
@@ -282,24 +313,23 @@ export class VideoService {
     );
   }
 
-  private buildShotPrompt(shot: ScriptShot, productName: string): string {
-    return `为TikTok电商带货生成一个约${shot.duration || 3}秒的竖屏短视频分镜（9:16比例）。商品：${productName}。画面内容：${shot.description}。${shot.voiceover ? `口播：${shot.voiceover}。` : ''}${shot.subtitle ? `字幕：${shot.subtitle}。` : ''}${shot.camera_motion ? `运镜：${shot.camera_motion}。` : ''}要求：画面精美、节奏紧凑、适合社交媒体传播。`;
+  private buildShotPrompt(shot: ScriptShot, productName: string, targetDuration?: number): string {
+    const duration = targetDuration || shot.duration || 3;
+    return `为TikTok电商带货生成一个约${duration.toFixed(1)}秒的竖屏短视频分镜（9:16比例）。商品：${productName}。画面内容：${shot.description}。${shot.camera_motion ? `运镜：${shot.camera_motion}。` : ''}要求：画面精美、节奏紧凑、无字幕无水印、适合社交媒体传播。`;
   }
 
-  private async generateShot(videoId: string, shot: ScriptShot, productName: string, imageUrls: string[]) {
+  private async generateShot(videoId: string, shot: ScriptShot, productName: string, imageUrls: string[], targetDuration?: number) {
     const index = shot.index;
-    const prompt = this.buildShotPrompt(shot, productName);
-    // 更新已有的 task 状态为 processing
-    await this.taskRepo.update({ videoId, shotIndex: index }, { status: 'processing' });
-    this.logger.log(`Video ${videoId} shot#${index}: submitting to Seedance...`);
+    const prompt = this.buildShotPrompt(shot, productName, targetDuration);
+    this.logger.log(`Video ${videoId} shot#${index}: submitting to Seedance (duration=${(targetDuration || shot.duration).toFixed(1)}s)...`);
     const result = await this.volcano.generateVideo(prompt, imageUrls);
     if (!result) {
       await this.taskRepo.update({ videoId, shotIndex: index }, { status: 'failed', errorMsg: 'Seedance 未返回任务' });
-      return { index, localPath: '' };
+      return '';
     }
     await this.taskRepo.update({ videoId, shotIndex: index }, { seedanceTaskId: result.taskId });
     const localPath = await this.waitForShot(videoId, index, result.taskId);
-    return { index, localPath };
+    return localPath;
   }
 
   private waitForShot(videoId: string, shotIndex: number, taskId: string): Promise<string> {
@@ -318,7 +348,7 @@ export class VideoService {
           clearInterval(interval);
           const localPath = await this.downloadShot(videoId, shotIndex, r.videoUrl);
           if (localPath) {
-            await this.taskRepo.update({ videoId, shotIndex }, { status: 'completed', previewUrl: `/api/videos/${videoId}/shots/${shotIndex}/file` });
+            await this.taskRepo.update({ videoId, shotIndex }, { previewUrl: `/api/videos/${videoId}/shots/${shotIndex}/file` });
           } else {
             await this.taskRepo.update({ videoId, shotIndex }, { status: 'failed', errorMsg: '片段下载失败' });
           }
@@ -344,6 +374,73 @@ export class VideoService {
       return localPath;
     } catch {
       return '';
+    }
+  }
+
+  /** 单个分镜合成：Seedance 画面 + TTS 音频 + ASS 字幕 */
+  private async compositeShot(videoId: string, shotIndex: number, videoPath: string, tts: TTSResult | null): Promise<string | null> {
+    const outPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-composited.mp4`);
+    const tempFiles: string[] = [];
+
+    try {
+      // 没有 TTS → 直接返回原始视频
+      if (!tts) return videoPath;
+
+      // 下载 TTS 音频到临时文件（TTS 返回的是临时 HTTP URL）
+      const audioPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-audio.mp3`);
+      const ttsRes = await fetch(tts.audioUrl);
+      if (!ttsRes.ok) {
+        this.logger.warn(`TTS audio download failed: ${ttsRes.status}`);
+        return videoPath;
+      }
+      const ttsBuf = Buffer.from(await ttsRes.arrayBuffer());
+      writeFileSync(audioPath, ttsBuf);
+      tempFiles.push(audioPath);
+
+      // 生成 ASS 字幕文件
+      const assPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-sub.ass`);
+      const assContent = wordsToASS(tts);
+      writeFileSync(assPath, assContent, 'utf-8');
+      tempFiles.push(assPath);
+
+      // ffmpeg: 画面 + TTS 音轨 + 字幕烧录
+      const filters = [`fps=30`, `ass=${assPath.replace(/\\/g, '/')}`];
+      const padSec = 0.5; // 最多补 0.5s 尾帧
+      if (padSec > 0) {
+        filters.push(`tpad=stop_mode=clone:stop_duration=${padSec}`);
+      }
+
+      await new Promise<void>((resolve, reject) => {
+        const args = [
+          '-y',
+          '-i', videoPath,
+          '-i', audioPath,
+          '-vf', filters.join(','),
+          '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
+          '-c:a', 'aac', '-b:a', '128k',
+          '-map', '0:v:0', '-map', '1:a:0',
+          '-shortest',
+          '-movflags', '+faststart',
+          outPath,
+        ];
+        const ff = spawn('ffmpeg', args);
+        let stderr = '';
+        ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+        ff.on('error', reject);
+        ff.on('close', (code: number) => {
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-200)}`));
+        });
+      });
+
+      return outPath;
+    } catch (err) {
+      this.logger.warn(`compositeShot #${shotIndex} failed: ${(err as Error).message}, using raw clip`);
+      return videoPath;
+    } finally {
+      for (const f of tempFiles) {
+        try { unlinkSync(f); } catch { /* ignore */ }
+      }
     }
   }
 

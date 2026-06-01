@@ -17,6 +17,25 @@ export type ProductParseResult = {
   price_anchor: string;
 };
 
+export type TTSWord = {
+  word: string;
+  startTime: number;
+  endTime: number;
+};
+
+export type TTSSentence = {
+  text: string;
+  startTime: number;
+  endTime: number;
+  words: TTSWord[];
+};
+
+export type TTSResult = {
+  audioUrl: string;
+  duration: number;
+  sentences: TTSSentence[];
+};
+
 @Injectable()
 export class VolcanoApiService {
   private readonly logger = new Logger(VolcanoApiService.name);
@@ -24,13 +43,21 @@ export class VolcanoApiService {
   private readonly doubaoEp: string;
   private readonly seedanceEp: string;
   private readonly embeddingEp: string;
+  private readonly ttsAppId: string;
+  private readonly ttsAccessKey: string;
+  private readonly ttsResourceId: string;
+  private readonly ttsVoiceId: string;
 
   constructor(private readonly config: ConfigService) {
     this.apiKey = process.env.VOLCANO_ACCESS_KEY || this.config.get<string>('VOLCANO_ACCESS_KEY', '');
     this.doubaoEp = process.env.VOLCANO_DOUBAO_SEED_EP || this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
     this.seedanceEp = process.env.VOLCANO_SEEDANCE_EP || this.config.get<string>('VOLCANO_SEEDANCE_EP', '');
     this.embeddingEp = process.env.VOLCANO_EMBEDDING_EP || this.config.get<string>('VOLCANO_EMBEDDING_EP', 'doubao-embedding-large');
-    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp ? 'SET' : 'MISSING'}, seedanceEp=${this.seedanceEp ? 'SET' : 'MISSING'}, embeddingEp=${this.embeddingEp}`);
+    this.ttsAppId = process.env.VOLCANO_TTS_APP_ID || this.config.get<string>('VOLCANO_TTS_APP_ID', '');
+    this.ttsAccessKey = process.env.VOLCANO_TTS_ACCESS_KEY || this.config.get<string>('VOLCANO_TTS_ACCESS_KEY', '');
+    this.ttsResourceId = process.env.VOLCANO_TTS_RESOURCE_ID || this.config.get<string>('VOLCANO_TTS_RESOURCE_ID', 'seed-tts-2.0');
+    this.ttsVoiceId = process.env.TTS_VOICE_ID || this.config.get<string>('TTS_VOICE_ID', 'zh_female_qingxin');
+    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp ? 'SET' : 'MISSING'}, seedanceEp=${this.seedanceEp ? 'SET' : 'MISSING'}, embeddingEp=${this.embeddingEp}, tts=${this.ttsAppId ? 'SET' : 'MISSING'}`);
   }
 
   signCallback(taskId: string, secret: string) {
@@ -234,5 +261,122 @@ export class VolcanoApiService {
       this.logger.error(`analyzeMaterial error: ${(err as Error).message}`);
       throw err;
     }
+  }
+
+  // ---- TTS (豆包语音) ----
+
+  /** 检查 TTS 是否已配置 */
+  isTTSConfigured(): boolean {
+    return !!(this.ttsAppId && this.ttsAccessKey);
+  }
+
+  /** 提交 TTS 合成任务 */
+  private async submitTTS(text: string): Promise<string | null> {
+    try {
+      const res = await fetch('https://openspeech.bytedance.com/api/v3/tts/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-App-Id': this.ttsAppId,
+          'X-Api-Access-Key': this.ttsAccessKey,
+          'X-Api-Resource-Id': this.ttsResourceId,
+        },
+        body: JSON.stringify({
+          user: { uid: 'vidcraft' },
+          namespace: 'BidirectionalTTS',
+          req_params: {
+            text,
+            speaker: this.ttsVoiceId,
+            audio_params: {
+              format: 'mp3',
+              sample_rate: 24000,
+              enable_timestamp: true,
+            },
+            additions: { disable_markdown_filter: true, silence_duration: 0 },
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data?.code === 20000000 && data?.data?.task_id) {
+        return data.data.task_id;
+      }
+      this.logger.warn(`TTS submit failed: ${JSON.stringify(data).slice(0, 300)}`);
+      return null;
+    } catch (err) {
+      this.logger.warn(`TTS submit error: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** 查询 TTS 任务结果 */
+  private async queryTTS(taskId: string): Promise<TTSResult | null> {
+    try {
+      const res = await fetch('https://openspeech.bytedance.com/api/v3/tts/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-App-Id': this.ttsAppId,
+          'X-Api-Access-Key': this.ttsAccessKey,
+          'X-Api-Resource-Id': this.ttsResourceId,
+        },
+        body: JSON.stringify({ task_id: taskId }),
+      });
+      const data = await res.json();
+      if (data?.code === 20000000 && data?.data) {
+        const d = data.data;
+        if (d.task_status === 2) {
+          const sentences: TTSSentence[] = (d.sentences || []).map((s: Record<string, unknown>) => ({
+            text: s.text as string,
+            startTime: s.startTime as number,
+            endTime: s.endTime as number,
+            words: (s.words as Array<Record<string, unknown>> || []).map((w) => ({
+              word: w.word as string,
+              startTime: w.startTime as number,
+              endTime: w.endTime as number,
+            })),
+          }));
+          const lastWord = sentences.at(-1)?.words?.at(-1);
+          return {
+            audioUrl: d.audio_url as string,
+            duration: lastWord ? lastWord.endTime : 3,
+            sentences,
+          };
+        }
+        // task_status=1 (running) → 返回 null 表示继续等
+        if (d.task_status === 3) {
+          this.logger.warn(`TTS task ${taskId} failed`);
+        }
+      }
+      return null;
+    } catch (err) {
+      this.logger.warn(`TTS query error: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** 等待 TTS 完成 */
+  private sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** 语音合成：提交 + 轮询 + 返回结果。TTS 未配置时返回 null */
+  async synthesizeSpeech(text: string): Promise<TTSResult | null> {
+    if (!this.isTTSConfigured()) {
+      this.logger.warn('TTS not configured, skipping synthesizeSpeech');
+      return null;
+    }
+    const taskId = await this.submitTTS(text);
+    if (!taskId) return null;
+
+    for (let i = 0; i < 60; i++) {
+      await this.sleep(2000);
+      const result = await this.queryTTS(taskId);
+      if (result) {
+        this.logger.log(`TTS completed: ${(result.duration).toFixed(1)}s, ${result.sentences.length} sentences`);
+        return result;
+      }
+    }
+    this.logger.warn(`TTS timeout for task ${taskId}`);
+    return null;
   }
 }

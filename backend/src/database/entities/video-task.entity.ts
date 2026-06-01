@@ -31,6 +31,18 @@ export class VideoTask {
   @Column({ type: 'varchar', nullable: true, name: 'preview_url' })
   previewUrl: string;
 
+  @Column({ type: 'varchar', nullable: true, name: 'thumbnail_url' })
+  thumbnailUrl: string;
+
+  @Column({ type: 'varchar', nullable: true, name: 'tts_audio_url' })
+  ttsAudioUrl: string;
+
+  @Column({ type: 'numeric', precision: 5, scale: 2, nullable: true, name: 'tts_duration' })
+  ttsDuration: number;
+
+  @Column({ type: 'varchar', nullable: true, name: 'tts_subtitle_url' })
+  ttsSubtitleUrl: string;
+
   @Column({ type: 'varchar', nullable: true, name: 'trace_id' })
   traceId: string;
 
