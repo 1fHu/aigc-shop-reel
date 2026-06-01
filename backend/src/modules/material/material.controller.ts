@@ -13,6 +13,10 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
+import { diskStorage } from 'multer';
+import { tmpdir } from 'os';
+import { extname } from 'path';
+import { randomUUID } from 'crypto';
 import { MaterialService } from './material.service';
 import { ok } from '../../common/api-response';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -25,7 +29,13 @@ export class MaterialController {
   constructor(private readonly materialService: MaterialService) {}
 
   @UseGuards(AuthGuard('jwt'))
-  @UseInterceptors(FilesInterceptor('files', 20))
+  // diskStorage：大文件（视频）逐个落临时盘而非全进内存；service 读回后落 MinIO 并清理临时文件
+  @UseInterceptors(FilesInterceptor('files', 20, {
+    storage: diskStorage({
+      destination: tmpdir(),
+      filename: (_req, file, cb) => cb(null, `${randomUUID()}${extname(file.originalname)}`),
+    }),
+  }))
   @Post('upload')
   async upload(
     @CurrentUser() user: AuthenticatedUser,
