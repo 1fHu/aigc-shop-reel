@@ -3,14 +3,22 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { Repository } from 'typeorm';
+import { readFile, unlink } from 'fs/promises';
 import { Material } from '../../database/entities/material.entity';
 import { Project } from '../../database/entities/project.entity';
 import { MinioStorageService } from '../../common/minio-storage.service';
 
-/** 上传约束（对齐 API 文档 M4：图片 JPG/PNG/WEBP ≤20MB，单次 ≤20 个） */
+/**
+ * 上传约束：
+ * - 图片 JPG/PNG/WEBP ≤20MB（API 文档 M4）。
+ * - 视频 MP4/MOV/AVI ≤200MB（时长 ≤30s 在 processor 用 ffprobe 校验，上传时取不到）。
+ * - 单次 ≤20 个文件。
+ */
 const MAX_FILES = 20;
 const MAX_IMAGE_SIZE = 20 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 200 * 1024 * 1024;
 const IMAGE_MIMES = ['image/jpeg', 'image/png', 'image/webp'];
+const VIDEO_MIMES = ['video/mp4', 'video/quicktime', 'video/x-msvideo'];
 
 @Injectable()
 export class MaterialService {
@@ -22,9 +30,12 @@ export class MaterialService {
   ) {}
 
   /**
-   * POST /api/materials/upload 批量上传图片素材。
-   * 同步落 MinIO + 建 status='parsing' 记录并入队，AI 解析（Vision 打标 + Embedding）由
-   * material-analysis processor 后台异步完成（解析完置 status='ready'，失败置 'failed'）。
+   * POST /api/materials/upload 批量上传素材（图片 + 视频）。
+   * 文件经 multer diskStorage 落临时盘（`file.path`），本方法读回后落 MinIO + 建 status='parsing'
+   * 记录并入队；AI 解析由 material-analysis processor 后台异步完成：
+   * - 图片：Doubao Vision 打标 + Embedding；
+   * - 视频：ffprobe 取时长（>30s 置 failed）+ ffmpeg 抽 1 帧做缩略图与打标。
+   * 解析完置 status='ready'，失败置 'failed'。
    */
   async upload(userId: string, projectId: string, files: Express.Multer.File[]) {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
@@ -34,47 +45,62 @@ export class MaterialService {
     if (!files || files.length === 0) throw new BadRequestException('请至少上传一个素材文件');
     if (files.length > MAX_FILES) throw new BadRequestException(`单次最多上传 ${MAX_FILES} 个文件`);
 
-    // 先整体校验，任一不合法即整批拒绝，避免部分落库
-    for (const f of files) {
-      if (!IMAGE_MIMES.includes(f.mimetype)) {
-        throw new BadRequestException(`文件「${f.originalname}」格式不支持，仅支持 JPG/PNG/WEBP 图片`);
+    // diskStorage 落的临时文件，无论成功失败都在 finally 清理
+    const tempPaths = files.map((f) => f.path).filter(Boolean);
+    try {
+      // 先整体校验，任一不合法即整批拒绝，避免部分落库
+      for (const f of files) {
+        const isImage = IMAGE_MIMES.includes(f.mimetype);
+        const isVideo = VIDEO_MIMES.includes(f.mimetype);
+        if (!isImage && !isVideo) {
+          throw new BadRequestException(`文件「${f.originalname}」格式不支持，仅支持 JPG/PNG/WEBP 图片或 MP4/MOV/AVI 视频`);
+        }
+        if (isImage && f.size > MAX_IMAGE_SIZE) {
+          throw new BadRequestException(`图片「${f.originalname}」超过 20MB 大小限制`);
+        }
+        if (isVideo && f.size > MAX_VIDEO_SIZE) {
+          throw new BadRequestException(`视频「${f.originalname}」超过 200MB 大小限制`);
+        }
       }
-      if (f.size > MAX_IMAGE_SIZE) {
-        throw new BadRequestException(`图片「${f.originalname}」超过 20MB 大小限制`);
+
+      const results: Array<{ id: string; file_type: string; file_url: string; status: string; thumbnail_url: string | null }> = [];
+      for (const f of files) {
+        const fileType = IMAGE_MIMES.includes(f.mimetype) ? 'image' : 'video';
+        const ext = (f.originalname.split('.').pop() || (fileType === 'video' ? 'mp4' : 'jpg')).toLowerCase();
+        const key = `projects/${projectId}/materials/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        // diskStorage 时 buffer 为空，从临时盘读回；兼容 memoryStorage
+        const buffer = f.buffer ?? (await readFile(f.path));
+        const fileUrl = await this.minio.uploadFile(key, buffer, f.mimetype);
+
+        const material = this.materialRepo.create({
+          projectId,
+          fileUrl,
+          fileType,
+          fileName: f.originalname,
+          fileSize: f.size,
+          // 图片缩略图即自身；视频缩略图由 processor 抽首帧后回填（此处留空）
+          thumbnailUrl: fileType === 'image' ? fileUrl : undefined,
+          status: 'parsing',
+          tags: [],
+          slices: [],
+        });
+        const saved = await this.materialRepo.save(material);
+
+        // 入队，由 material-analysis processor 后台解析
+        await this.analysisQueue.add({ materialId: saved.id });
+
+        results.push({
+          id: saved.id,
+          file_type: saved.fileType,
+          file_url: saved.fileUrl,
+          status: saved.status,
+          thumbnail_url: saved.thumbnailUrl,
+        });
       }
+      return results;
+    } finally {
+      await Promise.all(tempPaths.map((p) => unlink(p).catch(() => undefined)));
     }
-
-    const results: Array<{ id: string; file_type: string; file_url: string; status: string; thumbnail_url: string }> = [];
-    for (const f of files) {
-      const ext = (f.originalname.split('.').pop() || 'jpg').toLowerCase();
-      const key = `projects/${projectId}/materials/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const fileUrl = await this.minio.uploadFile(key, f.buffer, f.mimetype);
-
-      const material = this.materialRepo.create({
-        projectId,
-        fileUrl,
-        fileType: 'image',
-        fileName: f.originalname,
-        fileSize: f.size,
-        thumbnailUrl: fileUrl,
-        status: 'parsing',
-        tags: [],
-        slices: [],
-      });
-      const saved = await this.materialRepo.save(material);
-
-      // 入队，由 material-analysis processor 后台解析（Vision + Embedding）
-      await this.analysisQueue.add({ materialId: saved.id });
-
-      results.push({
-        id: saved.id,
-        file_type: saved.fileType,
-        file_url: saved.fileUrl,
-        status: saved.status,
-        thumbnail_url: saved.thumbnailUrl,
-      });
-    }
-    return results;
   }
 
   async list(userId: string, projectId: string, type = 'all', page = 1, limit = 24) {
