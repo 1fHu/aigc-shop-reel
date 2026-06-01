@@ -2,16 +2,6 @@ import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nest
 import { MockStoreService, ScriptShot } from '../../common/mock-store.service';
 import { DirectorAgentService } from './director-agent.service';
 
-export type ScriptShot = {
-  index: number;
-  description: string;
-  camera_motion: string;
-  duration: number;
-  voiceover: string;
-  subtitle: string;
-  bgm: string;
-  reference_image_url: string | null;
-};
 @Injectable()
 export class ScriptService {
   private readonly logger = new Logger(ScriptService.name);
@@ -83,7 +73,7 @@ export class ScriptService {
     };
   }
 
-  saveStoryboard(id: string, storyboard: Array<{ index: number; description: string; camera_motion: string; duration: number; voiceover: string; subtitle: string; reference_image_url: string | null }>) {
+  saveStoryboard(id: string, storyboard: Array<{ index: number; description: string; camera_motion: string; duration: number; voiceover: string; subtitle: string; bgm: string; reference_image_url: string | null }>) {
     const script = this.store.saveStoryboard(id, storyboard);
     if (!script) {
       throw new NotFoundException('剧本不存在');

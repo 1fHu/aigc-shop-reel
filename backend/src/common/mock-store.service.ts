@@ -75,6 +75,7 @@ export type ScriptShot = {
   duration: number;
   voiceover: string;
   subtitle: string;
+  bgm: string;
   reference_image_url: string | null;
 };
 
@@ -291,6 +292,7 @@ export class MockStoreService {
           duration: 3,
           voiceover: '你知道没做好防晒有多可怕吗？',
           subtitle: '拒绝晒黑',
+          bgm: 'Modern Beat',
           reference_image_url: null,
         },
       ],
@@ -835,11 +837,11 @@ export class MockStoreService {
     const shots: ScriptShot[] = (storyboard && storyboard.length > 0)
       ? storyboard.map((shot, index) => ({ ...shot, index, reference_image_url: shot.reference_image_url ?? null }))
       : [
-          { index: 0, description: '开场 Hook：痛点提问', camera_motion: 'push-in', duration: 3, voiceover: '你还在为...', subtitle: '拒绝油腻感', reference_image_url: null },
-          { index: 1, description: '产品外观 + 卖点特写', camera_motion: 'static', duration: 3, voiceover: '这款防晒的重点是...', subtitle: '轻薄不油腻', reference_image_url: null },
-          { index: 2, description: '使用场景演示', camera_motion: 'tracking', duration: 3, voiceover: '户外也能清爽自在', subtitle: '全天候防护', reference_image_url: null },
-          { index: 3, description: '质地/成分细节展示', camera_motion: 'push-in', duration: 3, voiceover: '成分温和，敏感肌适用', subtitle: '温和不刺激', reference_image_url: null },
-          { index: 4, description: '行动号召 CTA', camera_motion: 'static', duration: 3, voiceover: '现在下单立享优惠', subtitle: '立即下单', reference_image_url: null },
+          { index: 0, description: '开场 Hook：痛点提问', camera_motion: 'push-in', duration: 3, voiceover: '你还在为...', subtitle: '拒绝油腻感', bgm: 'Modern Beat', reference_image_url: null },
+          { index: 1, description: '产品外观 + 卖点特写', camera_motion: 'static', duration: 3, voiceover: '这款防晒的重点是...', subtitle: '轻薄不油腻', bgm: 'Modern Beat', reference_image_url: null },
+          { index: 2, description: '使用场景演示', camera_motion: 'tracking', duration: 3, voiceover: '户外也能清爽自在', subtitle: '全天候防护', bgm: 'Modern Beat', reference_image_url: null },
+          { index: 3, description: '质地/成分细节展示', camera_motion: 'push-in', duration: 3, voiceover: '成分温和，敏感肌适用', subtitle: '温和不刺激', bgm: 'Modern Beat', reference_image_url: null },
+          { index: 4, description: '行动号召 CTA', camera_motion: 'static', duration: 3, voiceover: '现在下单立享优惠', subtitle: '立即下单', bgm: 'Modern Beat', reference_image_url: null },
         ];
     const totalDuration = shots.reduce((sum, shot) => sum + (shot.duration || 0), 0);
     const script: ScriptRecord = {
@@ -1293,6 +1295,7 @@ export class MockStoreService {
       duration: 3,
       voiceover: '参考爆款结构生成',
       subtitle: '借鉴优化',
+      bgm: 'Modern Beat',
       reference_image_url: item.thumbnail_url,
     });
     script.updated_at = new Date().toISOString();
