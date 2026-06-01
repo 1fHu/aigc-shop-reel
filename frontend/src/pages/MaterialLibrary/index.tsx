@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Upload, App, Modal } from 'antd';
-import { UploadOutlined, DownOutlined, CloseOutlined, ThunderboltOutlined } from '@ant-design/icons';
+import { UploadOutlined, DownOutlined, CloseOutlined, ThunderboltOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
 import type { RcFile } from 'antd/es/upload';
 import { productService } from '@/services/productService';
+import { materialService } from '@/services/materialService';
+import type { MaterialListItem } from '@/types';
 import styles from './MaterialLibrary.module.css';
 
 type MaterialType = 'all' | 'image' | 'video';
@@ -26,41 +28,62 @@ type MaterialItem = {
   status: 'parsing' | 'ready' | 'failed';
 };
 
+function toMaterialItem(m: MaterialListItem): MaterialItem {
+  const a = m.analysis || {};
+  return {
+    id: m.id,
+    type: m.file_type,
+    name: (a.name as string) || m.file_name || '未命名',
+    cover: (a.cover_url as string) || m.thumbnail_url || '',
+    tag: m.status === 'ready' ? 'PRODUCT' : undefined,
+    duration: m.duration ? `${Math.round(m.duration)}s` : undefined,
+    time: m.created_at ? new Date(m.created_at).toLocaleDateString('zh-CN') : '',
+    fileSize: m.file_size ? `${(m.file_size / 1024 / 1024).toFixed(1)} MB` : '未知',
+    fileType: m.file_type === 'video' ? 'video/mp4' : 'image/jpeg',
+    category: a.category as string,
+    sellingPoints: a.selling_points as string[],
+    targetAudience: a.target_audience as string,
+    usageScene: a.usage_scene as string,
+    priceAnchor: a.price_anchor as string,
+    status: m.status as 'parsing' | 'ready' | 'failed',
+  };
+}
+
 export default function MaterialLibrary() {
   const { id: pid } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { message } = App.useApp();
+  const { message, modal } = App.useApp();
 
   const [mtype, setMtype] = useState<MaterialType>('all');
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [active, setActive] = useState<MaterialItem | null>(null);
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  const loadMaterials = async () => {
+    if (!pid) return;
+    try {
+      const items = await materialService.list(pid);
+      setMaterials(items.map(toMaterialItem));
+    } catch {
+      // 拦截器已统一 toast
+    }
+  };
+
+  useEffect(() => { loadMaterials(); }, [pid]); // eslint-disable-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => mtype === 'all' ? materials : materials.filter((m) => m.type === mtype), [materials, mtype]);
 
   const handleUpload = async (file: RcFile) => {
     if (!pid) { message.warning('请先创建项目'); return false; }
-    const objectUrl = URL.createObjectURL(file);
-    const newId = `up-${Date.now()}`;
-    const newItem: MaterialItem = {
-      id: newId, type: 'image', name: file.name, cover: objectUrl,
-      time: '刚刚', fileSize: file.size ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : '未知',
-      fileType: file.type || 'image/jpeg', status: 'parsing',
-    };
-    setMaterials((prev) => [newItem, ...prev]);
     setUploadOpen(false);
-    message.success('素材上传成功，AI 正在后台解析...');
+    message.loading({ content: 'AI 正在解析商品信息...', key: 'upload', duration: 0 });
     try {
-      const r = await productService.parseImage(pid, file);
-      const p = r as any;
-      setMaterials((prev) => prev.map((m) => m.id === newId ? {
-        ...m, status: 'ready' as const, name: p.name || m.name,
-        category: p.category, sellingPoints: p.selling_points,
-        targetAudience: p.target_audience, usageScene: p.usage_scene,
-        priceAnchor: p.price_anchor, tag: 'PRODUCT',
-      } : m));
+      await productService.parseImage(pid, file);
+      message.success({ content: '素材上传成功，AI 解析完成', key: 'upload' });
+      await loadMaterials();
     } catch {
-      setMaterials((prev) => prev.map((m) => m.id === newId ? { ...m, status: 'failed' as const } : m));
+      message.error({ content: 'AI 解析失败，请重试', key: 'upload' });
     }
     return false;
   };
@@ -70,6 +93,30 @@ export default function MaterialLibrary() {
     const ready = materials.filter((m) => m.status === 'ready');
     if (ready.length === 0) { message.warning('请先上传并完成商品解析'); return; }
     navigate(`/projects/${pid}/script`);
+  };
+
+  const handleDelete = (item: MaterialItem) => {
+    modal.confirm({
+      title: '确认删除',
+      icon: <ExclamationCircleOutlined />,
+      content: `确定要删除素材「${item.name}」吗？此操作不可撤销。`,
+      okText: '删除',
+      okType: 'danger',
+      cancelText: '取消',
+      onOk: async () => {
+        setDeletingId(item.id);
+        try {
+          await materialService.delete(item.id);
+          setMaterials((prev) => prev.filter((m) => m.id !== item.id));
+          if (active?.id === item.id) setActive(null);
+          message.success('素材已删除');
+        } catch {
+          // 拦截器已统一 toast
+        } finally {
+          setDeletingId(null);
+        }
+      },
+    });
   };
 
   return (
@@ -105,6 +152,14 @@ export default function MaterialLibrary() {
             <div key={m.id} className={styles.card} onClick={() => setActive(m)}>
               <div className={styles.cover}>
                 <img src={m.cover} alt={m.name}/>
+                <button
+                  className={styles.deleteBtn}
+                  disabled={deletingId === m.id}
+                  onClick={(e) => { e.stopPropagation(); handleDelete(m); }}
+                  title="删除素材"
+                >
+                  <DeleteOutlined />
+                </button>
                 {m.tag && <span className={`${styles.cardTag} ${m.tag==='TIKTOK READY'?styles.cardTagReady:styles.cardTagProduct}`}>{m.tag}</span>}
                 {m.status==='parsing' && <span className={styles.parsingBadge}>解析中</span>}
                 {m.status==='failed' && <span className={styles.failedBadge}>失败</span>}
@@ -138,6 +193,14 @@ export default function MaterialLibrary() {
           {active.targetAudience && <div style={{marginTop:16}}><div className={styles.sectionLabel}>目标人群</div><div style={{fontSize:13,color:'#6B7280',marginTop:4}}>{active.targetAudience}</div></div>}
           {active.usageScene && <div style={{marginTop:16}}><div className={styles.sectionLabel}>使用场景</div><div style={{fontSize:13,color:'#6B7280',marginTop:4}}>{active.usageScene}</div></div>}
           {active.priceAnchor && <div style={{marginTop:16}}><div className={styles.sectionLabel}>价格锚点</div><div style={{fontSize:13,color:'#4648D4',fontWeight:600,marginTop:4}}>{active.priceAnchor}</div></div>}
+
+          <button
+            className={styles.drawerDeleteBtn}
+            disabled={deletingId === active.id}
+            onClick={() => handleDelete(active)}
+          >
+            <DeleteOutlined /> 删除素材
+          </button>
         </aside>
       </>)}
 

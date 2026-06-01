@@ -49,6 +49,9 @@ export class Project {
   @Column({ type: 'boolean', default: false, name: 'tiktok_ready' })
   tiktokReady: boolean;
 
+  @Column({ type: 'boolean', default: false, name: 'is_guest' })
+  isGuest: boolean;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

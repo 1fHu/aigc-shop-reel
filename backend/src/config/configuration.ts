@@ -13,6 +13,12 @@ export default () => ({
     accessKey: process.env.VOLCANO_ACCESS_KEY || '',
     secretKey: process.env.VOLCANO_SECRET_KEY || '',
     region: process.env.VOLCANO_REGION || 'cn-north-1',
+    tts: {
+      appId: process.env.VOLCANO_TTS_APP_ID || '',
+      accessKey: process.env.VOLCANO_TTS_ACCESS_KEY || '',
+      resourceId: process.env.VOLCANO_TTS_RESOURCE_ID || 'seed-tts-2.0',
+      voiceId: process.env.TTS_VOICE_ID || 'zh_female_qingxin',
+    },
   },
   minio: {
     endPoint: process.env.MINIO_ENDPOINT || 'localhost',

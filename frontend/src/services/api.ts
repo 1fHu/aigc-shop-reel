@@ -71,7 +71,11 @@ api.interceptors.response.use(
     const serverMsg = error.response?.data?.msg;
 
     if (status === 401) {
-      message.error('登录已过期，请重新登录');
+      // 登录接口的 401 由页面自行处理，拦截器不重复 toast
+      const isLoginRequest = error.config?.url?.includes('/auth/login');
+      if (!isLoginRequest) {
+        message.error(serverMsg || '登录已过期，请重新登录');
+      }
       localStorage.removeItem('vidcraft_access_token');
       localStorage.removeItem('vidcraft_refresh_token');
       // TODO: 跳转到登录页（等登录页实现后接入）
