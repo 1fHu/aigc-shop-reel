@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Upload, App, Modal } from 'antd';
 import { UploadOutlined, DownOutlined, CloseOutlined, ThunderboltOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
@@ -57,8 +57,12 @@ export default function MaterialLibrary() {
   const [mtype, setMtype] = useState<MaterialType>('all');
   const [materials, setMaterials] = useState<MaterialItem[]>([]);
   const [active, setActive] = useState<MaterialItem | null>(null);
-  const [uploadOpen, setUploadOpen] = useState(false);
+  // 上传弹窗模式：'cover' = 商品主图（parseImage），'material' = 普通素材（materialService.upload），null = 关闭
+  const [uploadMode, setUploadMode] = useState<'cover' | 'material' | null>(null);
+  // 是否已有商品主图：决定头部按钮显示「上传商品主图」还是「上传素材」
+  const [hasCover, setHasCover] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const pollingRef = useRef(false);
 
   const loadMaterials = async () => {
     if (!pid) return;
@@ -70,20 +74,68 @@ export default function MaterialLibrary() {
     }
   };
 
-  useEffect(() => { loadMaterials(); }, [pid]); // eslint-disable-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
+  const loadProduct = async () => {
+    if (!pid) return;
+    try {
+      const p = await productService.get(pid);
+      setHasCover(!!p.cover_url);
+    } catch {
+      // 项目必然存在（已在素材页），失败仅当作"暂无主图"，不额外提示
+    }
+  };
+
+  // 上传素材后异步解析，轮询列表直到没有 parsing（最多 ~60s）
+  const pollUntilReady = async () => {
+    if (!pid || pollingRef.current) return;
+    pollingRef.current = true;
+    try {
+      for (let i = 0; i < 20; i++) {
+        await new Promise((r) => setTimeout(r, 3000));
+        const items = await materialService.list(pid);
+        setMaterials(items.map(toMaterialItem));
+        if (!items.some((m) => m.status === 'parsing')) break;
+      }
+    } catch {
+      // 拦截器已统一 toast
+    } finally {
+      pollingRef.current = false;
+    }
+  };
+
+  useEffect(() => { loadMaterials(); loadProduct(); }, [pid]); // eslint-disable-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => mtype === 'all' ? materials : materials.filter((m) => m.type === mtype), [materials, mtype]);
 
-  const handleUpload = async (file: RcFile) => {
+  // 上传商品主图：走同步的 parseImage，解析完刷新主图状态 + 素材列表
+  const handleCoverUpload = async (file: RcFile) => {
     if (!pid) { message.warning('请先创建项目'); return false; }
-    setUploadOpen(false);
-    message.loading({ content: 'AI 正在解析商品信息...', key: 'upload', duration: 0 });
+    setUploadMode(null);
+    message.loading({ content: 'AI 正在解析商品主图...', key: 'upload', duration: 0 });
     try {
       await productService.parseImage(pid, file);
-      message.success({ content: '素材上传成功，AI 解析完成', key: 'upload' });
+      message.success({ content: '商品主图解析完成', key: 'upload' });
+      await loadProduct();
       await loadMaterials();
     } catch {
       message.error({ content: 'AI 解析失败，请重试', key: 'upload' });
+    }
+    return false;
+  };
+
+  // 上传普通素材（图片 + 视频，多文件）：走异步的 materials/upload，上传后轮询解析状态。
+  // multiple 模式下 beforeUpload 每个文件触发一次，只在最后一个文件时整批上传
+  const handleMaterialUpload = async (file: RcFile, fileList: RcFile[]) => {
+    if (file !== fileList[fileList.length - 1]) return false;
+    if (!pid) { message.warning('请先创建项目'); return false; }
+    setUploadMode(null);
+    message.loading({ content: `正在上传 ${fileList.length} 个素材...`, key: 'upload', duration: 0 });
+    try {
+      await materialService.upload(pid, fileList);
+      message.success({ content: '上传成功，AI 正在后台解析', key: 'upload' });
+      await loadMaterials();
+      pollUntilReady();
+    } catch {
+      message.error({ content: '上传失败，请重试', key: 'upload' });
     }
     return false;
   };
@@ -123,7 +175,9 @@ export default function MaterialLibrary() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div><h1 className={styles.title}>素材库</h1><p className={styles.subtitle}>上传商品图片，AI 自动解析并生成视频素材</p></div>
-        <button className={styles.uploadBtn} onClick={() => setUploadOpen(true)}><UploadOutlined /> 上传素材</button>
+        <button className={styles.uploadBtn} onClick={() => setUploadMode(hasCover ? 'material' : 'cover')}>
+          <UploadOutlined /> {hasCover ? '上传素材' : '上传商品主图'}
+        </button>
       </div>
 
       <div className={styles.filters}>
@@ -145,7 +199,7 @@ export default function MaterialLibrary() {
           {filtered.length === 0 && (
             <div style={{gridColumn:'1/-1',textAlign:'center',padding:60,color:'#9CA3AF'}}>
               <UploadOutlined style={{fontSize:40,marginBottom:12,display:'block'}}/>
-              <p>暂无素材，点击右上角"上传素材"开始</p>
+              <p>{hasCover ? '暂无素材，点击右上角"上传素材"开始' : '请先点击右上角"上传商品主图"'}</p>
             </div>
           )}
           {filtered.map((m) => (
@@ -204,13 +258,21 @@ export default function MaterialLibrary() {
         </aside>
       </>)}
 
-      <Modal open={uploadOpen} onCancel={() => setUploadOpen(false)} footer={null} width={480} destroyOnClose title="上传素材">
+      <Modal open={uploadMode !== null} onCancel={() => setUploadMode(null)} footer={null} width={480} destroyOnClose title={uploadMode === 'cover' ? '上传商品主图' : '上传素材'}>
         <div style={{textAlign:'center',padding:'16px 0'}}>
-          <Upload.Dragger name="image" multiple={false} accept="image/*" showUploadList={false} beforeUpload={handleUpload}>
-            <p className="ant-upload-drag-icon"><UploadOutlined style={{fontSize:36,color:'#4648D4'}}/></p>
-            <p style={{fontSize:15,fontWeight:600}}>拖拽商品图片或点击上传</p>
-            <p style={{fontSize:12,color:'#9CA3AF'}}>支持 JPG/PNG/WEBP · 最大 10MB</p>
-          </Upload.Dragger>
+          {uploadMode === 'cover' ? (
+            <Upload.Dragger name="image" multiple={false} accept="image/*" showUploadList={false} beforeUpload={handleCoverUpload}>
+              <p className="ant-upload-drag-icon"><UploadOutlined style={{fontSize:36,color:'#4648D4'}}/></p>
+              <p style={{fontSize:15,fontWeight:600}}>拖拽商品主图或点击上传</p>
+              <p style={{fontSize:12,color:'#9CA3AF'}}>支持 JPG/PNG/WEBP · AI 自动解析商品信息</p>
+            </Upload.Dragger>
+          ) : (
+            <Upload.Dragger name="files" multiple accept="image/*,video/*" showUploadList={false} beforeUpload={handleMaterialUpload}>
+              <p className="ant-upload-drag-icon"><UploadOutlined style={{fontSize:36,color:'#4648D4'}}/></p>
+              <p style={{fontSize:15,fontWeight:600}}>拖拽图片 / 视频或点击上传（可多选）</p>
+              <p style={{fontSize:12,color:'#9CA3AF'}}>图片 JPG/PNG/WEBP ≤20MB · 视频 MP4/MOV/AVI ≤30s ≤200MB</p>
+            </Upload.Dragger>
+          )}
         </div>
       </Modal>
 

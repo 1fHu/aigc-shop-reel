@@ -249,8 +249,11 @@ export class VolcanoApiService {
         });
         const embedData = await embedRes.json();
         const vec = embedData?.data?.[0]?.embedding;
-        if (vec && Array.isArray(vec)) {
+        if (vec && Array.isArray(vec) && vec.length > 0) {
           embedding = JSON.stringify(vec);
+        } else {
+          // 拿不到向量（端点无效 / 返回错误体）：不是抛错，会静默留空，这里打日志暴露原因
+          this.logger.warn(`Embedding empty for ${input.fileName} (ep=${this.embeddingEp}): ${JSON.stringify(embedData).slice(0, 300)}`);
         }
       } catch (err) {
         this.logger.warn(`Embedding failed: ${(err as Error).message}`);

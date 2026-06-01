@@ -73,7 +73,7 @@ export class MaterialAnalysisProcessor {
       status: 'ready',
       analysis: result.analysis,
       tags: result.tags,
-      embedding: result.embedding,
+      embedding: this.toVector(result.embedding),
     });
     this.logger.log(`图片素材 ${material.id} AI 解析完成，status=ready`);
   }
@@ -120,12 +120,20 @@ export class MaterialAnalysisProcessor {
         duration: duration ?? undefined,
         analysis: result.analysis,
         tags: result.tags,
-        embedding: result.embedding,
+        embedding: this.toVector(result.embedding),
       });
       this.logger.log(`视频素材 ${material.id} AI 解析完成，duration=${duration ?? '?'}s，status=ready`);
     } finally {
       await unlink(videoPath).catch(() => undefined);
     }
+  }
+
+  /**
+   * 归一化 embedding 写入值：pgvector 的 vector 列不接受空向量 '[]'
+   * （会报 "vector must have at least 1 dimension"），无向量时存 NULL。
+   */
+  private toVector(embedding: string | null | undefined): string | null {
+    return embedding && embedding !== '[]' ? embedding : null;
   }
 
   /** ffprobe 读时长（秒）；失败返回 null */
