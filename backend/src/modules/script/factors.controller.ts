@@ -9,7 +9,8 @@ export class FactorsController {
 
   @UseGuards(AuthGuard('jwt'))
   @Get()
-  getFactors() {
-    return ok(this.scriptService.listFactors(), this.scriptService.listFactors().length);
+  async getFactors() {
+    const factors = await this.scriptService.listFactors();
+    return ok(factors, factors.length);
   }
 }

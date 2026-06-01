@@ -275,7 +275,16 @@ WHERE id = $1;
 | `analysis` | `JSONB` | ✅ | NULL | 见 3.9 | Doubao Vision 多模态理解摘要 |
 | `embedding` | `vector(1024)` | ✅ | NULL | — | 整段素材的 Doubao Embedding |
 | `tags` | `TEXT[]` | ✅ | NULL | — | AI 提取 + 人工补充的标签 |
+| `thumbnail_url` | `VARCHAR(500)` | ✅ | NULL | — | 缩略图 URL（图片取自身，视频取首帧）；列表/卡片展示用 |
+| `status` | `VARCHAR(20)` | ❌ | `'parsing'` | 枚举：`parsing` / `ready` / `failed` | AI 解析状态：上传即 `parsing`，`material-analysis` processor 完成置 `ready`，异常置 `failed` |
+| `duration` | `FLOAT` | ✅ | NULL | — | 视频时长（秒），图片为 NULL |
+| `slices` | `JSONB` | ✅ | `'[]'` | — | ⚠️ **实现态的内联切片快照**（见下方说明）；语义上的切片权威表是 `material_slices` |
 | `created_at` | `TIMESTAMPTZ` | ❌ | `NOW()` | — | — |
+
+> **v1.2 实现对齐（与 `entities/material.entity.ts` + `scripts/init-db.sql` 一致）**：
+> 1. 实体/SQL 额外含 `thumbnail_url` / `status` / `duration` / `slices` 四列（API 文档 M4 的 list/detail 依赖），已补入上表。提交前自检：实体字段集合 = SQL 列集合 = 本表。
+> 2. `embedding`：DB/SQL 为 `vector(1024)`；TypeORM 无原生 pgvector 类型，实体里**声明为 `varchar`**（务实折衷）。写入时 `analyzeMaterial` 产出 `JSON.stringify(vec)`（`[0.1,...]` 文本，恰为 pgvector 接受的输入格式），HNSW 索引与 `<=>` 检索在 DB 层不受影响。
+> 3. `slices` 列与独立表 `material_slices`（§2.4）当前**并存**：实体只映射了内联 `slices` JSONB，`material_slices` 表已建但暂无实体、未写入。视频切片正式落地后应以 `material_slices` 为权威（见 §2.4 与 Roadmap）。
 
 **索引**
 

@@ -16,4 +16,8 @@ export const materialService = {
 	getById(id: string): Promise<MaterialDetail> {
 		return api.get(`/materials/${id}`);
 	},
+
+	delete(id: string): Promise<void> {
+		return api.delete(`/materials/${id}`);
+	},
 };

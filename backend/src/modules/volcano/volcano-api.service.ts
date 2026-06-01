@@ -17,17 +17,47 @@ export type ProductParseResult = {
   price_anchor: string;
 };
 
+export type TTSWord = {
+  word: string;
+  startTime: number;
+  endTime: number;
+};
+
+export type TTSSentence = {
+  text: string;
+  startTime: number;
+  endTime: number;
+  words: TTSWord[];
+};
+
+export type TTSResult = {
+  audioUrl: string;
+  duration: number;
+  sentences: TTSSentence[];
+};
+
 @Injectable()
 export class VolcanoApiService {
   private readonly logger = new Logger(VolcanoApiService.name);
   private readonly apiKey: string;
   private readonly doubaoEp: string;
   private readonly seedanceEp: string;
+  private readonly embeddingEp: string;
+  private readonly ttsAppId: string;
+  private readonly ttsAccessKey: string;
+  private readonly ttsResourceId: string;
+  private readonly ttsVoiceId: string;
 
   constructor(private readonly config: ConfigService) {
-    this.apiKey = this.config.get<string>('VOLCANO_ACCESS_KEY', '');
-    this.doubaoEp = this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
-    this.seedanceEp = this.config.get<string>('VOLCANO_SEEDANCE_EP', '');
+    this.apiKey = process.env.VOLCANO_ACCESS_KEY || this.config.get<string>('VOLCANO_ACCESS_KEY', '');
+    this.doubaoEp = process.env.VOLCANO_DOUBAO_SEED_EP || this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
+    this.seedanceEp = process.env.VOLCANO_SEEDANCE_EP || this.config.get<string>('VOLCANO_SEEDANCE_EP', '');
+    this.embeddingEp = process.env.VOLCANO_EMBEDDING_EP || this.config.get<string>('VOLCANO_EMBEDDING_EP', 'doubao-embedding-large');
+    this.ttsAppId = process.env.VOLCANO_TTS_APP_ID || this.config.get<string>('VOLCANO_TTS_APP_ID', '');
+    this.ttsAccessKey = process.env.VOLCANO_TTS_ACCESS_KEY || this.config.get<string>('VOLCANO_TTS_ACCESS_KEY', '');
+    this.ttsResourceId = process.env.VOLCANO_TTS_RESOURCE_ID || this.config.get<string>('VOLCANO_TTS_RESOURCE_ID', 'seed-tts-2.0');
+    this.ttsVoiceId = process.env.TTS_VOICE_ID || this.config.get<string>('TTS_VOICE_ID', 'zh_female_qingxin');
+    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp ? 'SET' : 'MISSING'}, seedanceEp=${this.seedanceEp ? 'SET' : 'MISSING'}, embeddingEp=${this.embeddingEp}, tts=${this.ttsAppId ? 'SET' : 'MISSING'}`);
   }
 
   signCallback(taskId: string, secret: string) {
@@ -36,7 +66,7 @@ export class VolcanoApiService {
 
   /** 商品图片多模态解析 */
   async analyzeProductImage(imageName: string, imageBuffer?: Buffer): Promise<ProductParseResult> {
-    this.logger.log(`analyzeProductImage: ${imageName}`);
+    this.logger.log(`analyzeProductImage: ${imageName}, buffer=${imageBuffer ? (imageBuffer.length / 1024).toFixed(0) + 'KB' : 'MISSING'}, apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp ? 'SET' : 'MISSING'}`);
     if (imageBuffer && this.apiKey && this.doubaoEp) {
       try {
         const result = await this.callDoubaoVision(imageBuffer);
@@ -51,6 +81,7 @@ export class VolcanoApiService {
   private async callDoubaoVision(imageBuffer: Buffer): Promise<ProductParseResult | null> {
     const base64 = imageBuffer.toString('base64');
     const mime = this.detectMime(imageBuffer);
+    this.logger.log(`Calling Doubao Vision API, image: ${(imageBuffer.length / 1024).toFixed(0)}KB, mime: ${mime}`);
     const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
@@ -63,9 +94,16 @@ export class VolcanoApiService {
         max_tokens: 400,
       }),
     });
+    this.logger.log(`Doubao Vision response status: ${res.status}`);
     const data = await res.json();
+    if (res.status !== 200) {
+      this.logger.error(`Doubao Vision API error (${res.status}): ${JSON.stringify(data).slice(0, 500)}`);
+    }
     const content = data?.choices?.[0]?.message?.content;
-    if (!content) return null;
+    if (!content) {
+      this.logger.warn(`Doubao Vision returned no content: ${JSON.stringify(data).slice(0, 500)}`);
+      return null;
+    }
     const m = content.match(/\{[\s\S]*\}/);
     if (!m) return null;
     const p = JSON.parse(m[0]);
@@ -96,15 +134,19 @@ export class VolcanoApiService {
     } catch { return []; }
   }
 
-  /** 生成带货视频 — 调用 Seedance 1.5 Pro */
-  async generateVideo(prompt: string, coverUrl?: string): Promise<{ taskId: string } | null> {
+  /** 生成带货视频 — 调用 Seedance 1.5 Pro，支持多张参考图 */
+  async generateVideo(prompt: string, imageUrls: string[] = []): Promise<{ taskId: string } | null> {
     if (!this.apiKey || !this.seedanceEp) {
       this.logger.warn('Seedance not configured, using mock');
       return null;
     }
     try {
       const content: unknown[] = [];
-      if (coverUrl) content.push({ type: 'image_url', image_url: { url: coverUrl } });
+      for (const url of imageUrls) {
+        if (url && !url.includes('placehold.co')) {
+          content.push({ type: 'image_url', image_url: { url } });
+        }
+      }
       content.push({ type: 'text', text: prompt });
 
       const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks', {
@@ -115,10 +157,19 @@ export class VolcanoApiService {
           content,
         }),
       });
+      this.logger.log(`Seedance submit with ${imageUrls.length} reference images`);
+      this.logger.log(`Seedance response status: ${res.status}`);
       const data = await res.json();
-      this.logger.log(`Seedance submit: ${JSON.stringify(data).slice(0, 300)}`);
+      this.logger.log(`Seedance response: ${JSON.stringify(data).slice(0, 500)}`);
+      if (res.status !== 200) {
+        this.logger.error(`Seedance API error (${res.status}): ${JSON.stringify(data).slice(0, 500)}`);
+      }
       const taskId = data?.id || data?.task_id;
-      if (taskId) return { taskId };
+      if (taskId) {
+        this.logger.log(`Seedance task created: ${taskId}`);
+        return { taskId };
+      }
+      this.logger.warn('Seedance returned no task ID');
       return null;
     } catch (err) {
       this.logger.error(`Seedance error: ${(err as Error).message}`);
@@ -144,7 +195,188 @@ export class VolcanoApiService {
     return 'image/jpeg';
   }
 
-  async analyzeMaterial(_input: { fileType: 'image' | 'video'; fileName: string }): Promise<MaterialAnalysisResult> {
-    return { analysis: {}, tags: [], embedding: '[]', duration: null };
+  /** Analyze uploaded material — Doubao Vision for tags + Embedding for vector */
+  async analyzeMaterial(input: { fileType: 'image' | 'video'; fileName: string; buffer: Buffer }): Promise<MaterialAnalysisResult> {
+    this.logger.log(`analyzeMaterial: ${input.fileName} (${input.fileType})`);
+    if (!this.apiKey || !this.doubaoEp) {
+      this.logger.warn('Volcano API not configured, returning empty analysis');
+      return { analysis: {}, tags: [], embedding: '[]', duration: null };
+    }
+
+    try {
+      const base64 = input.buffer.toString('base64');
+      const mime = this.detectMime(input.buffer);
+
+      // Step 1: Doubao Vision analysis
+      const visionRes = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.doubaoEp,
+          messages: [{ role: 'user', content: [
+            { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
+            { type: 'text', text: '分析这张商品素材图片，以JSON返回：{"category":"品类标签","tags":["标签1","标签2","标签3"],"description":"一句话描述素材内容","quality":"画质评估(high/medium/low)","suitable_for":"适用场景"}。只返回JSON。' },
+          ]}],
+          max_tokens: 300,
+        }),
+      });
+      const visionData = await visionRes.json();
+      const content = visionData?.choices?.[0]?.message?.content || '';
+      let analysis: Record<string, unknown> = {};
+      let tags: string[] = [];
+      const m = content.match(/\{[\s\S]*\}/);
+      if (m) {
+        try {
+          const parsed = JSON.parse(m[0]);
+          analysis = parsed;
+          tags = Array.isArray(parsed.tags) ? parsed.tags : [];
+        } catch {
+          this.logger.warn(`Failed to parse vision response: ${content}`);
+        }
+      }
+
+      // Step 2: Doubao Embedding
+      let embedding = '[]';
+      try {
+        const embedText = JSON.stringify({ name: input.fileName, ...analysis });
+        const embedRes = await fetch('https://ark.cn-beijing.volces.com/api/v3/embeddings', {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: this.embeddingEp,
+            input: [embedText],
+          }),
+        });
+        const embedData = await embedRes.json();
+        const vec = embedData?.data?.[0]?.embedding;
+        if (vec && Array.isArray(vec)) {
+          embedding = JSON.stringify(vec);
+        }
+      } catch (err) {
+        this.logger.warn(`Embedding failed: ${(err as Error).message}`);
+      }
+
+      return { analysis, tags, embedding, duration: null };
+    } catch (err) {
+      this.logger.error(`analyzeMaterial error: ${(err as Error).message}`);
+      throw err;
+    }
+  }
+
+  // ---- TTS (豆包语音) ----
+
+  /** 检查 TTS 是否已配置 */
+  isTTSConfigured(): boolean {
+    return !!(this.ttsAppId && this.ttsAccessKey);
+  }
+
+  /** 提交 TTS 合成任务 */
+  private async submitTTS(text: string): Promise<string | null> {
+    try {
+      const res = await fetch('https://openspeech.bytedance.com/api/v3/tts/submit', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-App-Id': this.ttsAppId,
+          'X-Api-Access-Key': this.ttsAccessKey,
+          'X-Api-Resource-Id': this.ttsResourceId,
+        },
+        body: JSON.stringify({
+          user: { uid: 'vidcraft' },
+          namespace: 'BidirectionalTTS',
+          req_params: {
+            text,
+            speaker: this.ttsVoiceId,
+            audio_params: {
+              format: 'mp3',
+              sample_rate: 24000,
+              enable_timestamp: true,
+            },
+            additions: { disable_markdown_filter: true, silence_duration: 0 },
+          },
+        }),
+      });
+      const data = await res.json();
+      if (data?.code === 20000000 && data?.data?.task_id) {
+        return data.data.task_id;
+      }
+      this.logger.warn(`TTS submit failed: ${JSON.stringify(data).slice(0, 300)}`);
+      return null;
+    } catch (err) {
+      this.logger.warn(`TTS submit error: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** 查询 TTS 任务结果 */
+  private async queryTTS(taskId: string): Promise<TTSResult | null> {
+    try {
+      const res = await fetch('https://openspeech.bytedance.com/api/v3/tts/query', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Api-App-Id': this.ttsAppId,
+          'X-Api-Access-Key': this.ttsAccessKey,
+          'X-Api-Resource-Id': this.ttsResourceId,
+        },
+        body: JSON.stringify({ task_id: taskId }),
+      });
+      const data = await res.json();
+      if (data?.code === 20000000 && data?.data) {
+        const d = data.data;
+        if (d.task_status === 2) {
+          const sentences: TTSSentence[] = (d.sentences || []).map((s: Record<string, unknown>) => ({
+            text: s.text as string,
+            startTime: s.startTime as number,
+            endTime: s.endTime as number,
+            words: (s.words as Array<Record<string, unknown>> || []).map((w) => ({
+              word: w.word as string,
+              startTime: w.startTime as number,
+              endTime: w.endTime as number,
+            })),
+          }));
+          const lastWord = sentences.at(-1)?.words?.at(-1);
+          return {
+            audioUrl: d.audio_url as string,
+            duration: lastWord ? lastWord.endTime : 3,
+            sentences,
+          };
+        }
+        // task_status=1 (running) → 返回 null 表示继续等
+        if (d.task_status === 3) {
+          this.logger.warn(`TTS task ${taskId} failed`);
+        }
+      }
+      return null;
+    } catch (err) {
+      this.logger.warn(`TTS query error: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /** 等待 TTS 完成 */
+  private sleep(ms: number) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** 语音合成：提交 + 轮询 + 返回结果。TTS 未配置时返回 null */
+  async synthesizeSpeech(text: string): Promise<TTSResult | null> {
+    if (!this.isTTSConfigured()) {
+      this.logger.warn('TTS not configured, skipping synthesizeSpeech');
+      return null;
+    }
+    const taskId = await this.submitTTS(text);
+    if (!taskId) return null;
+
+    for (let i = 0; i < 60; i++) {
+      await this.sleep(2000);
+      const result = await this.queryTTS(taskId);
+      if (result) {
+        this.logger.log(`TTS completed: ${(result.duration).toFixed(1)}s, ${result.sentences.length} sentences`);
+        return result;
+      }
+    }
+    this.logger.warn(`TTS timeout for task ${taskId}`);
+    return null;
   }
 }

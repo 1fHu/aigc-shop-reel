@@ -8,7 +8,6 @@ import { scriptHandlers } from './handlers/scripts';
 import { videoHandlers } from './handlers/videos';
 import { genebankHandlers } from './handlers/genebank';
 // 后续每个模块的 handlers 在这里聚合
-// import { materialHandlers } from './handlers/materials';
 // import { analyticsHandlers } from './handlers/analytics';
 
 /**

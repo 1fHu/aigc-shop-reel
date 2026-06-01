@@ -46,6 +46,7 @@ export interface GenerateVideoPayload {
   project_id: string;
   script_id: string;
   ratio?: VideoRatio;          // 默认 9:16
+  subtitle_enabled?: boolean;  // 是否烧录字幕，默认 true
 }
 
 /** POST /api/videos/:id/export 请求体 */
