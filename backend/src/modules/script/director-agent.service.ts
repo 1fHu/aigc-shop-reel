@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { ScriptShot } from '../../common/mock-store.service';
+import type { ScriptShot } from './script.service';
 
 /** 允许的运镜方式（AI 越界时归一化到 static） */
 const CAMERA_MOTIONS = ['push-in', 'static', 'tracking', 'pan', 'zoom-out', 'handheld'];

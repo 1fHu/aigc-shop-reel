@@ -399,14 +399,47 @@
 
 /* 状态角标 */
 .parsingBadge {
-  position: absolute; top: 8px; right: 8px;
+  position: absolute; top: 8px; left: 8px;
   background: #FEF3C7; color: #92400E; font-size: 10px; font-weight: 600;
   padding: 2px 8px; border-radius: 999px;
 }
 .failedBadge {
-  position: absolute; top: 8px; right: 8px;
+  position: absolute; top: 8px; left: 8px;
   background: #FEE2E2; color: #991B1B; font-size: 10px; font-weight: 600;
   padding: 2px 8px; border-radius: 999px;
+}
+
+/* 卡片删除按钮（始终可见） */
+.deleteBtn {
+  position: absolute; top: 8px; right: 8px; z-index: 5;
+  width: 28px; height: 28px; border-radius: 8px; border: none;
+  background: rgba(0, 0, 0, 0.35);
+  color: #fff;
+  font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background 0.15s;
+}
+.deleteBtn:hover {
+  background: #EF4444;
+}
+.deleteBtn:disabled {
+  opacity: 0.4; cursor: not-allowed;
+}
+
+/* 抽屉删除按钮 */
+.drawerDeleteBtn {
+  width: 100%; margin-top: 24px; padding: 10px 0;
+  border-radius: 10px; border: 1px solid #FCA5A5;
+  background: #FEF2F2; color: #DC2626;
+  font-size: 14px; font-weight: 500; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: background 0.15s;
+}
+.drawerDeleteBtn:hover {
+  background: #FEE2E2;
+}
+.drawerDeleteBtn:disabled {
+  opacity: 0.5; cursor: not-allowed;
 }
 
 @media (max-width: 900px) {

@@ -1,15 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { App } from 'antd';
+import { Tag, App } from 'antd';
 import { ArrowLeftOutlined, ReloadOutlined, ShareAltOutlined, DownloadOutlined, CaretRightFilled, ThunderboltOutlined } from '@ant-design/icons';
 import { videoService } from '@/services/videoService';
 import { scriptService } from '@/services/scriptService';
-import type { VideoTask } from '@/types';
+import type { VideoShotStatus, VideoTask } from '@/types';
 import styles from './VideoCreation.module.css';
 
 const POLL_MS = 1500;
 // 轮询安全上限：约 10 分钟，避免离开页面（浏览器后退手势）后 setInterval 永久泄漏
 const MAX_POLLS = Math.ceil((10 * 60 * 1000) / POLL_MS);
+
+const STATUS_PILL: Record<VideoShotStatus, string> = {
+  queued: 'default', rendering: 'processing', completed: 'success', failed: 'error',
+};
+const STATUS_LABEL: Record<VideoShotStatus, string> = {
+  queued: '排队中', rendering: '生成中', completed: '完成', failed: '失败',
+};
+const BAR_CLASS: Record<VideoShotStatus, string> = {
+  queued: styles.barQueued, rendering: styles.barRendering, completed: styles.barCompleted, failed: styles.barFailed,
+};
 
 function fmt(sec: number): string {
   const m = Math.floor(sec / 60).toString().padStart(2, '0');
@@ -96,8 +106,11 @@ export default function VideoCreation() {
       .catch(() => { setBusy(false); });
   };
 
-  // 进页面：一次性读取该项目「已有的最新视频」。已完成 → 直接进播放态；
-  // 否则保持空闲态（"开始生成"），用户触发生成的路径不受影响。
+  // 进页面：一次性读取该项目「已有的最新视频」并按状态恢复对应视图：
+  //   - completed → 播放态；
+  //   - rendering / queued（生成中）→ 恢复进度展示并继续轮询（从项目卡片点进来时直达进度）；
+  //   - failed → 失败态（可重试）；
+  //   - 无视频 → 空闲态（"开始生成"）。
   // 注意：这是单次 GET（非自动提交生成），不会重现之前的双调问题。
   useEffect(() => {
     let cancelled = false;
@@ -105,12 +118,20 @@ export default function VideoCreation() {
     const load = pid ? videoService.getLatestByProject(pid) : Promise.resolve(null);
     load
       .then((existing) => {
-        if (cancelled) return;
-        if (existing && existing.status === 'completed') setTask(existing);
+        if (cancelled || !existing) return;
+        if (existing.status === 'completed' || existing.status === 'failed') {
+          setTask(existing);
+        } else if (existing.status === 'rendering' || existing.status === 'queued') {
+          // 正在生成：恢复进度展示并继续轮询（getStatus 回填分镜队列与百分比）
+          setBusy(true);
+          startPolling(existing.id, existing);
+        }
       })
       .catch(() => { /* 拦截器已 toast；当作"无已有视频"处理 */ })
       .finally(() => { if (!cancelled) setChecking(false); });
     return () => { cancelled = true; };
+    // startPolling 为组件内闭包，仅需在 pid 变化时按最新视频状态恢复一次，无需作为依赖
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid]);
 
   // 卸载时兜底清理轮询，防止离开页面后 setInterval 泄漏
@@ -157,6 +178,15 @@ export default function VideoCreation() {
         </div>
       )}
 
+      {/* 失败态 */}
+      {!checking && !busy && task && task.status === 'failed' && (
+        <div className={styles.gen}>
+          <p className={styles.genTitle} style={{ color: '#DC2626' }}>视频生成失败</p>
+          <p className={styles.genSub}>{task.error_message || 'AI 视频生成未成功，可能是 Seedance 服务暂不可用'}</p>
+          <button className={styles.genBtn} onClick={handleGenerate}><ReloadOutlined /> 重新生成</button>
+        </div>
+      )}
+
       {/* 渲染中 */}
       {busy && !done && (
         <div className={styles.gen}>
@@ -174,6 +204,33 @@ export default function VideoCreation() {
           </div>
           <p className={styles.genTitle}>AI正在生成您的视频</p>
           <p className={styles.genSub}>正在为您精心制作专属短视频，请稍候片刻</p>
+
+          {/* Shot render queue */}
+          {task && task.shots.length > 0 && (
+            <div className={styles.queueCard}>
+              <div className={styles.queueHead}>
+                <span className={styles.queueTitle}>分镜渲染队列</span>
+                <span className={styles.queueMeta}>共 {task.shots.length} 个分镜</span>
+              </div>
+              {task.shots.map((shot, i) => (
+                <div key={shot.id} className={styles.queueRow}>
+                  <img src={shot.thumb_url} alt={shot.label} className={styles.queueThumb} />
+                  <div className={styles.queueRowBody}>
+                    <div className={styles.queueRowTitle}>
+                      Scene 0{i + 1}
+                      <span className={styles.queueRowMeta}>· {shot.label}</span>
+                    </div>
+                    <div className={styles.queueProgressTrack}>
+                      <div className={`${styles.queueProgressBar} ${BAR_CLASS[shot.status]}`} style={{ width: `${shot.progress}%` }} />
+                    </div>
+                  </div>
+                  <Tag color={STATUS_PILL[shot.status]} style={{ margin: 0, borderRadius: 999 }}>
+                    {STATUS_LABEL[shot.status]}
+                  </Tag>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

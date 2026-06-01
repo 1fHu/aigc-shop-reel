@@ -35,7 +35,7 @@ export class Material {
   tags: string[];
 
   @Column({ type: 'varchar', nullable: true, name: 'thumbnail_url' })
-  thumbnailUrl: string | null;
+  thumbnailUrl: string;
 
   @Column({ type: 'varchar', default: 'parsing' })
   status: string;

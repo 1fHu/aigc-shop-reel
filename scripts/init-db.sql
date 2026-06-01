@@ -29,7 +29,15 @@ CREATE TABLE projects (
     description TEXT,
     product_url VARCHAR(500),
     product_info JSONB,
+    cover_url VARCHAR(500),
     status VARCHAR(20) DEFAULT 'draft',
+    material_count INTEGER DEFAULT 0,
+    script_count INTEGER DEFAULT 0,
+    video_count INTEGER DEFAULT 0,
+    views INTEGER DEFAULT 0,
+    render_progress INTEGER DEFAULT 0,
+    tiktok_ready BOOLEAN DEFAULT false,
+    is_guest BOOLEAN DEFAULT false,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -45,6 +53,10 @@ CREATE TABLE materials (
     analysis JSONB,
     embedding vector(1024),
     tags TEXT[],
+    thumbnail_url VARCHAR(500),
+    status VARCHAR(20) DEFAULT 'parsing',
+    duration FLOAT,
+    slices JSONB DEFAULT '[]',
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -97,6 +109,7 @@ CREATE TABLE video_tasks (
     status VARCHAR(20) DEFAULT 'queued',
     retry_count INTEGER DEFAULT 0,
     error_msg TEXT,
+    preview_url VARCHAR(500),
     trace_id VARCHAR(36),
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()

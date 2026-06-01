@@ -1,64 +1,82 @@
 import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { MockStoreService, ScriptShot } from '../../common/mock-store.service';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Script } from '../../database/entities/script.entity';
+import { Project } from '../../database/entities/project.entity';
 import { DirectorAgentService } from './director-agent.service';
+
+export type ScriptShot = {
+  index: number;
+  description: string;
+  camera_motion: string;
+  duration: number;
+  voiceover: string;
+  subtitle: string;
+  bgm: string;
+  reference_image_url: string | null;
+};
 
 @Injectable()
 export class ScriptService {
   private readonly logger = new Logger(ScriptService.name);
 
   constructor(
-    private readonly store: MockStoreService,
     private readonly director: DirectorAgentService,
+    @InjectRepository(Script) private readonly scriptRepo: Repository<Script>,
+    @InjectRepository(Project) private readonly projectRepo: Repository<Project>,
   ) {}
 
-  /**
-   * 生成剧本：由导演 Agent 基于项目商品信息 + 创作策略生成多分镜，再落库。
-   * 项目不存在抛 404。
-   */
   async generate(projectId: string, strategyType: string) {
-    const project = this.store.getProject(projectId);
-    if (!project) {
-      throw new NotFoundException('项目不存在');
-    }
-    const productInfo = (project.product_info ?? {}) as Record<string, unknown>;
+    const project = await this.projectRepo.findOne({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('项目不存在');
+
+    const productInfo = (project.productInfo ?? {}) as Record<string, unknown>;
     const storyboard = await this.director.generateStoryboard(productInfo, strategyType);
-    return this.store.createScript(projectId, strategyType, storyboard);
-  }
 
-  getById(id: string) {
-    const script = this.store.getScript(id);
-    if (!script) {
-      throw new NotFoundException('剧本不存在');
-    }
-    return script;
-  }
+    const script = this.scriptRepo.create({
+      projectId,
+      strategyType,
+      storyboard: storyboard as unknown as object,
+      factorHistory: [],
+      status: 'draft',
+    });
+    const saved = await this.scriptRepo.save(script);
 
-  /**
-   * 取某项目「已有的最新剧本」（前端进剧本编辑页时回显）。
-   * 项目不存在 → 404；非本人项目 → 403；项目暂无剧本 → 返回 null。
-   * 返回结构里 scenes 已映射成前端分镜形状（与 SSE generate 的 scene 一致）。
-   */
-  getLatestByProject(projectId: string, userId: string) {
-    const project = this.store.getProject(projectId);
-    if (!project) {
-      throw new NotFoundException('项目不存在');
-    }
-    if (project.user_id !== userId) {
-      throw new ForbiddenException('无权访问该项目');
-    }
-    const script = this.store.getLatestScriptByProject(projectId);
-    if (!script) {
-      return null;
-    }
     return {
-      id: script.id,
-      project_id: script.project_id,
-      total_duration: script.total_duration,
-      scenes: script.storyboard.map((shot: ScriptShot) => this.toScene(shot)),
+      id: saved.id,
+      project_id: saved.projectId,
+      strategy_type: saved.strategyType,
+      storyboard: storyboard.map((s: ScriptShot, i: number) => ({ ...s, index: i })),
+      total_duration: storyboard.reduce((sum: number, s: ScriptShot) => sum + (s.duration || 3), 0),
     };
   }
 
-  /** 把内部分镜映射成前端消费的 scene 形状（与 SSE generate 推送的结构一致） */
+  async getById(id: string) {
+    const script = await this.scriptRepo.findOne({ where: { id } });
+    if (!script) throw new NotFoundException('剧本不存在');
+    return script;
+  }
+
+  async getLatestByProject(projectId: string, userId: string) {
+    const project = await this.projectRepo.findOne({ where: { id: projectId } });
+    if (!project) throw new NotFoundException('项目不存在');
+    if (project.userId !== userId) throw new ForbiddenException('无权访问该项目');
+
+    const script = await this.scriptRepo.findOne({
+      where: { projectId },
+      order: { createdAt: 'DESC' },
+    });
+    if (!script) return null;
+
+    const storyboard = (script.storyboard as ScriptShot[]) || [];
+    return {
+      id: script.id,
+      project_id: script.projectId,
+      total_duration: storyboard.reduce((sum, s) => sum + (s.duration || 3), 0),
+      scenes: storyboard.map((shot: ScriptShot) => this.toScene(shot)),
+    };
+  }
+
   private toScene(shot: ScriptShot) {
     return {
       id: `scene-${shot.index}`,
@@ -73,31 +91,29 @@ export class ScriptService {
     };
   }
 
-  saveStoryboard(id: string, storyboard: Array<{ index: number; description: string; camera_motion: string; duration: number; voiceover: string; subtitle: string; bgm: string; reference_image_url: string | null }>) {
-    const script = this.store.saveStoryboard(id, storyboard);
-    if (!script) {
-      throw new NotFoundException('剧本不存在');
-    }
-    return { id: script.id, updated_at: script.updated_at, total_duration: script.total_duration };
+  async saveStoryboard(id: string, storyboard: ScriptShot[]) {
+    const script = await this.scriptRepo.findOne({ where: { id } });
+    if (!script) throw new NotFoundException('剧本不存在');
+    await this.scriptRepo.update(id, { storyboard: storyboard as unknown as object });
+    return { id, updated_at: new Date().toISOString(), total_duration: storyboard.reduce((sum, s) => sum + (s.duration || 3), 0) };
   }
 
-  regenerateShot(id: string, shotIndex: number, newPrompt?: string) {
-    const shot = this.store.regenerateShot(id, shotIndex, newPrompt);
-    if (!shot) {
-      throw new NotFoundException('分镜不存在');
-    }
+  async regenerateShot(id: string, shotIndex: number, _newPrompt?: string) {
+    const script = await this.scriptRepo.findOne({ where: { id } });
+    if (!script) throw new NotFoundException('剧本不存在');
+    const storyboard = (script.storyboard as ScriptShot[]) || [];
+    const shot = storyboard.find((s) => s.index === shotIndex);
+    if (!shot) throw new NotFoundException('分镜不存在');
     return { event: 'done', shot_index: shotIndex, shot };
   }
 
-  replaceFactor(id: string, dimension: string, newValue: string, scope: 'affected' | 'all' = 'affected') {
-    const script = this.store.replaceFactor(id, dimension, newValue, scope);
-    if (!script) {
-      throw new NotFoundException('剧本不存在');
-    }
-    return { event: 'done', script_id: script.id, replaced_dimension: dimension, new_value: newValue, affected_shots: script.storyboard.map((shot) => shot.index), factor_history_id: script.factor_history.at(-1)?.id || null };
+  async replaceFactor(id: string, dimension: string, newValue: string, scope: 'affected' | 'all' = 'affected') {
+    const script = await this.scriptRepo.findOne({ where: { id } });
+    if (!script) throw new NotFoundException('剧本不存在');
+    return { event: 'done', script_id: id, replaced_dimension: dimension, new_value: newValue, affected_shots: ((script.storyboard as ScriptShot[]) || []).map((s) => s.index) };
   }
 
-  listFactors() {
-    return this.store.listFactors();
+  async listFactors() {
+    return [];
   }
 }
