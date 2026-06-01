@@ -1,0 +1,237 @@
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+/* ============ 顶部 header ============ */
+.header {
+  display: flex;
+  gap: 14px;
+}
+
+.thumbBox {
+  position: relative;
+  width: 110px;
+  height: 160px;
+  border-radius: 12px;
+  overflow: hidden;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.08);
+}
+
+.thumbBox img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.platformPill {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  font-size: 10px;
+  font-weight: 600;
+  color: #4648D4;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.04em;
+}
+
+.headerMeta {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.metaRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.metaLabel {
+  color: #6B7280;
+}
+
+.metaValue {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 700;
+  color: #111827;
+  font-size: 16px;
+}
+
+.sourceUrl {
+  font-size: 11px;
+  color: #9CA3AF;
+  word-break: break-all;
+}
+
+.sourceUrl a {
+  color: #4648D4;
+}
+
+.complianceHint {
+  font-size: 11px;
+  color: #B45309;
+  background: #FEF3C7;
+  padding: 4px 8px;
+  border-radius: 6px;
+  display: inline-block;
+}
+
+/* ============ 报告 section ============ */
+.reportSection {
+  padding: 14px;
+  background: #F8FAFC;
+  border-radius: 10px;
+}
+
+.sectionTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.sectionTitle .anticon {
+  color: #4648D4;
+}
+
+.sectionText {
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.bullets {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 13px;
+  color: #374151;
+  line-height: 1.8;
+}
+
+.tagRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+/* ============ 亮点 box ============ */
+.highlightBox {
+  padding: 14px;
+  background: linear-gradient(135deg, #FEF3C7 0%, #FED7AA 100%);
+  border-radius: 10px;
+}
+
+.highlightTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400E;
+  margin-bottom: 6px;
+}
+
+.highlightList {
+  margin: 0;
+  padding-left: 4px;
+  list-style: none;
+}
+
+.highlightList li {
+  font-size: 13px;
+  color: #78350F;
+  line-height: 1.8;
+}
+
+/* ============ 因子勾选区 ============ */
+.factorBox {
+  padding: 16px;
+  background: linear-gradient(135deg, #EEF2FF 0%, #DBEAFE 100%);
+  border-radius: 10px;
+  border: 1px solid #C7D2FE;
+}
+
+.factorTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.factorHint {
+  font-size: 11px;
+  color: #4648D4;
+  margin: 0 0 12px 0;
+}
+
+.factorList {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.factorRow {
+  display: block;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.factorRow:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+.factorRowLabel {
+  font-size: 12px;
+  color: #6B7280;
+}
+
+.factorRowArrow {
+  margin: 0 8px;
+  color: #9CA3AF;
+}
+
+.factorRowValue {
+  font-size: 13px;
+  font-weight: 600;
+  color: #4648D4;
+}
+
+/* ============ 底部 CTA ============ */
+.footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid #E5E7EB;
+  margin-top: 4px;
+}
+
+.applyBtn {
+  background: linear-gradient(135deg, #8B5CF6 0%, #4648D4 50%, #0EA5E9 100%) !important;
+  border: none !important;
+  font-weight: 600 !important;
+  box-shadow: 0 0 16px rgba(70, 72, 212, 0.25);
+}
+
+.applyBtn:hover:not(:disabled) {
+  opacity: 0.94;
+}

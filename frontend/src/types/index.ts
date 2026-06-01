@@ -6,3 +6,4 @@ export * from './dashboard';
 export * from './script';
 export * from './video';
 export * from './material';
+export * from './genebank';
