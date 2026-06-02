@@ -51,6 +51,8 @@ export interface GenerateVideoPayload {
   subtitle_style?: {            // 字幕样式
     font_size?: number;        // 字体大小 px，默认 40
     outline?: number;          // 描边粗细，默认 2.5
+    color?: string;            // 字体颜色 hex，默认 #FFFFFF
+    font_family?: string;      // 字体名称，默认 Microsoft YaHei
   };
   custom_requirement?: string; // 用户自定义视频需求，追加到 Seedance prompt
 }

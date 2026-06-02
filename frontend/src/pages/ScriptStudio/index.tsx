@@ -47,12 +47,16 @@ export default function ScriptStudio() {
   const [subtitleFontSize, setSubtitleFontSize] = useState(() => Number(localStorage.getItem('vidcraft_sub_fontsize')) || 40);
   const [subtitleOutline, setSubtitleOutline] = useState(() => Number(localStorage.getItem('vidcraft_sub_outline')) || 2.5);
   const [customRequirement, setCustomRequirement] = useState(() => localStorage.getItem('vidcraft_custom_req') || '');
+  const [subtitleColor, setSubtitleColor] = useState(() => localStorage.getItem('vidcraft_sub_color') || '#FFFFFF');
+  const [subtitleFontFamily, setSubtitleFontFamily] = useState(() => localStorage.getItem('vidcraft_sub_font') || 'Microsoft YaHei');
 
   const handleVoiceChange = (v: string) => { setVoiceId(v); localStorage.setItem('vidcraft_voice_id', v); };
   const handleSubtitleChange = (v: boolean) => { setSubtitleEnabled(v); localStorage.setItem('vidcraft_subtitle', String(v)); };
   const handleSubFontSize = (v: number) => { setSubtitleFontSize(v); localStorage.setItem('vidcraft_sub_fontsize', String(v)); };
   const handleSubOutline = (v: number) => { setSubtitleOutline(v); localStorage.setItem('vidcraft_sub_outline', String(v)); };
   const handleCustomReq = (v: string) => { setCustomRequirement(v); localStorage.setItem('vidcraft_custom_req', v); };
+  const handleSubColor = (v: string) => { setSubtitleColor(v); localStorage.setItem('vidcraft_sub_color', v); };
+  const handleSubFontFamily = (v: string) => { setSubtitleFontFamily(v); localStorage.setItem('vidcraft_sub_font', v); };
 
   // ---- load existing script + factors on mount ----
   useEffect(() => {
@@ -339,7 +343,11 @@ export default function ScriptStudio() {
           onSubtitleFontSizeChange={handleSubFontSize}
           onSubtitleOutlineChange={handleSubOutline}
           customRequirement={customRequirement}
+          subtitleColor={subtitleColor}
+          subtitleFontFamily={subtitleFontFamily}
           onCustomRequirementChange={handleCustomReq}
+          onSubtitleColorChange={handleSubColor}
+          onSubtitleFontFamilyChange={handleSubFontFamily}
         />
       </div>
 

@@ -17,75 +17,94 @@ import { Material } from '../../database/entities/material.entity';
 const VIDEO_DIR = join(process.cwd(), '..', 'uploads', 'videos');
 const MAX_SHOT_POLLS = 120;
 
-/** TTS 字级时间戳 → SRT 字幕 */
+/** TTS 字级时间戳 → SRT 字幕（按句子边界 + 自然断点分组） */
 function ttsWordsToSRT(tts: TTSResult): string {
-  const rawWords = tts.sentences.flatMap((s) => s.words);
-  const maxEnd = rawWords.length ? Math.max(...rawWords.map((w) => w.endTime)) : 0;
-  // Heuristic: timestamps over 5 minutes are likely milliseconds
+  const allRaw = tts.sentences.flatMap((s) => s.words);
+  const maxEnd = allRaw.length ? Math.max(...allRaw.map((w) => w.endTime)) : 0;
   const timeScale = maxEnd > 300 ? 0.001 : 1;
 
-  const scaled = rawWords
-    .map((w) => ({
-      word: w.word,
-      startTime: w.startTime * timeScale,
-      endTime: w.endTime * timeScale,
-    }))
-    .filter((w) => w.endTime > w.startTime)
-    .sort((a, b) => a.startTime - b.startTime);
+  const PUNCT_RE = /[，。！？、,\.!\?\s]/;
+  // 自然断点字符：这些字后面换行看起来比较自然
+  const BREAK_CHARS = /[的了在是和这对把被让到与跟向从/，。！？、,\.!\?\s]/;
 
-  // Deduplicate repeated subtitle events and clamp overlaps.
-  const seen = new Set<string>();
-  let lastEnd = 0;
-  let subs = scaled
-    .filter((w) => {
-      const key = `${w.word}|${w.startTime.toFixed(3)}|${w.endTime.toFixed(3)}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .map((w) => {
-      const start = Math.max(w.startTime, lastEnd);
-      const end = Math.max(w.endTime, start);
-      lastEnd = end;
-      return { ...w, startTime: start, endTime: end };
-    })
-    .filter((w) => w.endTime > w.startTime);
+  const groups: Array<{ text: string; start: number; end: number }> = [];
+  const MAX_LINE = 12;  // 一行最多 12 字
+  const MIN_LINE = 6;   // 换成多行时，每行不少于 6 字
 
-  if (!subs.length && tts.text) {
+  for (const sentence of tts.sentences) {
+    const words = sentence.words
+      .map((w) => ({
+        word: w.word,
+        startTime: w.startTime * timeScale,
+        endTime: w.endTime * timeScale,
+      }))
+      .filter((w) => w.endTime > w.startTime);
+
+    if (!words.length) continue;
+
+    // 先按标点粗切
+    const segments: Array<typeof words> = [];
+    let buf: typeof words = [];
+    for (const w of words) {
+      if (PUNCT_RE.test(w.word)) {
+        if (buf.length) { segments.push(buf); buf = []; }
+        continue;
+      }
+      buf.push(w);
+    }
+    if (buf.length) segments.push(buf);
+
+    // 每个段如果太长再切
+    for (const seg of segments) {
+      const total = seg.length;
+      if (total <= MAX_LINE) {
+        groups.push({ text: seg.map((w) => w.word).join(''), start: seg[0].startTime, end: seg[seg.length - 1].endTime });
+        continue;
+      }
+
+      // 长段：找自然断点切成两行
+      const half = Math.floor(total / 2);
+      let splitAt = half;
+      // 在 half±3 范围内找自然断点字符
+      for (let d = 0; d <= 3; d++) {
+        const candidates = [half - d, half + d].filter((p) => p > MIN_LINE && p < total - MIN_LINE);
+        const found = candidates.find((p) => BREAK_CHARS.test(seg[p]?.word || ''));
+        if (found !== undefined) { splitAt = found; break; }
+      }
+
+      const first = seg.slice(0, splitAt);
+      const second = seg.slice(splitAt);
+      if (first.length) {
+        groups.push({ text: first.map((w) => w.word).join(''), start: first[0].startTime, end: first[first.length - 1].endTime });
+      }
+      if (second.length) {
+        groups.push({ text: second.map((w) => w.word).join(''), start: second[0].startTime, end: second[second.length - 1].endTime });
+      }
+    }
+  }
+
+  if (!groups.length && tts.text) {
     const text = tts.text.trim();
     const duration = Math.max((tts.duration || 3) * timeScale, 0.8);
-    const chars = Array.from(text).filter((c) => !/\s/.test(c));
+    const chars = Array.from(text).filter((c) => !PUNCT_RE.test(c) && !/\s/.test(c));
     if (chars.length > 0) {
       const perChar = duration / chars.length;
       let idx = 0;
-      const fallback: typeof subs = [];
+      const fallback: Array<{ word: string; startTime: number; endTime: number }> = [];
       for (const ch of text) {
-        if (/\s/.test(ch)) continue;
-        if (/[，。！？、,\.\!?]/.test(ch)) continue;
+        if (/\s/.test(ch) || PUNCT_RE.test(ch)) continue;
         const start = idx * perChar;
         const end = (idx + 1) * perChar;
         fallback.push({ word: ch, startTime: start, endTime: end });
         idx += 1;
       }
-      subs = fallback;
+      if (fallback.length) {
+        groups.push({ text: fallback.map((w) => w.word).join(''), start: fallback[0].startTime, end: fallback[fallback.length - 1].endTime });
+      }
     }
   }
 
-  if (!subs.length) return '';
-  // 每 2-6 字一组
-  const groups: Array<{ text: string; start: number; end: number }> = [];
-  let buf: typeof subs = [];
-  const flush = () => {
-    if (!buf.length) return;
-    groups.push({ text: buf.map((w) => w.word).join(''), start: buf[0].startTime, end: buf[buf.length - 1].endTime });
-    buf = [];
-  };
-  for (const w of subs) {
-    if (/[，。！？、,\.!\?\s]/.test(w.word)) { flush(); continue; }
-    buf.push(w);
-    if (buf.length >= 6) flush();
-  }
-  flush();
+  if (!groups.length) return '';
 
   // 相邻字幕组之间加 80ms 间隙，避免播放器渲染残留导致视觉重叠
   const MIN_GAP = 0.08;
@@ -147,7 +166,7 @@ export class VideoService {
   }
 
   /** POST /api/videos/generate */
-  async generate(projectId: string, scriptId: string, opts?: { voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number }; custom_requirement?: string }) {
+  async generate(projectId: string, scriptId: string, opts?: { voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string }) {
     let script = await this.scriptRepo.findOne({ where: { id: scriptId } });
     if (!script || !(script.storyboard as unknown[])?.length) {
       script = await this.scriptRepo.findOne({ where: { projectId }, order: { createdAt: 'DESC' } }) as Script;
@@ -181,7 +200,7 @@ export class VideoService {
       projectId, scriptId,
       status: 'processing',
       traceId: `vid-${Date.now()}`,
-      settings: { tts: { voice: opts?.voice_id || 'zh_female_qingxin' } },
+      settings: { tts: { voice: opts?.voice_id || 'zh_female_qingxin' }, subtitle_style: opts?.subtitle_style || {} },
     });
     // 临时存储 taskCount 供 status 查询
     (video as any)._taskCount = taskCount;
@@ -352,7 +371,8 @@ export class VideoService {
         ? await this.volcano.synthesizeSpeech(shot.voiceover || shot.description || '')
         : null;
       const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
-      const composited = await this.compositeShot(id, index, path, tts);
+      const savedStyle = ((video.settings as any)?.subtitle_style || {}) as { font_size?: number; outline?: number; color?: string; font_family?: string };
+      const composited = await this.compositeShot(id, index, path, tts, savedStyle);
       const finalPath = composited || path;
       await this.taskRepo.update({ videoId: id, shotIndex: index }, {
         status: 'completed',
@@ -413,7 +433,7 @@ export class VideoService {
 
   // ---- private: video generation (Seedance + ffmpeg) ----
 
-  private async buildPromptAndSubmit(videoId: string, script: Script | null, productName: string, productInfo: Record<string, unknown>, imageUrls: string[], materialContext: string, opts?: { voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number }; custom_requirement?: string }) {
+  private async buildPromptAndSubmit(videoId: string, script: Script | null, productName: string, productInfo: Record<string, unknown>, imageUrls: string[], materialContext: string, opts?: { voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string }) {
     const storyboard = (script?.storyboard as ScriptShot[]) || [];
     const normalizedStoryboard = storyboard.map((shot, idx) => ({
       ...shot,
@@ -730,7 +750,7 @@ export class VideoService {
   }
 
   /** 单个分镜合成：Seedance 画面 + TTS 音频 + SRT 字幕 */
-  private async compositeShot(videoId: string, shotIndex: number, videoPath: string, tts: TTSResult | null, subtitleStyle?: { font_size?: number; outline?: number }): Promise<string | null> {
+  private async compositeShot(videoId: string, shotIndex: number, videoPath: string, tts: TTSResult | null, subtitleStyle?: { font_size?: number; outline?: number; color?: string; font_family?: string }): Promise<string | null> {
     const outPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-composited.mp4`);
     const tempFiles: string[] = [];
     let hasAudio = false;
@@ -763,7 +783,13 @@ export class VideoService {
         const srtFilterPath = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
         const fontSize = subtitleStyle?.font_size || 40;
         const outline = subtitleStyle?.outline ?? 2.5;
-        args.push('-vf', `subtitles='${srtFilterPath}':charenc=UTF-8:force_style='Fontsize=${fontSize},PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,Outline=${outline},BorderStyle=1,MarginV=80'`);
+        const color = subtitleStyle?.color || '#FFFFFF';
+        const fontFamily = subtitleStyle?.font_family || 'Microsoft YaHei';
+        // 颜色 hex #RRGGBB → ASS &HBBGGRR 格式 (去掉#，反转RGB)
+        const hex = color.replace('#', '');
+        const assColor = `&H00${hex[4] || 'F'}${hex[5] || 'F'}${hex[2] || 'F'}${hex[3] || 'F'}${hex[0] || 'F'}${hex[1] || 'F'}`;
+        this.logger.log(`compositeShot #${shotIndex} subtitle: Fontsize=${fontSize}, Fontname=${fontFamily}, Outline=${outline}, Color=${color}`);
+        args.push('-vf', `subtitles='${srtFilterPath}':charenc=UTF-8:force_style='Fontsize=${fontSize},Fontname=${fontFamily},PrimaryColour=${assColor},OutlineColour=&H00000000,Outline=${outline},BorderStyle=1,MarginV=80'`);
       }
       args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p');
       if (hasAudio) { args.push('-c:a', 'aac', '-b:a', '128k', '-map', '0:v:0', '-map', '1:a:0'); }

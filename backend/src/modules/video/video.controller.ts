@@ -21,7 +21,7 @@ export class VideoController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post('generate')
-  async generate(@Body() body: { project_id: string; script_id: string; voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number }; custom_requirement?: string }) {
+  async generate(@Body() body: { project_id: string; script_id: string; voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string }) {
     return ok(await this.videoService.generate(body.project_id, body.script_id, { voice_id: body.voice_id, subtitle_enabled: body.subtitle_enabled, subtitle_style: body.subtitle_style, custom_requirement: body.custom_requirement }));
   }
 

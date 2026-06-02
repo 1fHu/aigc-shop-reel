@@ -99,6 +99,8 @@ export default function VideoCreation() {
       subtitle_style: {
         font_size: Number(localStorage.getItem('vidcraft_sub_fontsize')) || 40,
         outline: Number(localStorage.getItem('vidcraft_sub_outline')) || 2.5,
+        color: localStorage.getItem('vidcraft_sub_color') || '#FFFFFF',
+        font_family: localStorage.getItem('vidcraft_sub_font') || 'Microsoft YaHei',
       },
       custom_requirement: localStorage.getItem('vidcraft_custom_req') || '',
     })
