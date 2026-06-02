@@ -28,8 +28,10 @@ export class Material {
   @Column({ type: 'jsonb', nullable: true })
   analysis: object;
 
+  // 列在库里是 pgvector vector(1024)，TypeORM 当 varchar 字符串读写；无向量时存 NULL
+  // （pgvector 不接受空向量 '[]'，否则报 "vector must have at least 1 dimension"）
   @Column({ type: 'varchar', nullable: true })
-  embedding: string;
+  embedding: string | null;
 
   @Column({ type: 'text', array: true, nullable: true, default: '{}' })
   tags: string[];
