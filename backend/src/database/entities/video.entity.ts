@@ -39,6 +39,9 @@ export class Video {
   @Column({ type: 'float', nullable: true, name: 'generation_cost' })
   generationCost: number;
 
+  @Column({ type: 'jsonb', nullable: true })
+  settings: Record<string, unknown>;
+
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
 

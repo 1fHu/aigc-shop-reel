@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Switch, Tag, App } from 'antd';
+import { Tag, App } from 'antd';
 import { ArrowLeftOutlined, ReloadOutlined, ShareAltOutlined, DownloadOutlined, CaretRightFilled, ThunderboltOutlined } from '@ant-design/icons';
 import { videoService } from '@/services/videoService';
 import { scriptService } from '@/services/scriptService';
@@ -35,7 +35,6 @@ export default function VideoCreation() {
   const { message } = App.useApp();
 
   const [task, setTask] = useState<VideoTask | null>(null);
-  const [subtitleEnabled, setSubtitleEnabled] = useState(true);
   // busy: 已提交、正在生成/渲染中（从点击触发直到 completed/failed）
   const [busy, setBusy] = useState(false);
   // checking: 进页面后一次性查「项目是否已有完成视频」，期间显示加载、避免空闲态闪现
@@ -92,7 +91,17 @@ export default function VideoCreation() {
       return;
     }
 
-    videoService.generate({ project_id: projectId, script_id: scriptId, subtitle_enabled: subtitleEnabled })
+    videoService.generate({
+      project_id: projectId,
+      script_id: scriptId,
+      voice_id: localStorage.getItem('vidcraft_voice_id') || 'zh_female_vv_uranus_bigtts',
+      subtitle_enabled: localStorage.getItem('vidcraft_subtitle') !== 'false',
+      subtitle_style: {
+        font_size: Number(localStorage.getItem('vidcraft_sub_fontsize')) || 40,
+        outline: Number(localStorage.getItem('vidcraft_sub_outline')) || 2.5,
+      },
+      custom_requirement: localStorage.getItem('vidcraft_custom_req') || '',
+    })
       .then((t) => {
         const videoId = t.id;
         if (!videoId) {
@@ -147,6 +156,28 @@ export default function VideoCreation() {
   const done = task?.status === 'completed';
   const R = 85; const C = 2 * Math.PI * R;
 
+  const handleDownload = async () => {
+    if (!task?.id) return;
+    const token = localStorage.getItem('vidcraft_access_token');
+    const base = import.meta.env.VITE_API_BASE_URL || '/api';
+    try {
+      const res = await fetch(`${base}/videos/${task.id}/file`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) { message.error('下载失败'); return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `vidcraft-${task.id.slice(0, 8)}.mp4`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      message.success('下载已开始');
+    } catch { message.error('下载失败'); }
+  };
+
   return (
     <div className={styles.page}>
       <div className={styles.header}>
@@ -158,7 +189,7 @@ export default function VideoCreation() {
           <div className={styles.ha}>
             <button className={styles.ab} onClick={handleGenerate}><ReloadOutlined /> 重新生成</button>
             <button className={styles.ab}><ShareAltOutlined /> 分享</button>
-            <button className={`${styles.ab} ${styles.exp}`} onClick={() => message.success('导出已开始')}><DownloadOutlined /> 导出视频</button>
+            <button className={`${styles.ab} ${styles.exp}`} onClick={handleDownload}><DownloadOutlined /> 导出视频</button>
           </div>
         ) : task ? <span className={styles.tid}>TraceID: {task.render_id}</span> : null}
       </div>
@@ -175,10 +206,6 @@ export default function VideoCreation() {
         <div className={styles.gen}>
           <p className={styles.genTitle}>准备生成您的带货视频</p>
           <p className={styles.genSub}>点击下方按钮，AI 将根据当前脚本为您生成专属短视频</p>
-          <div style={{ marginBottom: 24, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <span style={{ color: '#6B7280', fontSize: 14 }}>烧录字幕</span>
-            <Switch checked={subtitleEnabled} onChange={setSubtitleEnabled} />
-          </div>
           <button className={styles.genBtn} onClick={handleGenerate}><ThunderboltOutlined /> 开始生成视频</button>
         </div>
       )}
@@ -262,7 +289,14 @@ export default function VideoCreation() {
 
       {busy && !done && (
         <div className={styles.cancelArea}>
-          <button className={styles.cancelBtn} onClick={() => leave(-1)}>取消任务</button>
+          <button className={styles.cancelBtn} onClick={async () => {
+            if (task?.id) {
+              try { await videoService.cancel(task.id); } catch { /* ignore */ }
+            }
+            stopPolling();
+            setBusy(false);
+            setTask(null);
+          }}>取消任务</button>
         </div>
       )}
     </div>

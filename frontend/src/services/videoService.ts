@@ -162,4 +162,9 @@ export const videoService = {
   exportVideo(videoId: string, payload: ExportVideoPayload): Promise<VideoTask> {
     return api.post(`/videos/${videoId}/export`, payload);
   },
+
+  /** 取消正在生成的任务，清理文件和 DB */
+  cancel(videoId: string): Promise<{ id: string; status: string }> {
+    return api.post(`/videos/${videoId}/cancel`);
+  },
 };

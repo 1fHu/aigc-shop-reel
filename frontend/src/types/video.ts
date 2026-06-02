@@ -46,7 +46,13 @@ export interface GenerateVideoPayload {
   project_id: string;
   script_id: string;
   ratio?: VideoRatio;          // 默认 9:16
+  voice_id?: string;           // TTS 音色
   subtitle_enabled?: boolean;  // 是否烧录字幕，默认 true
+  subtitle_style?: {            // 字幕样式
+    font_size?: number;        // 字体大小 px，默认 40
+    outline?: number;          // 描边粗细，默认 2.5
+  };
+  custom_requirement?: string; // 用户自定义视频需求，追加到 Seedance prompt
 }
 
 /** POST /api/videos/:id/export 请求体 */
