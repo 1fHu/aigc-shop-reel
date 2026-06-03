@@ -495,8 +495,23 @@ export class VideoService {
           await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'processing' });
           const tts = ttsResults.get(shot.index) || null;
           const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
-          const extraImages = prevKeyframe ? [prevKeyframe] : [];
-          const baseRefs = prevKeyframe ? [] : refImages;
+          // 收集前后分镜画面作为参考
+          const contextFrames: string[] = [];
+          if (prevKeyframe) contextFrames.push(prevKeyframe);
+          // 后一镜首帧（递进衔接）
+          if (i + 1 < orderedStoryboard.length) {
+            const nextShot = orderedStoryboard[i + 1];
+            const nextPath = join(VIDEO_DIR, `${id}-shot-${nextShot.index}-composited.mp4`);
+            const nextRaw = join(VIDEO_DIR, `${id}-shot-${nextShot.index}.mp4`);
+            const nextFile = existsSync(nextPath) ? nextPath : existsSync(nextRaw) ? nextRaw : '';
+            if (nextFile) {
+              const nextFrame = await this.extractFirstFrame(id, nextShot.index, nextFile);
+              if (nextFrame) contextFrames.push(nextFrame);
+            }
+          }
+          const hasContextFrames = contextFrames.length > 0;
+          const extraImages = hasContextFrames ? contextFrames : [];
+          const baseRefs = hasContextFrames ? [] : refImages;
           const path = await this.generateShot(id, shot, productName, productInfo, baseRefs, materialContext, targetDuration, extraImages, prevShot || undefined, customReq);
           if (path) {
             const composited = await this.compositeShot(id, shot.index, path, tts, savedStyle);
