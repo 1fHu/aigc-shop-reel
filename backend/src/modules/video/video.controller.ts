@@ -53,6 +53,18 @@ export class VideoController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post(':id/regenerate-shots')
+  async regenerateShots(@Param('id') id: string, @Body() body: { shot_indices: number[] }) {
+    return ok(await this.videoService.regenerateShots(id, body.shot_indices));
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post(':id/finalize')
+  async finalize(@Param('id') id: string) {
+    return ok(await this.videoService.finalize(id));
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Put(':id/settings')
   async updateSettings(@Param('id') id: string, @Body() body: { tts?: { language?: string; voice?: string }; bgm?: { preset_id?: string; custom_url?: string; volume?: number } }) {
     return ok(await this.videoService.updateSettings(id, body));

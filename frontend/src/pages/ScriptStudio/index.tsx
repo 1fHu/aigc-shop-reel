@@ -108,7 +108,7 @@ export default function ScriptStudio() {
   const handleSave = useCallback(async () => {
     if (!scriptId) return;
     try {
-      await scriptService.saveStoryboard(scriptId, { scenes });
+      await scriptService.saveStoryboard(scriptId, { storyboard: scenes });
       message.success('分镜已保存');
     } catch {
       message.error('保存失败');
@@ -156,12 +156,15 @@ export default function ScriptStudio() {
         body: JSON.stringify({ shot_index: index }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      const result = data.data || data;
-      if (result?.shot) {
-        setScenes((prev) => prev.map((s) => (s.index === index ? { ...s, ...result.shot, index } : s)));
+      // 后端返回 SSE 格式: data: {...}\n\n
+      const text = await resp.text();
+      const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
+      if (!dataLine) throw new Error('No SSE data');
+      const payload = JSON.parse(dataLine.slice(5).trim());
+      if (payload?.shot) {
+        setScenes((prev) => prev.map((s) => (s.index === index ? { ...s, ...payload.shot, index } : s)));
+        message.success('分镜剧本已重生');
       }
-      message.success('分镜已重生');
     } catch {
       message.error('重生失败');
     } finally {
@@ -182,15 +185,18 @@ export default function ScriptStudio() {
         body: JSON.stringify({ dimension: key, new_value: value }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      const data = await resp.json();
-      const result = data.data || data;
-      if (result?.affected_shots) {
+      // 后端返回 SSE 格式: data: {...}\n\n
+      const text = await resp.text();
+      const dataLine = text.split('\n').find((l) => l.startsWith('data:'));
+      if (!dataLine) throw new Error('No SSE data');
+      const payload = JSON.parse(dataLine.slice(5).trim());
+      if (payload?.affected_shots) {
         const now = new Date().toISOString();
         setHistory((prev) => [{
           id: `${Date.now()}`,
           timestamp: now,
           message: `替换 "${factors.find((f) => f.key === key)?.label || key}" → ${value}`,
-          affected_scene_ids: result.affected_shots.map((i: number) => `#${String(i + 1).padStart(2, '0')}`),
+          affected_scene_ids: payload.affected_shots.map((i: number) => `#${String(i + 1).padStart(2, '0')}`),
         }, ...prev]);
       }
     } catch {
@@ -241,13 +247,13 @@ export default function ScriptStudio() {
       const latest = await videoService.getLatestByProject(projectId);
       if (!latest?.id) { message.error('未找到视频任务'); setRegeneratingShots(false); return; }
       const sorted = [...selectedShotIndices].sort((a, b) => a - b);
-      for (const idx of sorted) {
-        await videoService.regenerateShot(latest.id, idx);
-      }
+      // 批量再生：后端只重生选中的分镜，保留未选中，最终合成
+      await videoService.regenerateShots(latest.id, sorted);
       message.success(`${sorted.length} 个分镜已提交重新生成`);
+      navigate(`/projects/${projectId}/video?scriptId=${scriptId}`);
     } catch { message.error('分镜重新生成失败'); }
     setRegeneratingShots(false);
-  }, [projectId, selectedShotIndices, message]);
+  }, [projectId, scriptId, selectedShotIndices, navigate, message]);
 
   const handleViewVideo = useCallback(async () => {
     if (!projectId) return;

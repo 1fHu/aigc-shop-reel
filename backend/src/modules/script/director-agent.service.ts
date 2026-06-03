@@ -50,6 +50,76 @@ export class DirectorAgentService {
     return this.fallback(productInfo, strategyType);
   }
 
+  /** 单镜重生：根据上下文（前后分镜 + 商品信息）用 AI 重写一个分镜 */
+  async regenerateShot(
+    productInfo: Record<string, unknown>,
+    storyboard: ScriptShot[],
+    shotIndex: number,
+  ): Promise<ScriptShot | null> {
+    const shot = storyboard.find((s) => s.index === shotIndex);
+    if (!shot) return null;
+    const prevShot = storyboard.find((s) => s.index === shotIndex - 1);
+    const nextShot = storyboard.find((s) => s.index === shotIndex + 1);
+
+    const aiShot = await this.callDoubaoRegenerate(productInfo, shot, prevShot, nextShot);
+    if (aiShot) {
+      const [normalized] = this.normalize([aiShot]);
+      if (normalized) return normalized;
+    }
+    // 降级：轻微调整原分镜文案
+    this.logger.warn(`Director agent: 单镜重生降级，shot#${shotIndex}`);
+    return { ...shot, voiceover: shot.voiceover ? `${shot.voiceover}（优化）` : '', description: shot.description ? `${shot.description}（优化）` : '' };
+  }
+
+  /** 调用 Doubao 重写单个分镜 */
+  private async callDoubaoRegenerate(
+    productInfo: Record<string, unknown>,
+    target: ScriptShot,
+    prevShot?: ScriptShot,
+    nextShot?: ScriptShot,
+  ): Promise<Partial<ScriptShot> | null> {
+    if (!this.apiKey || !this.doubaoEp) return null;
+    const name = (productInfo.name as string) || '商品';
+    const contextParts: string[] = [];
+    if (prevShot) contextParts.push(`前一镜：${prevShot.description}（配音：${prevShot.voiceover || '无'}）`);
+    if (nextShot) contextParts.push(`后一镜：${nextShot.description}（配音：${nextShot.voiceover || '无'}）`);
+    const context = contextParts.length ? `\n上下文（用于保持连贯）：\n${contextParts.join('\n')}` : '';
+
+    const prompt = `你是 TikTok 电商带货短视频导演。请重写下面这个分镜，保持风格和前后连贯，但文案/运镜要有变化。
+${context}
+当前分镜：
+- 画面：${target.description}
+- 配音：${target.voiceover || '无'}
+- 运镜：${target.camera_motion || 'static'}
+- 时长：${target.duration || 3}秒
+
+商品信息：${JSON.stringify(productInfo)}
+
+返回一个 JSON 对象（不是数组）：
+{"description":"新的画面描述(中文一句话)","camera_motion":"push-in/static/tracking/pan/zoom-out/handheld","duration":秒数(2-5)","voiceover":"新的口播文案(中文)","subtitle":"新的字幕(简短)"}
+只返回 JSON 对象本身，不要 markdown，不要额外文字。`;
+
+    try {
+      const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.doubaoEp,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: 600,
+        }),
+      });
+      const data = await res.json();
+      const content: string = data?.choices?.[0]?.message?.content || '';
+      const match = content.match(/\{[\s\S]*\}/);
+      if (!match) return null;
+      return JSON.parse(match[0]);
+    } catch (err) {
+      this.logger.warn(`Doubao 单镜重生失败: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
   /** 调用 Doubao 生成分镜 JSON 数组；不可用或失败返回 null */
   private async callDoubao(
     productInfo: Record<string, unknown>,

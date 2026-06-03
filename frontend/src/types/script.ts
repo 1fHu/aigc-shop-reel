@@ -72,7 +72,7 @@ export interface Script {
 
 /** PUT /api/scripts/:id/storyboard 请求体 */
 export interface SaveStoryboardPayload {
-  scenes: Scene[];          // 完整最新顺序与内容
+  storyboard: Scene[];       // 完整最新顺序与内容（后端字段名 storyboard）
 }
 
 /** POST /api/scripts/:id/regenerate-shot 请求体 */

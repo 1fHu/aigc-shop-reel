@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, unlinkSync, readFileSync } from 'fs';
@@ -106,11 +106,15 @@ function ttsWordsToSRT(tts: TTSResult): string {
 
   if (!groups.length) return '';
 
-  // 相邻字幕组之间加 80ms 间隙，避免播放器渲染残留导致视觉重叠
-  const MIN_GAP = 0.08;
+  // 相邻字幕组之间保持间隙，双向避让避免播放器渲染残留
+  const MIN_GAP = 0.16;
   const finalGroups: Array<{ text: string; start: number; end: number }> = [];
   for (const g of groups) {
     const prev = finalGroups[finalGroups.length - 1];
+    if (prev) {
+      // 前一条往前收紧，但不能短于自身 start + MIN_GAP
+      prev.end = Math.max(prev.start + MIN_GAP, Math.min(prev.end, g.start - MIN_GAP));
+    }
     const start = prev ? Math.max(g.start, prev.end + MIN_GAP) : g.start;
     const end = Math.max(g.end, start + MIN_GAP);
     finalGroups.push({ ...g, start, end });
@@ -383,6 +387,160 @@ export class VideoService {
 
     await this.taskRepo.update({ videoId: id, shotIndex: index }, { status: 'failed', errorMsg: '分镜生成失败' });
     throw new Error('分镜生成失败');
+  }
+
+  /** POST /api/videos/:id/finalize — 用已有分镜文件重新合成最终视频 */
+  async finalize(id: string) {
+    const video = await this.videoRepo.findOne({ where: { id } });
+    if (!video) throw new NotFoundException('视频不存在');
+
+    const script = video.scriptId ? await this.scriptRepo.findOne({ where: { id: video.scriptId } }) : null;
+    const storyboard = (script?.storyboard as ScriptShot[]) || [];
+    if (!storyboard.length) throw new BadRequestException('无分镜数据');
+
+    const clips: string[] = [];
+    for (const shot of storyboard) {
+      const composited = join(VIDEO_DIR, `${id}-shot-${shot.index}-composited.mp4`);
+      const raw = join(VIDEO_DIR, `${id}-shot-${shot.index}.mp4`);
+      if (existsSync(composited)) {
+        clips.push(composited);
+      } else if (existsSync(raw)) {
+        clips.push(raw);
+      }
+    }
+
+    if (!clips.length) throw new BadRequestException('没有可用的分镜文件');
+
+    const finalUrl = await this.composite(id, clips);
+    await this.videoRepo.update(id, { status: 'completed', videoUrl: finalUrl });
+    return { id, status: 'completed', video_url: finalUrl };
+  }
+
+  /** POST /api/videos/:id/regenerate-shots — 后台异步重新生成选中分镜，保留未选中的，最终合成 */
+  async regenerateShots(id: string, shotIndices: number[]) {
+    const video = await this.videoRepo.findOne({ where: { id } });
+    if (!video) throw new NotFoundException('视频不存在');
+    if (video.status !== 'completed' && video.status !== 'failed') {
+      throw new BadRequestException('仅已完成或失败的任务可重新生成');
+    }
+
+    const script = video.scriptId ? await this.scriptRepo.findOne({ where: { id: video.scriptId } }) : null;
+    const storyboard = (script?.storyboard as ScriptShot[]) || [];
+    const normalizedStoryboard = storyboard.map((shot, idx) => ({
+      ...shot,
+      index: Number.isFinite(shot.index) ? shot.index : idx,
+    }));
+    if (!normalizedStoryboard.length) throw new BadRequestException('无分镜数据');
+
+    // 标记状态：选中的变 queued，未选中保持 completed
+    const set = new Set(shotIndices);
+    for (const shot of normalizedStoryboard) {
+      if (set.has(shot.index)) {
+        await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'queued', errorMsg: null as unknown as string });
+      }
+    }
+    await this.videoRepo.update(id, { status: 'processing' });
+
+    // 后台异步处理
+    this.processRegenerateShots(id, normalizedStoryboard, set, video);
+    return { id, status: 'processing' };
+  }
+
+  private async processRegenerateShots(
+    id: string,
+    storyboard: ScriptShot[],
+    selectedSet: Set<number>,
+    video: Video,
+  ) {
+    const project = await this.projectRepo.findOne({ where: { id: video.projectId } });
+    const productInfo = (project?.productInfo || {}) as Record<string, unknown>;
+    const productName = (productInfo.name as string) || '商品';
+
+    const materials = await this.materialRepo.find({ where: { projectId: video.projectId, status: 'ready' } });
+    const imageUrls = materials.map((m) => m.thumbnailUrl).filter(Boolean) as string[];
+    const materialContext = materials.length > 0
+      ? materials.map((m) => {
+          const a = (m.analysis || {}) as Record<string, unknown>;
+          return `[${m.fileType}] ${(a.description as string) || m.fileName || ''}`;
+        }).join('\n')
+      : '';
+
+    const refImages = await this.prepareReferenceImages(imageUrls);
+    const useTTS = this.volcano.isTTSConfigured();
+    const savedStyle = ((video.settings as any)?.subtitle_style || {}) as { font_size?: number; outline?: number; color?: string; font_family?: string };
+    const customReq = (video.settings as any)?.custom_requirement || '';
+
+    try {
+      const orderedStoryboard = [...storyboard].sort((a, b) => a.index - b.index);
+      const compositedClips: string[] = [];
+
+      // 并行 TTS — 只给选中的分镜跑
+      const ttsResults = new Map<number, TTSResult | null>();
+      if (useTTS) {
+        const selectedShots = orderedStoryboard.filter((s) => selectedSet.has(s.index));
+        const ttsPromises = selectedShots.map(async (s) => {
+          const result = await this.volcano.synthesizeSpeech(s.voiceover || s.description || '');
+          return { index: s.index, result };
+        });
+        const ttsAll = await Promise.all(ttsPromises);
+        for (const { index, result } of ttsAll) ttsResults.set(index, result);
+      }
+
+      let prevKeyframe: string | null = null;
+      for (let i = 0; i < orderedStoryboard.length; i += 1) {
+        const shot = orderedStoryboard[i];
+        const prevShot = i > 0 ? orderedStoryboard[i - 1] : null;
+
+        if (selectedSet.has(shot.index)) {
+          await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'processing' });
+          const tts = ttsResults.get(shot.index) || null;
+          const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
+          const extraImages = prevKeyframe ? [prevKeyframe] : [];
+          const baseRefs = prevKeyframe ? [] : refImages;
+          const path = await this.generateShot(id, shot, productName, productInfo, baseRefs, materialContext, targetDuration, extraImages, prevShot || undefined, customReq);
+          if (path) {
+            const composited = await this.compositeShot(id, shot.index, path, tts, savedStyle);
+            const finalPath = composited || path;
+            await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'completed', previewUrl: `/api/videos/${id}/shots/${shot.index}/file` });
+            compositedClips.push(finalPath);
+            prevKeyframe = await this.extractKeyframeDataUri(id, shot.index, finalPath);
+          } else {
+            await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'failed', errorMsg: '分镜生成失败' });
+            compositedClips.push(join(VIDEO_DIR, `${id}-shot-${shot.index}.mp4`));
+            prevKeyframe = null;
+          }
+        } else {
+          // 复用已有分镜：直接用合成版，不做任何重新处理
+          const existingComposited = join(VIDEO_DIR, `${id}-shot-${shot.index}-composited.mp4`);
+          const existingRaw = join(VIDEO_DIR, `${id}-shot-${shot.index}.mp4`);
+          let keepPath = '';
+          if (existsSync(existingComposited)) {
+            compositedClips.push(existingComposited);
+            keepPath = existingComposited;
+          } else if (existsSync(existingRaw)) {
+            compositedClips.push(existingRaw);
+            keepPath = existingRaw;
+          }
+          if (keepPath) {
+            prevKeyframe = await this.extractKeyframeDataUri(id, shot.index, keepPath);
+          } else {
+            prevKeyframe = null;
+          }
+        }
+      }
+
+      if (compositedClips.length === 0) {
+        await this.videoRepo.update(id, { status: 'failed' });
+        return;
+      }
+
+      const finalUrl = await this.composite(id, compositedClips);
+      await this.videoRepo.update(id, { status: 'completed', videoUrl: finalUrl });
+      this.logger.log(`RegenerateShots ${id} completed: ${finalUrl}`);
+    } catch (err) {
+      this.logger.error(`processRegenerateShots FAILED: ${(err as Error).message}`, (err as Error).stack);
+      await this.videoRepo.update(id, { status: 'failed' });
+    }
   }
 
   async updateSettings(id: string, body: { tts?: { language?: string; voice?: string }; bgm?: { preset_id?: string; custom_url?: string; volume?: number } }) {

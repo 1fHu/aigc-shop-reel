@@ -53,7 +53,7 @@ export default function ShotEditor({
           </div>
           <button className={styles.regenBtn} onClick={() => onRegenerate(scene.index)} disabled={regenerating}>
             {regenerating ? <Spin size="small" /> : <ReloadOutlined />}
-            {' '}重生分镜
+            {' '}重生剧本
           </button>
         </div>
 

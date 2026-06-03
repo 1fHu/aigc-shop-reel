@@ -133,7 +133,17 @@ export const videoService = {
 
   /** 单分镜重新生成 */
   regenerateShot(videoId: string, shotIndex: number): Promise<VideoShot> {
-    return api.post(`/videos/${videoId}/shots/${shotIndex}/regenerate`);
+    return api.post(`/videos/${videoId}/shots/${shotIndex}/regenerate`, {});
+  },
+
+  /** 批量重新生成选中分镜，保留未选中，最终合成 */
+  regenerateShots(videoId: string, shotIndices: number[]): Promise<{ id: string; status: string; video_url?: string }> {
+    return api.post(`/videos/${videoId}/regenerate-shots`, { shot_indices: shotIndices });
+  },
+
+  /** 用已有分镜文件重新合成最终视频 */
+  finalize(videoId: string): Promise<{ id: string; status: string; video_url?: string }> {
+    return api.post(`/videos/${videoId}/finalize`, {});
   },
 
   /** 更新 TTS / BGM 设置 */
