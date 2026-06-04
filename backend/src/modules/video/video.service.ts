@@ -495,7 +495,7 @@ export class VideoService {
           await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'processing' });
           const tts = ttsResults.get(shot.index) || null;
           const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
-          // 收集前后分镜画面作为参考
+          // 收集前后分镜画面作为首尾帧控制
           const contextFrames: string[] = [];
           if (prevKeyframe) contextFrames.push(prevKeyframe);
           // 后一镜首帧（递进衔接）
@@ -509,10 +509,10 @@ export class VideoService {
               if (nextFrame) contextFrames.push(nextFrame);
             }
           }
-          const hasContextFrames = contextFrames.length > 0;
-          const extraImages = hasContextFrames ? contextFrames : [];
-          const baseRefs = hasContextFrames ? [] : refImages;
-          const path = await this.generateShot(id, shot, productName, productInfo, baseRefs, materialContext, targetDuration, extraImages, prevShot || undefined, customReq);
+          const frameControl = contextFrames.length > 0
+            ? { startImage: contextFrames[0], endImage: contextFrames[1] }
+            : undefined;
+          const path = await this.generateShot(id, shot, productName, productInfo, refImages, materialContext, targetDuration, undefined, prevShot || undefined, customReq, frameControl);
           if (path) {
             const composited = await this.compositeShot(id, shot.index, path, tts, savedStyle);
             const finalPath = composited || path;
