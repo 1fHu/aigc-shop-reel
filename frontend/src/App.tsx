@@ -48,6 +48,9 @@ function App() {
           <Route path="/gene-bank" element={<GeneBank />} />
           <Route path="/viral-library" element={<ViralLibrary />} />
 
+          {/* 快捷入口（无需项目 ID） */}
+          <Route path="/script-studio" element={<ScriptStudio />} />
+
           {/* 项目内子页：素材库 → 分镜编辑 → 视频创作 */}
           <Route path="/projects/:id/materials"    element={<MaterialLibrary />} />
           <Route path="/projects/:id/script"       element={<ScriptStudio />} />

@@ -4,6 +4,8 @@ import { Repository } from 'typeorm';
 import { Script } from '../../database/entities/script.entity';
 import { Project } from '../../database/entities/project.entity';
 import { DirectorAgentService } from './director-agent.service';
+import { GeneBankService } from '../gene-bank/gene-bank.service';
+import { CreativeFactors } from '../gene-bank/types/creative-factors.type';
 
 export type ScriptShot = {
   index: number;
@@ -22,22 +24,32 @@ export class ScriptService {
 
   constructor(
     private readonly director: DirectorAgentService,
+    private readonly geneBank: GeneBankService,
     @InjectRepository(Script) private readonly scriptRepo: Repository<Script>,
     @InjectRepository(Project) private readonly projectRepo: Repository<Project>,
   ) {}
 
-  async generate(projectId: string, strategyType: string) {
+  async generate(projectId: string, strategyType: string, referenceVideoId?: string) {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
     if (!project) throw new NotFoundException('项目不存在');
 
     const productInfo = (project.productInfo ?? {}) as Record<string, unknown>;
-    const storyboard = await this.director.generateStoryboard(productInfo, strategyType);
+
+    // 如果提供了参考视频 ID，获取其创作因子
+    let creativeFactors: CreativeFactors | undefined;
+    if (referenceVideoId) {
+      const refVideo = this.geneBank.getReferenceVideoById(referenceVideoId);
+      creativeFactors = refVideo.factors;
+      this.logger.log(`使用参考视频 ${referenceVideoId} 的创作因子`);
+    }
+
+    const storyboard = await this.director.generateStoryboard(productInfo, strategyType, creativeFactors);
 
     const script = this.scriptRepo.create({
       projectId,
       strategyType,
       storyboard: storyboard as unknown as object,
-      factorHistory: [],
+      factorHistory: referenceVideoId ? [{ referenceVideoId, appliedAt: new Date().toISOString() }] : [],
       status: 'draft',
     });
     const saved = await this.scriptRepo.save(script);

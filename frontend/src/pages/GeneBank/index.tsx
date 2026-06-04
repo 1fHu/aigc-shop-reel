@@ -70,7 +70,13 @@ export default function GeneBank() {
     let cancelled = false;
     genebankService
       .search({ limit: 24 })
-      .then((data) => { if (!cancelled) setCards(data); })
+      .then((data) => {
+        if (!cancelled) {
+          // 按 ID 排序，确保视频顺序固定
+          const sorted = data.sort((a, b) => a.id.localeCompare(b.id));
+          setCards(sorted);
+        }
+      })
       .catch(() => { /* 拦截器统一 toast */ })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };

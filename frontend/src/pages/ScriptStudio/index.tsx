@@ -58,6 +58,33 @@ export default function ScriptStudio() {
   const handleSubColor = (v: string) => { setSubtitleColor(v); localStorage.setItem('vidcraft_sub_color', v); };
   const handleSubFontFamily = (v: string) => { setSubtitleFontFamily(v); localStorage.setItem('vidcraft_sub_font', v); };
 
+  // ---- 读取爆款模板库应用的创作因子 ----
+  useEffect(() => {
+    const appliedData = sessionStorage.getItem('genebank_applied');
+    if (appliedData) {
+      try {
+        const { viral_id, factors } = JSON.parse(appliedData);
+        console.log('=== 应用爆款模板库因子 ===');
+        console.log('来源视频:', viral_id);
+        console.log('创作因子:', factors);
+
+        // 应用创作因子到 factorState
+        setFactorState((prev) => ({
+          ...prev,
+          ...factors,
+        }));
+
+        // 显示提示
+        message.success(`已应用爆款模板「${viral_id}」的创作因子`);
+
+        // 清除 sessionStorage（避免重复应用）
+        sessionStorage.removeItem('genebank_applied');
+      } catch (err) {
+        console.error('解析创作因子失败:', err);
+      }
+    }
+  }, [message]);
+
   // ---- load existing script + factors on mount ----
   useEffect(() => {
     if (!projectId) return;
@@ -90,7 +117,26 @@ export default function ScriptStudio() {
     let cleared = false;
     try {
       const pid = projectId || '';
-      for await (const event of scriptService.generate({ project_id: pid, strategy_type: 'pain_point' })) {
+
+      // 读取爆款模板库应用的参考视频 ID
+      let referenceVideoId: string | undefined;
+      const appliedData = sessionStorage.getItem('genebank_applied');
+      if (appliedData) {
+        try {
+          const { viral_id } = JSON.parse(appliedData);
+          referenceVideoId = viral_id;
+          console.log('🎬 使用爆款模板参考视频:', referenceVideoId);
+        } catch (err) {
+          console.error('解析参考视频ID失败:', err);
+        }
+      }
+
+      // 生成剧本
+      for await (const event of scriptService.generate({
+        project_id: pid,
+        strategy_type: 'pain_point',
+        reference_video_id: referenceVideoId,
+      })) {
         if (event.type === 'scene') {
           if (!cleared) { setScenes([]); cleared = true; }
           setScenes((prev) => [...prev, event.scene]);

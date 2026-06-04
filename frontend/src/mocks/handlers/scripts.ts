@@ -234,54 +234,56 @@ export const scriptHandlers = [
   }),
 
   // POST /api/scripts/generate（SSE 流式）
-  http.post('/api/scripts/generate', async ({ request }) => {
-    const body = (await request.json().catch(() => ({}))) as { project_id?: string; mode?: string };
-    const scriptId = `script-${Date.now()}`;
-    const encoder = new TextEncoder();
-
-    const stream = new ReadableStream({
-      async start(controller) {
-        const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
-
-        // 1) meta
-        send({ type: 'meta', script_id: scriptId, total_scenes: defaultScenes.length });
-        await new Promise((r) => setTimeout(r, 400));
-
-        // 2) scenes 一条条流出来（模拟 LLM 流式输出）
-        for (const s of defaultScenes) {
-          send({ type: 'scene', scene: s });
-          await new Promise((r) => setTimeout(r, 600));
-        }
-
-        // 3) done
-        send({ type: 'done', script_id: scriptId });
-        controller.close();
-
-        // 同时把新 script 存进 store（created_at 设为当前，保证"取最新"排序正确）
-        const now = new Date().toISOString();
-        scriptsStore.set(scriptId, {
-          ...defaultScript,
-          id: scriptId,
-          project_id: body.project_id || defaultScript.project_id,
-          mode: (body.mode as Script['mode']) || 'reference',
-          created_at: now,
-          updated_at: now,
-          history: [{
-            id: `h-${Date.now()}`,
-            timestamp: new Date().toISOString(),
-            message: '初始化剧本生成',
-            affected_scene_ids: defaultScenes.map((s) => s.id),
-          }],
-        });
-      },
-    });
-
-    return new HttpResponse(stream, {
-      headers: {
-        'Content-Type': 'text/event-stream',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-      },
-    });
-  }),
+  // ⚠️ 已禁用 Mock：让请求穿透到真实后端 AI 生成
+  // 这样可以测试爆款模板库的创作因子是否正确应用到 AI 生成
+  // http.post('/api/scripts/generate', async ({ request }) => {
+  //   const body = (await request.json().catch(() => ({}))) as { project_id?: string; mode?: string };
+  //   const scriptId = `script-${Date.now()}`;
+  //   const encoder = new TextEncoder();
+  //
+  //   const stream = new ReadableStream({
+  //     async start(controller) {
+  //       const send = (obj: unknown) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
+  //
+  //       // 1) meta
+  //       send({ type: 'meta', script_id: scriptId, total_scenes: defaultScenes.length });
+  //       await new Promise((r) => setTimeout(r, 400));
+  //
+  //       // 2) scenes 一条条流出来（模拟 LLM 流式输出）
+  //       for (const s of defaultScenes) {
+  //         send({ type: 'scene', scene: s });
+  //         await new Promise((r) => setTimeout(r, 600));
+  //       }
+  //
+  //       // 3) done
+  //       send({ type: 'done', script_id: scriptId });
+  //       controller.close();
+  //
+  //       // 同时把新 script 存进 store（created_at 设为当前，保证"取最新"排序正确）
+  //       const now = new Date().toISOString();
+  //       scriptsStore.set(scriptId, {
+  //         ...defaultScript,
+  //         id: scriptId,
+  //         project_id: body.project_id || defaultScript.project_id,
+  //         mode: (body.mode as Script['mode']) || 'reference',
+  //         created_at: now,
+  //         updated_at: now,
+  //         history: [{
+  //           id: `h-${Date.now()}`,
+  //           timestamp: new Date().toISOString(),
+  //           message: '初始化剧本生成',
+  //           affected_scene_ids: defaultScenes.map((s) => s.id),
+  //         }],
+  //       });
+  //     },
+  //   });
+  //
+  //   return new HttpResponse(stream, {
+  //     headers: {
+  //       'Content-Type': 'text/event-stream',
+  //       'Cache-Control': 'no-cache',
+  //       Connection: 'keep-alive',
+  //     },
+  //   });
+  // }),
 ];
