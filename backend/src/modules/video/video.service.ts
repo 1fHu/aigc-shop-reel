@@ -1,7 +1,7 @@
-import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, writeFileSync, unlinkSync } from 'fs';
+import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, unlinkSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
@@ -16,6 +16,122 @@ import { Material } from '../../database/entities/material.entity';
 
 const VIDEO_DIR = join(process.cwd(), '..', 'uploads', 'videos');
 const MAX_SHOT_POLLS = 120;
+
+/** TTS 字级时间戳 → SRT 字幕（按句子边界 + 自然断点分组） */
+function ttsWordsToSRT(tts: TTSResult): string {
+  const allRaw = tts.sentences.flatMap((s) => s.words);
+  const maxEnd = allRaw.length ? Math.max(...allRaw.map((w) => w.endTime)) : 0;
+  const timeScale = maxEnd > 300 ? 0.001 : 1;
+
+  const PUNCT_RE = /[，。！？、,\.!\?\s]/;
+  // 自然断点字符：这些字后面换行看起来比较自然
+  const BREAK_CHARS = /[的了在是和这对把被让到与跟向从/，。！？、,\.!\?\s]/;
+
+  const groups: Array<{ text: string; start: number; end: number }> = [];
+  const MAX_LINE = 12;  // 一行最多 12 字
+  const MIN_LINE = 6;   // 换成多行时，每行不少于 6 字
+
+  for (const sentence of tts.sentences) {
+    const words = sentence.words
+      .map((w) => ({
+        word: w.word,
+        startTime: w.startTime * timeScale,
+        endTime: w.endTime * timeScale,
+      }))
+      .filter((w) => w.endTime > w.startTime);
+
+    if (!words.length) continue;
+
+    // 先按标点粗切
+    const segments: Array<typeof words> = [];
+    let buf: typeof words = [];
+    for (const w of words) {
+      if (PUNCT_RE.test(w.word)) {
+        if (buf.length) { segments.push(buf); buf = []; }
+        continue;
+      }
+      buf.push(w);
+    }
+    if (buf.length) segments.push(buf);
+
+    // 每个段如果太长再切
+    for (const seg of segments) {
+      const total = seg.length;
+      if (total <= MAX_LINE) {
+        groups.push({ text: seg.map((w) => w.word).join(''), start: seg[0].startTime, end: seg[seg.length - 1].endTime });
+        continue;
+      }
+
+      // 长段：找自然断点切成两行
+      const half = Math.floor(total / 2);
+      let splitAt = half;
+      // 在 half±3 范围内找自然断点字符
+      for (let d = 0; d <= 3; d++) {
+        const candidates = [half - d, half + d].filter((p) => p > MIN_LINE && p < total - MIN_LINE);
+        const found = candidates.find((p) => BREAK_CHARS.test(seg[p]?.word || ''));
+        if (found !== undefined) { splitAt = found; break; }
+      }
+
+      const first = seg.slice(0, splitAt);
+      const second = seg.slice(splitAt);
+      if (first.length) {
+        groups.push({ text: first.map((w) => w.word).join(''), start: first[0].startTime, end: first[first.length - 1].endTime });
+      }
+      if (second.length) {
+        groups.push({ text: second.map((w) => w.word).join(''), start: second[0].startTime, end: second[second.length - 1].endTime });
+      }
+    }
+  }
+
+  if (!groups.length && tts.text) {
+    const text = tts.text.trim();
+    const duration = Math.max((tts.duration || 3) * timeScale, 0.8);
+    const chars = Array.from(text).filter((c) => !PUNCT_RE.test(c) && !/\s/.test(c));
+    if (chars.length > 0) {
+      const perChar = duration / chars.length;
+      let idx = 0;
+      const fallback: Array<{ word: string; startTime: number; endTime: number }> = [];
+      for (const ch of text) {
+        if (/\s/.test(ch) || PUNCT_RE.test(ch)) continue;
+        const start = idx * perChar;
+        const end = (idx + 1) * perChar;
+        fallback.push({ word: ch, startTime: start, endTime: end });
+        idx += 1;
+      }
+      if (fallback.length) {
+        groups.push({ text: fallback.map((w) => w.word).join(''), start: fallback[0].startTime, end: fallback[fallback.length - 1].endTime });
+      }
+    }
+  }
+
+  if (!groups.length) return '';
+
+  // 相邻字幕组之间保持间隙，双向避让避免播放器渲染残留
+  const MIN_GAP = 0.16;
+  const finalGroups: Array<{ text: string; start: number; end: number }> = [];
+  for (const g of groups) {
+    const prev = finalGroups[finalGroups.length - 1];
+    if (prev) {
+      // 前一条往前收紧，但不能短于自身 start + MIN_GAP
+      prev.end = Math.max(prev.start + MIN_GAP, Math.min(prev.end, g.start - MIN_GAP));
+    }
+    const start = prev ? Math.max(g.start, prev.end + MIN_GAP) : g.start;
+    const end = Math.max(g.end, start + MIN_GAP);
+    finalGroups.push({ ...g, start, end });
+  }
+
+  return finalGroups.map((g, i) => {
+    const ss = (t: number) => {
+      const safe = Math.max(t, 0);
+      const hh = Math.floor(safe / 3600);
+      const mm = Math.floor((safe % 3600) / 60);
+      const sec = Math.floor(safe % 60);
+      const ms = Math.floor((safe % 1) * 1000);
+      return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(sec).padStart(2, '0')},${String(ms).padStart(3, '0')}`;
+    };
+    return `${i + 1}\n${ss(g.start)} --> ${ss(g.end)}\n${g.text}\n`;
+  }).join('\n');
+}
 
 type ScriptShot = {
   index: number; description: string; camera_motion: string; duration: number;
@@ -54,7 +170,7 @@ export class VideoService {
   }
 
   /** POST /api/videos/generate */
-  async generate(projectId: string, scriptId: string) {
+  async generate(projectId: string, scriptId: string, opts?: { voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string }) {
     let script = await this.scriptRepo.findOne({ where: { id: scriptId } });
     if (!script || !(script.storyboard as unknown[])?.length) {
       script = await this.scriptRepo.findOne({ where: { projectId }, order: { createdAt: 'DESC' } }) as Script;
@@ -64,29 +180,43 @@ export class VideoService {
     const productInfo = (project?.productInfo || {}) as Record<string, unknown>;
     const productName = (productInfo.name as string) || '商品';
 
-    // 获取项目的所有 ready 素材图片作为参考图
+    // 获取项目的所有 ready 素材作为参考图 + 构建素材库描述
     const materials = await this.materialRepo.find({ where: { projectId, status: 'ready' } });
     const imageUrls = materials.map((m) => m.thumbnailUrl).filter(Boolean) as string[];
+    const materialContext = materials.length > 0
+      ? materials.map((m) => {
+          const analysis = (m.analysis || {}) as Record<string, unknown>;
+          const desc = (analysis.description as string) || m.fileName || '';
+          const category = (analysis.category as string) || m.fileType || '';
+          const tags = (m.tags || []).slice(0, 5).join('、');
+          return `[${category}] ${desc}${tags ? ` (标签: ${tags})` : ''}`;
+        }).join('\n')
+      : '';
 
     const storyboard = (script?.storyboard as ScriptShot[]) || [];
-    const taskCount = storyboard.length;
+    const normalizedStoryboard = storyboard.map((shot, idx) => ({
+      ...shot,
+      index: Number.isFinite(shot.index) ? shot.index : idx,
+    }));
+    const taskCount = normalizedStoryboard.length;
 
     const video = this.videoRepo.create({
       projectId, scriptId,
       status: 'processing',
       traceId: `vid-${Date.now()}`,
-    } as Video);
+      settings: { tts: { voice: opts?.voice_id || 'zh_female_qingxin' }, subtitle_style: opts?.subtitle_style || {} },
+    });
     // 临时存储 taskCount 供 status 查询
     (video as any)._taskCount = taskCount;
     const saved = await this.videoRepo.save(video);
 
     // 立即为每个分镜创建 task 记录（queued），前端轮询时可看到进度
-    for (const shot of storyboard) {
+    for (const shot of normalizedStoryboard) {
       const task = this.taskRepo.create({ videoId: saved.id, shotIndex: shot.index, status: 'queued' });
       await this.taskRepo.save(task);
     }
 
-    this.buildPromptAndSubmit(saved.id, script, productName, imageUrls);
+    this.buildPromptAndSubmit(saved.id, script, productName, productInfo, imageUrls, materialContext, opts);
     return { id: saved.id, video_id: saved.id, trace_id: saved.traceId, task_count: taskCount, total_shots: taskCount, status: saved.status };
   }
 
@@ -177,76 +307,369 @@ export class VideoService {
     });
   }
 
-  async regenerateShot(id: string, index: number, _newPrompt?: string) {
-    return { video_id: id, shot_index: index };
+  async regenerateShot(id: string, index: number, newPrompt?: string) {
+    const video = await this.videoRepo.findOne({ where: { id } });
+    if (!video) throw new NotFoundException('视频不存在');
+
+    const script = video.scriptId ? await this.scriptRepo.findOne({ where: { id: video.scriptId } }) : null;
+    const storyboard = (script?.storyboard as ScriptShot[]) || [];
+    const shot = storyboard.find((s) => s.index === index);
+    if (!shot) throw new NotFoundException('分镜不存在');
+
+    const project = await this.projectRepo.findOne({ where: { id: video.projectId } });
+    const productInfo = (project?.productInfo || {}) as Record<string, unknown>;
+    const productName = (productInfo.name as string) || '商品';
+
+    const materials = await this.materialRepo.find({ where: { projectId: video.projectId, status: 'ready' } });
+    const imageUrls = materials.map((m) => m.thumbnailUrl).filter(Boolean) as string[];
+    const materialContext = materials.length > 0
+      ? materials.map((m) => {
+          const a = (m.analysis || {}) as Record<string, unknown>;
+          const desc = (a.description as string) || m.fileName || '';
+          const tags = (m.tags || []).slice(0, 5).join('、');
+          return `[${m.fileType}] ${desc}${tags ? ` (标签: ${tags})` : ''}`;
+        }).join('\n')
+      : '';
+
+    const prevShot = storyboard.find((s) => s.index === index - 1);
+    const nextShot = storyboard.find((s) => s.index === index + 1);
+
+    const contextImages: string[] = [];
+    // 前一镜结尾帧（保持逻辑连贯）
+    if (prevShot) {
+      const prevPath = join(VIDEO_DIR, `${id}-shot-${prevShot.index}-composited.mp4`);
+      if (!existsSync(prevPath)) {
+        // fallback to raw shot
+      }
+      const realPath = existsSync(prevPath) ? prevPath : join(VIDEO_DIR, `${id}-shot-${prevShot.index}.mp4`);
+      if (existsSync(realPath)) {
+        const frame = await this.extractKeyframeDataUri(id, prevShot.index, realPath);
+        if (frame) contextImages.push(frame);
+      }
+    }
+    // 后一镜首帧（保持衔接）
+    if (nextShot) {
+      const nextPath = join(VIDEO_DIR, `${id}-shot-${nextShot.index}.mp4`);
+      if (existsSync(nextPath)) {
+        const frame = await this.extractFirstFrame(id, nextShot.index, nextPath);
+        if (frame) contextImages.push(frame);
+      }
+    }
+
+    // 标记为 processing
+    await this.taskRepo.update({ videoId: id, shotIndex: index }, { status: 'processing' });
+
+    const refs = await this.prepareReferenceImages(imageUrls);
+    const customReq = (video.settings as any)?.custom_requirement || '';
+    const prompt = newPrompt || this.buildShotPrompt(shot, productName, productInfo, materialContext, shot.duration || 3, prevShot, customReq);
+    const frameControl = contextImages.length > 0
+      ? { startImage: contextImages[0], endImage: contextImages[1] }
+      : undefined;
+
+    this.logger.log(`Regenerate shot#${index}: startFrame=${!!frameControl?.startImage} endFrame=${!!frameControl?.endImage} refs=${refs.length}, prevShot=${!!prevShot}, nextShot=${!!nextShot}`);
+
+    const path = await this.generateShot(id, shot, productName, productInfo, refs, materialContext, shot.duration || 3, undefined, prevShot, customReq, frameControl);
+
+    if (path) {
+      const tts = this.volcano.isTTSConfigured()
+        ? await this.volcano.synthesizeSpeech(shot.voiceover || shot.description || '')
+        : null;
+      const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
+      const savedStyle = ((video.settings as any)?.subtitle_style || {}) as { font_size?: number; outline?: number; color?: string; font_family?: string };
+      const composited = await this.compositeShot(id, index, path, tts, savedStyle);
+      const finalPath = composited || path;
+      await this.taskRepo.update({ videoId: id, shotIndex: index }, {
+        status: 'completed',
+        previewUrl: `/api/videos/${id}/shots/${index}/file`,
+      });
+      return { video_id: id, shot_index: index, status: 'completed', path: finalPath };
+    }
+
+    await this.taskRepo.update({ videoId: id, shotIndex: index }, { status: 'failed', errorMsg: '分镜生成失败' });
+    throw new Error('分镜生成失败');
   }
 
-  async updateSettings(id: string, _body: unknown) {
+  /** POST /api/videos/:id/finalize — 用已有分镜文件重新合成最终视频 */
+  async finalize(id: string) {
+    const video = await this.videoRepo.findOne({ where: { id } });
+    if (!video) throw new NotFoundException('视频不存在');
+
+    const script = video.scriptId ? await this.scriptRepo.findOne({ where: { id: video.scriptId } }) : null;
+    const storyboard = (script?.storyboard as ScriptShot[]) || [];
+    if (!storyboard.length) throw new BadRequestException('无分镜数据');
+
+    const clips: string[] = [];
+    for (const shot of storyboard) {
+      const composited = join(VIDEO_DIR, `${id}-shot-${shot.index}-composited.mp4`);
+      const raw = join(VIDEO_DIR, `${id}-shot-${shot.index}.mp4`);
+      if (existsSync(composited)) {
+        clips.push(composited);
+      } else if (existsSync(raw)) {
+        clips.push(raw);
+      }
+    }
+
+    if (!clips.length) throw new BadRequestException('没有可用的分镜文件');
+
+    const finalUrl = await this.composite(id, clips);
+    await this.videoRepo.update(id, { status: 'completed', videoUrl: finalUrl });
+    return { id, status: 'completed', video_url: finalUrl };
+  }
+
+  /** POST /api/videos/:id/regenerate-shots — 后台异步重新生成选中分镜，保留未选中的，最终合成 */
+  async regenerateShots(id: string, shotIndices: number[]) {
+    const video = await this.videoRepo.findOne({ where: { id } });
+    if (!video) throw new NotFoundException('视频不存在');
+    if (video.status !== 'completed' && video.status !== 'failed') {
+      throw new BadRequestException('仅已完成或失败的任务可重新生成');
+    }
+
+    const script = video.scriptId ? await this.scriptRepo.findOne({ where: { id: video.scriptId } }) : null;
+    const storyboard = (script?.storyboard as ScriptShot[]) || [];
+    const normalizedStoryboard = storyboard.map((shot, idx) => ({
+      ...shot,
+      index: Number.isFinite(shot.index) ? shot.index : idx,
+    }));
+    if (!normalizedStoryboard.length) throw new BadRequestException('无分镜数据');
+
+    // 标记状态：选中的变 queued，未选中保持 completed
+    const set = new Set(shotIndices);
+    for (const shot of normalizedStoryboard) {
+      if (set.has(shot.index)) {
+        await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'queued', errorMsg: null as unknown as string });
+      }
+    }
+    await this.videoRepo.update(id, { status: 'processing' });
+
+    // 后台异步处理
+    this.processRegenerateShots(id, normalizedStoryboard, set, video);
+    return { id, status: 'processing' };
+  }
+
+  private async processRegenerateShots(
+    id: string,
+    storyboard: ScriptShot[],
+    selectedSet: Set<number>,
+    video: Video,
+  ) {
+    const project = await this.projectRepo.findOne({ where: { id: video.projectId } });
+    const productInfo = (project?.productInfo || {}) as Record<string, unknown>;
+    const productName = (productInfo.name as string) || '商品';
+
+    const materials = await this.materialRepo.find({ where: { projectId: video.projectId, status: 'ready' } });
+    const imageUrls = materials.map((m) => m.thumbnailUrl).filter(Boolean) as string[];
+    const materialContext = materials.length > 0
+      ? materials.map((m) => {
+          const a = (m.analysis || {}) as Record<string, unknown>;
+          return `[${m.fileType}] ${(a.description as string) || m.fileName || ''}`;
+        }).join('\n')
+      : '';
+
+    const refImages = await this.prepareReferenceImages(imageUrls);
+    const useTTS = this.volcano.isTTSConfigured();
+    const savedStyle = ((video.settings as any)?.subtitle_style || {}) as { font_size?: number; outline?: number; color?: string; font_family?: string };
+    const customReq = (video.settings as any)?.custom_requirement || '';
+
+    try {
+      const orderedStoryboard = [...storyboard].sort((a, b) => a.index - b.index);
+      const compositedClips: string[] = [];
+
+      // 并行 TTS — 只给选中的分镜跑
+      const ttsResults = new Map<number, TTSResult | null>();
+      if (useTTS) {
+        const selectedShots = orderedStoryboard.filter((s) => selectedSet.has(s.index));
+        const ttsPromises = selectedShots.map(async (s) => {
+          const result = await this.volcano.synthesizeSpeech(s.voiceover || s.description || '');
+          return { index: s.index, result };
+        });
+        const ttsAll = await Promise.all(ttsPromises);
+        for (const { index, result } of ttsAll) ttsResults.set(index, result);
+      }
+
+      let prevKeyframe: string | null = null;
+      for (let i = 0; i < orderedStoryboard.length; i += 1) {
+        const shot = orderedStoryboard[i];
+        const prevShot = i > 0 ? orderedStoryboard[i - 1] : null;
+
+        if (selectedSet.has(shot.index)) {
+          await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'processing' });
+          const tts = ttsResults.get(shot.index) || null;
+          const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
+          // 收集前后分镜画面作为首尾帧控制
+          const contextFrames: string[] = [];
+          if (prevKeyframe) contextFrames.push(prevKeyframe);
+          // 后一镜首帧（递进衔接）
+          if (i + 1 < orderedStoryboard.length) {
+            const nextShot = orderedStoryboard[i + 1];
+            const nextPath = join(VIDEO_DIR, `${id}-shot-${nextShot.index}-composited.mp4`);
+            const nextRaw = join(VIDEO_DIR, `${id}-shot-${nextShot.index}.mp4`);
+            const nextFile = existsSync(nextPath) ? nextPath : existsSync(nextRaw) ? nextRaw : '';
+            if (nextFile) {
+              const nextFrame = await this.extractFirstFrame(id, nextShot.index, nextFile);
+              if (nextFrame) contextFrames.push(nextFrame);
+            }
+          }
+          const frameControl = contextFrames.length > 0
+            ? { startImage: contextFrames[0], endImage: contextFrames[1] }
+            : undefined;
+          const path = await this.generateShot(id, shot, productName, productInfo, refImages, materialContext, targetDuration, undefined, prevShot || undefined, customReq, frameControl);
+          if (path) {
+            const composited = await this.compositeShot(id, shot.index, path, tts, savedStyle);
+            const finalPath = composited || path;
+            await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'completed', previewUrl: `/api/videos/${id}/shots/${shot.index}/file` });
+            compositedClips.push(finalPath);
+            prevKeyframe = await this.extractKeyframeDataUri(id, shot.index, finalPath);
+          } else {
+            await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'failed', errorMsg: '分镜生成失败' });
+            compositedClips.push(join(VIDEO_DIR, `${id}-shot-${shot.index}.mp4`));
+            prevKeyframe = null;
+          }
+        } else {
+          // 复用已有分镜：直接用合成版，不做任何重新处理
+          const existingComposited = join(VIDEO_DIR, `${id}-shot-${shot.index}-composited.mp4`);
+          const existingRaw = join(VIDEO_DIR, `${id}-shot-${shot.index}.mp4`);
+          let keepPath = '';
+          if (existsSync(existingComposited)) {
+            compositedClips.push(existingComposited);
+            keepPath = existingComposited;
+          } else if (existsSync(existingRaw)) {
+            compositedClips.push(existingRaw);
+            keepPath = existingRaw;
+          }
+          if (keepPath) {
+            prevKeyframe = await this.extractKeyframeDataUri(id, shot.index, keepPath);
+          } else {
+            prevKeyframe = null;
+          }
+        }
+      }
+
+      if (compositedClips.length === 0) {
+        await this.videoRepo.update(id, { status: 'failed' });
+        return;
+      }
+
+      const finalUrl = await this.composite(id, compositedClips);
+      await this.videoRepo.update(id, { status: 'completed', videoUrl: finalUrl });
+      this.logger.log(`RegenerateShots ${id} completed: ${finalUrl}`);
+    } catch (err) {
+      this.logger.error(`processRegenerateShots FAILED: ${(err as Error).message}`, (err as Error).stack);
+      await this.videoRepo.update(id, { status: 'failed' });
+    }
+  }
+
+  async updateSettings(id: string, body: { tts?: { language?: string; voice?: string }; bgm?: { preset_id?: string; custom_url?: string; volume?: number } }) {
     const v = await this.videoRepo.findOne({ where: { id } });
     if (!v) throw new NotFoundException('视频不存在');
+    if (body.tts || body.bgm) {
+      await this.videoRepo.update(id, { settings: body } as any);
+    }
     return { id, updated: true };
   }
 
   async getDownload(id: string) {
     const v = await this.videoRepo.findOne({ where: { id } });
     if (!v) throw new NotFoundException('视频不存在');
-    return { id: v.id, video_url: v.videoUrl, status: v.status };
+    const filePath = join(VIDEO_DIR, `${v.id}.mp4`);
+    const url = existsSync(filePath)
+      ? `/api/videos/${v.id}/file`
+      : `/api/videos/${v.id}/shots/0/file`;
+    return { id: v.id, video_url: url, download_url: url, status: v.status };
   }
 
   async export(id: string, aspectRatio: string, resolution: string) {
     const v = await this.videoRepo.findOne({ where: { id } });
     if (!v) throw new NotFoundException('视频不存在');
-    return { id: v.id, aspect_ratio: aspectRatio, resolution };
+    const filePath = join(VIDEO_DIR, `${v.id}.mp4`);
+    const url = existsSync(filePath)
+      ? `/api/videos/${v.id}/file`
+      : `/api/videos/${v.id}/shots/0/file`;
+    return { id: v.id, video_url: url, download_url: url, aspect_ratio: aspectRatio, resolution, status: v.status };
+  }
+
+  async cancel(videoId: string) {
+    const v = await this.videoRepo.findOne({ where: { id: videoId } });
+    if (!v) throw new NotFoundException('视频不存在');
+    // 更新状态为 failed
+    await this.videoRepo.update(videoId, { status: 'failed' });
+    await this.taskRepo.update({ videoId }, { status: 'failed', errorMsg: '用户取消' });
+    // 清理已生成的文件
+    try {
+      const files = readdirSync(VIDEO_DIR);
+      for (const f of files) {
+        if (f.startsWith(videoId)) unlinkSync(join(VIDEO_DIR, f));
+      }
+    } catch { /* ignore */ }
+    this.logger.log(`Video ${videoId} cancelled, files cleaned`);
+    return { id: videoId, status: 'failed' };
   }
 
   // ---- private: video generation (Seedance + ffmpeg) ----
 
-  private async buildPromptAndSubmit(videoId: string, script: Script | null, productName: string, imageUrls: string[]) {
+  private async buildPromptAndSubmit(videoId: string, script: Script | null, productName: string, productInfo: Record<string, unknown>, imageUrls: string[], materialContext: string, opts?: { voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string }) {
     const storyboard = (script?.storyboard as ScriptShot[]) || [];
-    if (storyboard.length === 0) {
+    const normalizedStoryboard = storyboard.map((shot, idx) => ({
+      ...shot,
+      index: Number.isFinite(shot.index) ? shot.index : idx,
+    }));
+    if (normalizedStoryboard.length === 0) {
       await this.videoRepo.update(videoId, { status: 'failed' });
       return;
     }
 
     const refImages = await this.prepareReferenceImages(imageUrls);
     const useTTS = this.volcano.isTTSConfigured();
+    const subtitleEnabled = opts?.subtitle_enabled !== false; // 默认开启
+    const voiceId = opts?.voice_id;
 
     try {
       // 阶段 1：并行 TTS（所有分镜同时跑）
       const ttsResults = new Map<number, TTSResult | null>();
       if (useTTS) {
-        this.logger.log(`[TTS] Starting parallel TTS for ${storyboard.length} shots`);
-        const ttsPromises = storyboard.map(async (s) => {
-          const result = await this.volcano.synthesizeSpeech(s.voiceover || s.description || '');
+        this.logger.log(`[TTS] Starting parallel TTS for ${normalizedStoryboard.length} shots, voice=${voiceId || 'default'}`);
+        const ttsPromises = normalizedStoryboard.map(async (s) => {
+          const result = await this.volcano.synthesizeSpeech(s.voiceover || s.description || '', voiceId);
           return { index: s.index, result };
         });
         const ttsAll = await Promise.all(ttsPromises);
         for (const { index, result } of ttsAll) {
           ttsResults.set(index, result);
         }
-        this.logger.log(`[TTS] Completed: ${[...ttsResults.values()].filter(Boolean).length}/${storyboard.length}`);
+        this.logger.log(`[TTS] Completed: ${[...ttsResults.values()].filter(Boolean).length}/${normalizedStoryboard.length}`);
       }
 
-      // 阶段 2：顺序 Seedance + 逐镜合成
+      // 阶段 2：串行提交 Seedance 任务（上一镜头关键帧作为参考）
+      const orderedStoryboard = [...normalizedStoryboard].sort((a, b) => a.index - b.index);
+      this.logger.log(`[Seedance] Submitting ${orderedStoryboard.length} shots sequentially with keyframe reference`);
+
       const compositedClips: string[] = [];
-      for (const shot of storyboard) {
+      let prevKeyframe: string | null = null;
+
+      for (let i = 0; i < orderedStoryboard.length; i += 1) {
+        const shot = orderedStoryboard[i];
+        const prevShot = i > 0 ? orderedStoryboard[i - 1] : null;
+        await this.taskRepo.update({ videoId, shotIndex: shot.index }, { status: 'processing' });
+
         const tts = ttsResults.get(shot.index) || null;
         const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
+        const extraImages = prevKeyframe ? [prevKeyframe] : [];
+        const baseRefs = prevKeyframe ? [] : refImages;
+        const path = await this.generateShot(videoId, shot, productName, productInfo, baseRefs, materialContext, targetDuration, extraImages, prevShot || undefined, opts?.custom_requirement);
 
-        // 生成 Seedance 视频
-        await this.taskRepo.update({ videoId, shotIndex: shot.index }, { status: 'processing' });
-        const shotPath = await this.generateShot(videoId, shot, productName, refImages, targetDuration);
-
-        // 合成：画面 + TTS 音频 + 字幕
-        if (shotPath) {
-          const composited = await this.compositeShot(videoId, shot.index, shotPath, tts);
-          if (composited) {
-            compositedClips.push(composited);
-            await this.taskRepo.update({ videoId, shotIndex: shot.index }, { status: 'completed', previewUrl: `/api/videos/${videoId}/shots/${shot.index}/file` });
-          } else {
-            compositedClips.push(shotPath); // 合成失败用原始片段
-          }
+        if (!path) {
+          prevKeyframe = null;
+          continue;
         }
+
+        const composited = await this.compositeShot(videoId, shot.index, path, subtitleEnabled ? tts : null, opts?.subtitle_style);
+        const finalPath = composited || path;
+        await this.taskRepo.update({ videoId, shotIndex: shot.index }, {
+          status: 'completed',
+          previewUrl: `/api/videos/${videoId}/shots/${shot.index}/file`,
+        });
+        compositedClips.push(finalPath);
+
+        prevKeyframe = await this.extractKeyframeDataUri(videoId, shot.index, finalPath);
       }
 
       if (compositedClips.length === 0) {
@@ -313,16 +736,83 @@ export class VideoService {
     );
   }
 
-  private buildShotPrompt(shot: ScriptShot, productName: string, targetDuration?: number): string {
+  private buildShotPrompt(
+    shot: ScriptShot,
+    productName: string,
+    productInfo: Record<string, unknown>,
+    materialContext: string,
+    targetDuration?: number,
+    prevShot?: ScriptShot,
+    customRequirement?: string,
+  ): string {
     const duration = targetDuration || shot.duration || 3;
-    return `为TikTok电商带货生成一个约${duration.toFixed(1)}秒的竖屏短视频分镜（9:16比例）。商品：${productName}。画面内容：${shot.description}。${shot.camera_motion ? `运镜：${shot.camera_motion}。` : ''}要求：画面精美、节奏紧凑、无字幕无水印、适合社交媒体传播。`;
+    const sellingPoints = (productInfo.selling_points as string[]) || [];
+    const category = (productInfo.category as string) || '';
+    const scene = (productInfo.usage_scene as string) || '';
+
+    const parts: string[] = [];
+
+    // 1. 角色与任务
+    parts.push(`你是一个专业的TikTok电商带货短视频导演。为商品"${productName}"${category ? `（品类：${category}）` : ''}生成一个${duration.toFixed(1)}秒的竖屏9:16分镜画面。`);
+
+    // 2. 分镜内容指令
+    parts.push(`画面内容：${shot.description}。`);
+    if (shot.voiceover) {
+      parts.push(`本镜头配音文案为"${shot.voiceover}"，请确保画面与配音内容高度匹配。`);
+    }
+    if (shot.camera_motion) {
+      parts.push(`运镜方式：${shot.camera_motion}。`);
+    }
+
+    // 3. 可参考素材库
+    if (materialContext) {
+      parts.push(`可参考的素材库（已提供图片参考，请参考其风格、色调与构图）：\n${materialContext}`);
+    }
+
+    // 4. 商品卖点与场景
+    if (sellingPoints.length > 0) {
+      parts.push(`商品核心卖点：${sellingPoints.join('、')}。`);
+    }
+    if (scene) {
+      parts.push(`适用场景：${scene}。`);
+    }
+
+    // 5. 上一镜衔接
+    if (prevShot?.description) {
+      parts.push(`上一镜头：${prevShot.description}。请保持主体一致、风格连贯、色调统一，确保转场自然流畅。`);
+    }
+
+    // 6. 质量要求
+    parts.push('要求：画面精美写实、光影自然、色彩饱满、无字幕无水印无logo、适合TikTok社交媒体传播。');
+
+    // 7. 用户自定义需求
+    if (customRequirement?.trim()) {
+      parts.push(`额外要求：${customRequirement.trim()}`);
+    }
+
+    return parts.join('\n');
   }
 
-  private async generateShot(videoId: string, shot: ScriptShot, productName: string, imageUrls: string[], targetDuration?: number) {
+  private async generateShot(
+    videoId: string,
+    shot: ScriptShot,
+    productName: string,
+    productInfo: Record<string, unknown>,
+    imageUrls: string[],
+    materialContext: string,
+    targetDuration?: number,
+    extraImages?: string[],
+    prevShot?: ScriptShot,
+    customRequirement?: string,
+    /** 首尾帧控制：仅生成分镜时使用 */
+    frameControl?: { startImage?: string; endImage?: string },
+  ) {
     const index = shot.index;
-    const prompt = this.buildShotPrompt(shot, productName, targetDuration);
-    this.logger.log(`Video ${videoId} shot#${index}: submitting to Seedance (duration=${(targetDuration || shot.duration).toFixed(1)}s)...`);
-    const result = await this.volcano.generateVideo(prompt, imageUrls);
+    const prompt = this.buildShotPrompt(shot, productName, productInfo, materialContext, targetDuration, prevShot, customRequirement);
+    const refs = extraImages?.length ? [...extraImages, ...imageUrls] : imageUrls;
+    const hasFrame = !!(frameControl?.startImage || frameControl?.endImage);
+    this.logger.log(`Video ${videoId} shot#${index}: submitting to Seedance (duration=${(targetDuration || shot.duration).toFixed(1)}s, refs=${refs.length}, startFrame=${!!frameControl?.startImage}, endFrame=${!!frameControl?.endImage})...`);
+    const result = await this.volcano.generateVideo(prompt, refs, hasFrame ? frameControl : undefined);
     if (!result) {
       await this.taskRepo.update({ videoId, shotIndex: index }, { status: 'failed', errorMsg: 'Seedance 未返回任务' });
       return '';
@@ -377,53 +867,109 @@ export class VideoService {
     }
   }
 
-  /** 单个分镜合成：Seedance 画面 + TTS 音频 + ASS 字幕 */
-  private async compositeShot(videoId: string, shotIndex: number, videoPath: string, tts: TTSResult | null): Promise<string | null> {
+  private async extractKeyframeDataUri(videoId: string, shotIndex: number, videoPath: string): Promise<string | null> {
+    if (!existsSync(VIDEO_DIR)) mkdirSync(VIDEO_DIR, { recursive: true });
+    const keyPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-key.jpg`);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const args = ['-y', '-sseof', '-0.1', '-i', videoPath, '-frames:v', '1', '-q:v', '2', keyPath];
+        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args);
+        let stderr = '';
+        ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+        ff.on('error', reject);
+        ff.on('close', (code: number) => {
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-200)}`));
+        });
+      });
+
+      if (!existsSync(keyPath)) return null;
+      const buf = readFileSync(keyPath);
+      if (!buf.length) return null;
+      return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    } catch (err) {
+      this.logger.warn(`extractKeyframe #${shotIndex} failed: ${(err as Error).message}`);
+      return null;
+    } finally {
+      try { if (existsSync(keyPath)) unlinkSync(keyPath); } catch { /* ignore */ }
+    }
+  }
+
+  /** 提取视频首帧作为 data URI（用于后一镜头的衔接参考） */
+  private async extractFirstFrame(videoId: string, shotIndex: number, videoPath: string): Promise<string | null> {
+    const keyPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-first.jpg`);
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const args = ['-y', '-i', videoPath, '-frames:v', '1', '-q:v', '2', keyPath];
+        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args);
+        let stderr = '';
+        ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+        ff.on('error', reject);
+        ff.on('close', (code: number) => {
+          if (code === 0) resolve();
+          else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-200)}`));
+        });
+      });
+      if (!existsSync(keyPath)) return null;
+      const buf = readFileSync(keyPath);
+      if (!buf.length) return null;
+      return `data:image/jpeg;base64,${buf.toString('base64')}`;
+    } catch (err) {
+      this.logger.warn(`extractFirstFrame #${shotIndex} failed: ${(err as Error).message}`);
+      return null;
+    } finally {
+      try { if (existsSync(keyPath)) unlinkSync(keyPath); } catch { /* ignore */ }
+    }
+  }
+
+  /** 单个分镜合成：Seedance 画面 + TTS 音频 + SRT 字幕 */
+  private async compositeShot(videoId: string, shotIndex: number, videoPath: string, tts: TTSResult | null, subtitleStyle?: { font_size?: number; outline?: number; color?: string; font_family?: string }): Promise<string | null> {
     const outPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-composited.mp4`);
     const tempFiles: string[] = [];
+    let hasAudio = false;
+    let hasSubs = false;
 
     try {
-      // 没有 TTS → 直接返回原始视频
-      if (!tts) return videoPath;
-
-      // 下载 TTS 音频到临时文件（TTS 返回的是临时 HTTP URL）
       const audioPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-audio.mp3`);
-      const ttsRes = await fetch(tts.audioUrl);
-      if (!ttsRes.ok) {
-        this.logger.warn(`TTS audio download failed: ${ttsRes.status}`);
-        return videoPath;
-      }
-      const ttsBuf = Buffer.from(await ttsRes.arrayBuffer());
-      writeFileSync(audioPath, ttsBuf);
-      tempFiles.push(audioPath);
+      const srtPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-sub.srt`);
 
-      // 生成 ASS 字幕文件
-      const assPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-sub.ass`);
-      const assContent = wordsToASS(tts);
-      writeFileSync(assPath, assContent, 'utf-8');
-      tempFiles.push(assPath);
-
-      // ffmpeg: 画面 + TTS 音轨 + 字幕烧录
-      const filters = [`fps=30`, `ass=${assPath.replace(/\\/g, '/')}`];
-      const padSec = 0.5; // 最多补 0.5s 尾帧
-      if (padSec > 0) {
-        filters.push(`tpad=stop_mode=clone:stop_duration=${padSec}`);
+      if (tts) {
+        const ttsRes = await fetch(tts.audioUrl);
+        if (ttsRes.ok) {
+          writeFileSync(audioPath, Buffer.from(await ttsRes.arrayBuffer()));
+          tempFiles.push(audioPath);
+          hasAudio = true;
+        }
+        const srtContent = ttsWordsToSRT(tts);
+        if (srtContent) {
+          writeFileSync(srtPath, srtContent, 'utf-8');
+          tempFiles.push(srtPath);
+          hasSubs = true;
+        }
       }
+
+      if (!hasAudio) return videoPath; // 无 TTS → 不烧录字幕，返回原始片段
+
+      const args = ['-y', '-i', videoPath];
+      if (hasAudio) args.push('-i', audioPath);
+      if (hasSubs) {
+        const srtFilterPath = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+        const fontSize = subtitleStyle?.font_size || 40;
+        const outline = subtitleStyle?.outline ?? 2.5;
+        const color = subtitleStyle?.color || '#FFFFFF';
+        const fontFamily = subtitleStyle?.font_family || 'Microsoft YaHei';
+        // 颜色 hex #RRGGBB → ASS &HBBGGRR 格式 (去掉#，反转RGB)
+        const hex = color.replace('#', '');
+        const assColor = `&H00${hex[4] || 'F'}${hex[5] || 'F'}${hex[2] || 'F'}${hex[3] || 'F'}${hex[0] || 'F'}${hex[1] || 'F'}`;
+        this.logger.log(`compositeShot #${shotIndex} subtitle: Fontsize=${fontSize}, Fontname=${fontFamily}, Outline=${outline}, Color=${color}`);
+        args.push('-vf', `subtitles='${srtFilterPath}':charenc=UTF-8:force_style='Fontsize=${fontSize},Fontname=${fontFamily},PrimaryColour=${assColor},OutlineColour=&H00000000,Outline=${outline},BorderStyle=1,MarginV=80'`);
+      }
+      args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p');
+      if (hasAudio) { args.push('-c:a', 'aac', '-b:a', '128k', '-map', '0:v:0', '-map', '1:a:0'); }
+      args.push('-shortest', '-movflags', '+faststart', outPath);
 
       await new Promise<void>((resolve, reject) => {
-        const args = [
-          '-y',
-          '-i', videoPath,
-          '-i', audioPath,
-          '-vf', filters.join(','),
-          '-c:v', 'libx264', '-pix_fmt', 'yuv420p',
-          '-c:a', 'aac', '-b:a', '128k',
-          '-map', '0:v:0', '-map', '1:a:0',
-          '-shortest',
-          '-movflags', '+faststart',
-          outPath,
-        ];
-        const ff = spawn('ffmpeg', args);
+        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args);
         let stderr = '';
         ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
         ff.on('error', reject);
@@ -451,10 +997,11 @@ export class VideoService {
       try { copyFileSync(clipPaths[0], finalPath); return fileUrl; } catch { return `/api/videos/${videoId}/shots/0/file`; }
     }
     const listPath = join(VIDEO_DIR, `${videoId}-concat.txt`);
-    writeFileSync(listPath, clipPaths.map((p) => `file '${p}'`).join('\n'));
+    // ffmpeg concat demuxer 需要正斜杠路径（Windows 反斜杠会导致解析失败）
+    writeFileSync(listPath, clipPaths.map((p) => `file '${p.replace(/\\/g, '/')}'`).join('\n'));
     try {
       await new Promise<void>((resolve, reject) => {
-        const ff = spawn('ffmpeg', ['-y','-f','concat','-safe','0','-i',listPath,'-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',finalPath]);
+        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ['-y','-f','concat','-safe','0','-i',listPath,'-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',finalPath]);
         let stderr = '';
         ff.stderr?.on('data', (d) => { stderr += d.toString(); });
         ff.on('error', reject);

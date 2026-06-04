@@ -104,6 +104,17 @@ export class ScriptService {
     const storyboard = (script.storyboard as ScriptShot[]) || [];
     const shot = storyboard.find((s) => s.index === shotIndex);
     if (!shot) throw new NotFoundException('分镜不存在');
+
+    const project = await this.projectRepo.findOne({ where: { id: script.projectId } });
+    const productInfo = (project?.productInfo || {}) as Record<string, unknown>;
+
+    const regenerated = await this.director.regenerateShot(productInfo, storyboard, shotIndex);
+    if (regenerated) {
+      // 更新 storyboard 中对应分镜
+      const updated = storyboard.map((s) => (s.index === shotIndex ? { ...regenerated, index: shotIndex } : s));
+      await this.scriptRepo.update(id, { storyboard: updated as unknown as object });
+      return { event: 'done', shot_index: shotIndex, shot: { ...regenerated, index: shotIndex } };
+    }
     return { event: 'done', shot_index: shotIndex, shot };
   }
 

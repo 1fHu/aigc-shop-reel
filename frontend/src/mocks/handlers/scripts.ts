@@ -168,10 +168,10 @@ export const scriptHandlers = [
 
   // PUT /api/scripts/:id/storyboard
   http.put('/api/scripts/:id/storyboard', async ({ params, request }) => {
-    const body = (await request.json()) as { scenes: Scene[] };
+    const body = (await request.json()) as { storyboard: Scene[] };
     const script = getOrInitScript(String(params.id));
-    script.scenes = body.scenes;
-    script.total_duration = body.scenes.reduce((s, x) => s + x.duration, 0);
+    script.scenes = body.storyboard;
+    script.total_duration = body.storyboard.reduce((s, x) => s + x.duration, 0);
     script.updated_at = new Date().toISOString();
     return HttpResponse.json({
       code: 200, msg: null, total: 0, data: { scenes: script.scenes }, traceId: `mock-${Date.now()}`,

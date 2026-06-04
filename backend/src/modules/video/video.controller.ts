@@ -21,8 +21,8 @@ export class VideoController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post('generate')
-  async generate(@Body() body: { project_id: string; script_id: string }) {
-    return ok(await this.videoService.generate(body.project_id, body.script_id));
+  async generate(@Body() body: { project_id: string; script_id: string; voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string }) {
+    return ok(await this.videoService.generate(body.project_id, body.script_id, { voice_id: body.voice_id, subtitle_enabled: body.subtitle_enabled, subtitle_style: body.subtitle_style, custom_requirement: body.custom_requirement }));
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -53,6 +53,18 @@ export class VideoController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Post(':id/regenerate-shots')
+  async regenerateShots(@Param('id') id: string, @Body() body: { shot_indices: number[] }) {
+    return ok(await this.videoService.regenerateShots(id, body.shot_indices));
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post(':id/finalize')
+  async finalize(@Param('id') id: string) {
+    return ok(await this.videoService.finalize(id));
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Put(':id/settings')
   async updateSettings(@Param('id') id: string, @Body() body: { tts?: { language?: string; voice?: string }; bgm?: { preset_id?: string; custom_url?: string; volume?: number } }) {
     return ok(await this.videoService.updateSettings(id, body));
@@ -68,6 +80,12 @@ export class VideoController {
   @Post(':id/export')
   async export(@Param('id') id: string, @Body() body: { aspect_ratio: string; resolution: string }) {
     return ok(await this.videoService.export(id, body.aspect_ratio, body.resolution));
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post(':id/cancel')
+  async cancel(@Param('id') id: string) {
+    return ok(await this.videoService.cancel(id));
   }
 
   @Get(':id/file')

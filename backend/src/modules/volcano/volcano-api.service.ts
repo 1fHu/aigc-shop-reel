@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
+import { MinioStorageService } from '../../common/minio-storage.service';
 
 export type MaterialAnalysisResult = {
   analysis: Record<string, unknown>;
@@ -31,6 +33,7 @@ export type TTSSentence = {
 };
 
 export type TTSResult = {
+  text?: string;
   audioUrl: string;
   duration: number;
   sentences: TTSSentence[];
@@ -45,19 +48,24 @@ export class VolcanoApiService {
   private readonly embeddingEp: string;
   private readonly ttsAppId: string;
   private readonly ttsAccessKey: string;
+  private readonly ttsApiKey: string;
   private readonly ttsResourceId: string;
   private readonly ttsVoiceId: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly minio: MinioStorageService,
+  ) {
     this.apiKey = process.env.VOLCANO_ACCESS_KEY || this.config.get<string>('VOLCANO_ACCESS_KEY', '');
     this.doubaoEp = process.env.VOLCANO_DOUBAO_SEED_EP || this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
     this.seedanceEp = process.env.VOLCANO_SEEDANCE_EP || this.config.get<string>('VOLCANO_SEEDANCE_EP', '');
     this.embeddingEp = process.env.VOLCANO_EMBEDDING_EP || this.config.get<string>('VOLCANO_EMBEDDING_EP', 'doubao-embedding-large');
     this.ttsAppId = process.env.VOLCANO_TTS_APP_ID || this.config.get<string>('VOLCANO_TTS_APP_ID', '');
     this.ttsAccessKey = process.env.VOLCANO_TTS_ACCESS_KEY || this.config.get<string>('VOLCANO_TTS_ACCESS_KEY', '');
+    this.ttsApiKey = process.env.VOLCANO_TTS_API_KEY || this.config.get<string>('VOLCANO_TTS_API_KEY', '');
     this.ttsResourceId = process.env.VOLCANO_TTS_RESOURCE_ID || this.config.get<string>('VOLCANO_TTS_RESOURCE_ID', 'seed-tts-2.0');
-    this.ttsVoiceId = process.env.TTS_VOICE_ID || this.config.get<string>('TTS_VOICE_ID', 'zh_female_qingxin');
-    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp ? 'SET' : 'MISSING'}, seedanceEp=${this.seedanceEp ? 'SET' : 'MISSING'}, embeddingEp=${this.embeddingEp}, tts=${this.ttsAppId ? 'SET' : 'MISSING'}`);
+    this.ttsVoiceId = process.env.TTS_VOICE_ID || this.config.get<string>('TTS_VOICE_ID', 'zh_female_vv_uranus_bigtts');
+    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp || 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}, embeddingEp=${this.embeddingEp}, tts=${this.isTTSConfigured() ? 'SET' : 'MISSING'}, ttsVoice=${this.ttsVoiceId}`);
   }
 
   signCallback(taskId: string, secret: string) {
@@ -134,8 +142,12 @@ export class VolcanoApiService {
     } catch { return []; }
   }
 
-  /** 生成带货视频 — 调用 Seedance 1.5 Pro，支持多张参考图 */
-  async generateVideo(prompt: string, imageUrls: string[] = []): Promise<{ taskId: string } | null> {
+  /** 生成带货视频 — 调用 Seedance 1.5 Pro，支持参考图 + 首尾帧控制 */
+  async generateVideo(
+    prompt: string,
+    imageUrls: string[] = [],
+    opts?: { startImage?: string; endImage?: string },
+  ): Promise<{ taskId: string } | null> {
     if (!this.apiKey || !this.seedanceEp) {
       this.logger.warn('Seedance not configured, using mock');
       return null;
@@ -149,18 +161,25 @@ export class VolcanoApiService {
       }
       content.push({ type: 'text', text: prompt });
 
+      const body: Record<string, unknown> = { model: this.seedanceEp, content };
+
+      // 首尾帧控制：start_image 约束视频第一帧，end_image 约束最后一帧
+      if (opts?.startImage) body.start_image = opts.startImage;
+      if (opts?.endImage) body.end_image = opts.endImage;
+
+      const hasFrameControl = !!(opts?.startImage || opts?.endImage);
+      this.logger.log(`Seedance submit: refs=${imageUrls.length} startFrame=${!!opts?.startImage} endFrame=${!!opts?.endImage}`);
+
       const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          model: this.seedanceEp,
-          content,
-        }),
+        body: JSON.stringify(body),
       });
-      this.logger.log(`Seedance submit with ${imageUrls.length} reference images`);
       this.logger.log(`Seedance response status: ${res.status}`);
       const data = await res.json();
-      this.logger.log(`Seedance response: ${JSON.stringify(data).slice(0, 500)}`);
+      if (hasFrameControl) {
+        this.logger.log(`Seedance response: ${JSON.stringify(data).slice(0, 500)}`);
+      }
       if (res.status !== 200) {
         this.logger.error(`Seedance API error (${res.status}): ${JSON.stringify(data).slice(0, 500)}`);
       }
@@ -270,116 +289,230 @@ export class VolcanoApiService {
 
   /** 检查 TTS 是否已配置 */
   isTTSConfigured(): boolean {
-    return !!(this.ttsAppId && this.ttsAccessKey);
+    // 新版 API Key 或 旧版 AppId+AccessKey 任一组合可用即视为已配置
+    return !!(this.ttsApiKey) || !!(this.ttsAppId && this.ttsAccessKey);
   }
 
-  /** 提交 TTS 合成任务 */
-  private async submitTTS(text: string): Promise<string | null> {
+  /** 语音合成：HTTP SSE 单向流式，一次请求拿到全部音频 + 字幕。TTS 未配置时返回 null */
+  async synthesizeSpeech(text: string, voiceId?: string): Promise<TTSResult | null> {
+    if (!this.isTTSConfigured()) {
+      this.logger.warn('TTS not configured, skipping synthesizeSpeech');
+      return null;
+    }
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'X-Api-Resource-Id': this.ttsResourceId,
+      'X-Api-Request-Id': randomUUID(),
+    };
+    if (this.ttsApiKey) {
+      headers['X-Api-Key'] = this.ttsApiKey;
+    } else {
+      headers['X-Api-App-Id'] = this.ttsAppId;
+      headers['X-Api-Access-Key'] = this.ttsAccessKey;
+    }
+
+    const speaker = voiceId || this.ttsVoiceId;
+    this.logger.log(`[TTS SSE] Starting for "${text.slice(0, 30)}...", speaker=${speaker}`);
+
     try {
-      const res = await fetch('https://openspeech.bytedance.com/api/v3/tts/submit', {
+      const res = await fetch('https://openspeech.bytedance.com/api/v3/tts/unidirectional/sse', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Api-App-Id': this.ttsAppId,
-          'X-Api-Access-Key': this.ttsAccessKey,
-          'X-Api-Resource-Id': this.ttsResourceId,
-        },
+        headers,
         body: JSON.stringify({
           user: { uid: 'vidcraft' },
           namespace: 'BidirectionalTTS',
           req_params: {
             text,
-            speaker: this.ttsVoiceId,
+            speaker,
             audio_params: {
               format: 'mp3',
               sample_rate: 24000,
-              enable_timestamp: true,
+              enable_subtitle: true,
             },
-            additions: { disable_markdown_filter: true, silence_duration: 0 },
           },
         }),
       });
-      const data = await res.json();
-      if (data?.code === 20000000 && data?.data?.task_id) {
-        return data.data.task_id;
+
+      if (!res.ok || !res.body) {
+        this.logger.warn(`[TTS SSE] HTTP ${res.status}`);
+        return null;
       }
-      this.logger.warn(`TTS submit failed: ${JSON.stringify(data).slice(0, 300)}`);
-      return null;
+
+      // 流式解析 SSE
+      const chunks: Buffer[] = [];
+      const sentences: TTSSentence[] = [];
+      const reader = (res.body as ReadableStream<Uint8Array>).getReader();
+
+      let buffer = '';
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const events = this.parseSSEEvents(buffer);
+        buffer = events.remainder;
+        for (const ev of events.parsed) {
+          this.processSSEEvent(ev, chunks, sentences);
+        }
+      }
+
+      if (!chunks.length) {
+        this.logger.warn('[TTS SSE] No audio received');
+        return null;
+      }
+
+      const normalizedSentences = this.normalizeTTSSentences(sentences);
+      const audioBuffer = Buffer.concat(chunks);
+      const duration = normalizedSentences.length > 0
+        ? (normalizedSentences.at(-1)!.words.at(-1)?.endTime ?? normalizedSentences.at(-1)!.endTime) ?? 3
+        : 3;
+
+      // Upload to MinIO
+      const objectName = `tts/${randomUUID()}.mp3`;
+      const audioUrl = await this.minio.uploadFile(objectName, audioBuffer, 'audio/mpeg');
+
+      this.logger.log(`[TTS SSE] Done: ${(duration).toFixed(1)}s, ${sentences.length} sentences, ${(audioBuffer.length / 1024).toFixed(0)}KB`);
+      return { text, audioUrl, duration, sentences: normalizedSentences };
     } catch (err) {
-      this.logger.warn(`TTS submit error: ${(err as Error).message}`);
+      this.logger.warn(`[TTS SSE] Error: ${(err as Error).message}`);
       return null;
     }
   }
 
-  /** 查询 TTS 任务结果 */
-  private async queryTTS(taskId: string): Promise<TTSResult | null> {
+  /** 解析 SSE 文本流，提取完整 event */
+  private parseSSEEvents(buffer: string): { parsed: Array<{ event: string; data: string }>; remainder: string } {
+    const parsed: Array<{ event: string; data: string }> = [];
+    const parts = buffer.split('\n\n');
+    // 最后一段可能不完整，留在 remainder
+    const remainder = parts.pop() || '';
+    let currentEvent = '';
+    for (const part of parts) {
+      if (!part.trim()) continue;
+      for (const line of part.split('\n')) {
+        if (line.startsWith('event: ')) { currentEvent = line.slice(7).trim(); }
+      }
+      const dataLine = part.split('\n').find((l) => l.startsWith('data: '));
+      if (dataLine) {
+        parsed.push({ event: currentEvent || '0', data: dataLine.slice(6) });
+      }
+    }
+    return { parsed, remainder };
+  }
+
+  /** 处理单个 SSE event */
+  private processSSEEvent(ev: { event: string; data: string }, audioChunks: Buffer[], sentences: TTSSentence[]) {
     try {
-      const res = await fetch('https://openspeech.bytedance.com/api/v3/tts/query', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Api-App-Id': this.ttsAppId,
-          'X-Api-Access-Key': this.ttsAccessKey,
-          'X-Api-Resource-Id': this.ttsResourceId,
-        },
-        body: JSON.stringify({ task_id: taskId }),
-      });
-      const data = await res.json();
-      if (data?.code === 20000000 && data?.data) {
-        const d = data.data;
-        if (d.task_status === 2) {
-          const sentences: TTSSentence[] = (d.sentences || []).map((s: Record<string, unknown>) => ({
-            text: s.text as string,
-            startTime: s.startTime as number,
-            endTime: s.endTime as number,
-            words: (s.words as Array<Record<string, unknown>> || []).map((w) => ({
-              word: w.word as string,
-              startTime: w.startTime as number,
-              endTime: w.endTime as number,
-            })),
-          }));
-          const lastWord = sentences.at(-1)?.words?.at(-1);
-          return {
-            audioUrl: d.audio_url as string,
-            duration: lastWord ? lastWord.endTime : 3,
-            sentences,
-          };
-        }
-        // task_status=1 (running) → 返回 null 表示继续等
-        if (d.task_status === 3) {
-          this.logger.warn(`TTS task ${taskId} failed`);
-        }
+      const json = JSON.parse(ev.data);
+      // 音频 base64 数据（event 352 = TTSResponse）
+      if (json.data && typeof json.data === 'string' && json.data.length > 100) {
+        audioChunks.push(Buffer.from(json.data, 'base64'));
+      } else if (typeof json.audio === 'string' && json.audio.length > 100) {
+        audioChunks.push(Buffer.from(json.audio, 'base64'));
+      } else if (typeof json.data?.audio === 'string' && json.data.audio.length > 100) {
+        audioChunks.push(Buffer.from(json.data.audio, 'base64'));
       }
-      return null;
-    } catch (err) {
-      this.logger.warn(`TTS query error: ${(err as Error).message}`);
-      return null;
-    }
+      // 句/词级时间戳：event 351 (TTSSentenceEnd) 或 TTSSubtitle（TTS 2.0 下 event ID 可能不同）
+      // TTS 2.0 enable_subtitle 会多次返回 TTSSubtitle 事件，携带原文打轴的 words
+      const extracted = this.extractSubtitleSentences(json);
+      if (extracted.length > 0) {
+        for (const s of extracted) sentences.push(s);
+        this.logger.debug(`[TTS SSE] subtitle event=${ev.event}: ${extracted.reduce((n, s) => n + s.words.length, 0)} words`);
+      }
+      // event 153 (SessionFailed): 报错
+      if (ev.event === '153') {
+        this.logger.warn(`[TTS SSE] SessionFailed: ${ev.data.slice(0, 200)}`);
+      }
+    } catch { /* skip malformed SSE data */ }
   }
 
-  /** 等待 TTS 完成 */
-  private sleep(ms: number) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
+  private extractSubtitleSentences(payload: any): TTSSentence[] {
+    const toNumber = (value: any) => (typeof value === 'number' ? value : Number(value || 0));
+    const toWord = (w: any): TTSWord => ({
+      word: (w?.word ?? '').toString(),
+      startTime: toNumber(w?.startTime ?? w?.start_time ?? 0),
+      endTime: toNumber(w?.endTime ?? w?.end_time ?? 0),
+    });
+    const toSentence = (s: any): TTSSentence | null => {
+      if (!s) return null;
+      const words = Array.isArray(s.words) ? s.words.map(toWord) : [];
+      return {
+        text: (s.text ?? s.sentence ?? '').toString(),
+        startTime: toNumber(s.startTime ?? s.start_time ?? words[0]?.startTime ?? 0),
+        endTime: toNumber(s.endTime ?? s.end_time ?? words.at(-1)?.endTime ?? 0),
+        words,
+      };
+    };
 
-  /** 语音合成：提交 + 轮询 + 返回结果。TTS 未配置时返回 null */
-  async synthesizeSpeech(text: string): Promise<TTSResult | null> {
-    if (!this.isTTSConfigured()) {
-      this.logger.warn('TTS not configured, skipping synthesizeSpeech');
-      return null;
-    }
-    const taskId = await this.submitTTS(text);
-    if (!taskId) return null;
+    const results: TTSSentence[] = [];
+    const candidates = [
+      payload?.sentence,
+      payload?.subtitle,
+      payload?.subtitles,
+      payload?.data?.sentence,
+      payload?.data?.subtitle,
+      payload?.data?.subtitles,
+      payload?.result?.subtitle,
+      payload?.result?.subtitles,
+      payload?.data?.result?.subtitle,
+      payload?.data?.result?.subtitles,
+    ];
 
-    for (let i = 0; i < 60; i++) {
-      await this.sleep(2000);
-      const result = await this.queryTTS(taskId);
-      if (result) {
-        this.logger.log(`TTS completed: ${(result.duration).toFixed(1)}s, ${result.sentences.length} sentences`);
-        return result;
+    for (const c of candidates) {
+      if (!c) continue;
+      if (Array.isArray(c)) {
+        for (const item of c) {
+          if (Array.isArray(item?.sentences)) {
+            for (const s of item.sentences) {
+              const sentence = toSentence(s);
+              if (sentence) results.push(sentence);
+            }
+          } else {
+            const sentence = toSentence(item);
+            if (sentence) results.push(sentence);
+          }
+        }
+      } else if (Array.isArray(c.sentences)) {
+        for (const s of c.sentences) {
+          const sentence = toSentence(s);
+          if (sentence) results.push(sentence);
+        }
+      } else {
+        const sentence = toSentence(c);
+        if (sentence) results.push(sentence);
       }
     }
-    this.logger.warn(`TTS timeout for task ${taskId}`);
-    return null;
+
+    return results.filter((s) => s.words.length > 0 || s.text.length > 0);
+  }
+
+  private normalizeTTSSentences(sentences: TTSSentence[]): TTSSentence[] {
+    if (sentences.length === 0) return [];
+    const maxTime = sentences.reduce((max, s) => {
+      const sentenceEnd = s.endTime || 0;
+      const wordEnd = s.words.at(-1)?.endTime || 0;
+      return Math.max(max, sentenceEnd, wordEnd);
+    }, 0);
+    const scale = maxTime > 1000 ? 0.001 : 1;
+    return sentences.map((s) => {
+      const rawWords = (s.words || []).map((w) => ({
+        word: w.word || '',
+        startTime: Number(w.startTime || 0),
+        endTime: Number(w.endTime || 0),
+      }));
+      const words = rawWords.map((w) => ({
+        word: w.word,
+        startTime: w.startTime * scale,
+        endTime: w.endTime * scale,
+      }));
+      const startTimeRaw = Number(s.startTime || rawWords[0]?.startTime || 0);
+      const endTimeRaw = Number(s.endTime || rawWords.at(-1)?.endTime || startTimeRaw);
+      return {
+        text: s.text || '',
+        startTime: startTimeRaw * scale,
+        endTime: endTimeRaw * scale,
+        words,
+      };
+    });
   }
 }
