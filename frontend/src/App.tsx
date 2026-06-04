@@ -14,6 +14,8 @@ import VideoCreation from './pages/VideoCreation';
 import Analytics from './pages/Analytics';
 import ViralLibrary from './pages/ViralLibrary';
 import GeneBank from './pages/GeneBank';
+import ViralAnalyzer from './pages/ViralAnalyzer';
+import ViralAnalyzerDetail from './pages/ViralAnalyzer/detail';
 
 /**
  * 路由设计：
@@ -47,6 +49,8 @@ function App() {
           <Route path="/analytics" element={<Analytics />} />
           <Route path="/gene-bank" element={<GeneBank />} />
           <Route path="/viral-library" element={<ViralLibrary />} />
+          <Route path="/viral-analyzer" element={<ViralAnalyzer />} />
+          <Route path="/viral-analyzer/:id" element={<ViralAnalyzerDetail />} />
 
           {/* 快捷入口（无需项目 ID） */}
           <Route path="/script-studio" element={<ScriptStudio />} />
