@@ -17,6 +17,7 @@ import {
   CloseOutlined,
   SettingOutlined,
   LogoutOutlined,
+  VideoCameraOutlined,
 } from '@ant-design/icons';
 
 import { useAuthStore, selectUser, selectIsGuest } from '@/stores/authStore';
@@ -65,6 +66,7 @@ export default function AppLayout() {
     { key: '/projects',      label: 'Projects',         icon: <FolderOpenOutlined /> },
     { key: '/gene-bank',     label: 'AI Factory',       icon: <RobotOutlined /> },
     { key: '/viral-library', label: 'Viral Library',    icon: <FireOutlined /> },
+    { key: '/viral-analyzer', label: 'Video Analyzer',   icon: <VideoCameraOutlined /> },
     { key: '/analytics',     label: 'Analytics',        icon: <BarChartOutlined /> },
   ];
 

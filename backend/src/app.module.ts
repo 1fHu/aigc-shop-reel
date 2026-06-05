@@ -20,6 +20,7 @@ import { GeneBankModule } from './modules/gene-bank/gene-bank.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 import { VolcanoModule } from './modules/volcano/volcano.module';
 import { MinioStorageModule } from './common/minio-storage.module';
+import { ViralAnalyzerModule } from './modules/viral-analyzer/viral-analyzer.module';
 
 @Module({
   controllers: [AppController],
@@ -46,6 +47,7 @@ import { MinioStorageModule } from './common/minio-storage.module';
     DashboardModule,
     VolcanoModule,
     MinioStorageModule,
+    ViralAnalyzerModule,
   ],
 })
 export class AppModule {}
