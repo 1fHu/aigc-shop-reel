@@ -1,6 +1,5 @@
-import { Controller, Get, Param, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Res } from '@nestjs/common';
 import { Response } from 'express';
-import { AuthGuard } from '@nestjs/passport';
 import { GeneBankService } from './gene-bank.service';
 import { ok } from '../../common/api-response';
 import { createReadStream, existsSync, statSync } from 'fs';
@@ -16,8 +15,8 @@ export class GeneBankController {
    * 公开接口，无需认证
    */
   @Get('reference-videos')
-  getAllReferenceVideos() {
-    const videos = this.geneBankService.getAllReferenceVideos();
+  async getAllReferenceVideos() {
+    const videos = await this.geneBankService.getAllReferenceVideos();
     return ok(videos, videos.length);
   }
 
@@ -27,8 +26,8 @@ export class GeneBankController {
    * 公开接口，无需认证
    */
   @Get('reference-videos/:id')
-  getReferenceVideoById(@Param('id') id: string) {
-    const video = this.geneBankService.getReferenceVideoById(id);
+  async getReferenceVideoById(@Param('id') id: string) {
+    const video = await this.geneBankService.getReferenceVideoById(id);
     return ok(video);
   }
 
@@ -38,8 +37,8 @@ export class GeneBankController {
    * 公开接口，无需认证
    */
   @Get('reference-videos/:id/factors')
-  getFactors(@Param('id') id: string) {
-    const factors = this.geneBankService.getFactorsWithLabels(id);
+  async getFactors(@Param('id') id: string) {
+    const factors = await this.geneBankService.getFactorsWithLabels(id);
     return ok(factors);
   }
 
