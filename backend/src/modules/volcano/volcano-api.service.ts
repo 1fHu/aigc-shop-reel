@@ -75,7 +75,7 @@ export class VolcanoApiService {
     return Buffer.from(`${taskId}:${secret}`).toString('hex');
   }
 
-  /** 商品图片多模态解析 */
+  /** analyzeProductImage 商品主图分析逻辑*/
   async analyzeProductImage(imageName: string, imageBuffer?: Buffer): Promise<ProductParseResult> {
     this.logger.log(`analyzeProductImage: ${imageName}, buffer=${imageBuffer ? (imageBuffer.length / 1024).toFixed(0) + 'KB' : 'MISSING'}, apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp ? 'SET' : 'MISSING'}`);
     if (imageBuffer && this.apiKey && this.doubaoEp) {
@@ -89,10 +89,11 @@ export class VolcanoApiService {
     return { name: imageName, category: 'other', selling_points: [], target_audience: '', usage_scene: '', price_anchor: '' };
   }
 
+  // only used for material analysis
   private async callDoubaoVision(imageBuffer: Buffer): Promise<ProductParseResult | null> {
     const base64 = imageBuffer.toString('base64');
     const mime = this.detectMime(imageBuffer);
-    this.logger.log(`Calling Doubao Vision API, image: ${(imageBuffer.length / 1024).toFixed(0)}KB, mime: ${mime}`);
+    this.logger.log(`Analyze product main image, image: ${(imageBuffer.length / 1024).toFixed(0)}KB, mime: ${mime}`);
     const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
@@ -231,6 +232,30 @@ export class VolcanoApiService {
     return 'image/jpeg';
   }
 
+  /**
+   * 文本 → Doubao Embedding 向量，返回 pgvector 可写的 JSON 字符串（如 "[0.1,...]"）。
+   * 未配置 Key / 端点无效 / 返回空向量时返回 null（调用方据此存 NULL，pgvector 不接受空向量 '[]'）。
+   */
+  async generateEmbedding(text: string): Promise<string | null> {
+    if (!this.apiKey) return null;
+    try {
+      const embedRes = await fetch('https://ark.cn-beijing.volces.com/api/v3/embeddings', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: this.embeddingEp, input: [text] }),
+      });
+      const embedData = await embedRes.json();
+      const vec = embedData?.data?.[0]?.embedding;
+      if (vec && Array.isArray(vec) && vec.length > 0) return JSON.stringify(vec);
+      // 拿不到向量（端点无效 / 返回错误体）：不抛错，留 NULL，这里打日志暴露原因
+      this.logger.warn(`Embedding empty (ep=${this.embeddingEp}): ${JSON.stringify(embedData).slice(0, 300)}`);
+      return null;
+    } catch (err) {
+      this.logger.warn(`Embedding failed: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
   /** Analyze uploaded material — Doubao Vision for tags + Embedding for vector */
   async analyzeMaterial(input: { fileType: 'image' | 'video'; fileName: string; buffer: Buffer }): Promise<MaterialAnalysisResult> {
     this.logger.log(`analyzeMaterial: ${input.fileName} (${input.fileType})`);
@@ -271,29 +296,9 @@ export class VolcanoApiService {
         }
       }
 
-      // Step 2: Doubao Embedding
-      let embedding = '[]';
-      try {
-        const embedText = JSON.stringify({ name: input.fileName, ...analysis });
-        const embedRes = await fetch('https://ark.cn-beijing.volces.com/api/v3/embeddings', {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            model: this.embeddingEp,
-            input: [embedText],
-          }),
-        });
-        const embedData = await embedRes.json();
-        const vec = embedData?.data?.[0]?.embedding;
-        if (vec && Array.isArray(vec) && vec.length > 0) {
-          embedding = JSON.stringify(vec);
-        } else {
-          // 拿不到向量（端点无效 / 返回错误体）：不是抛错，会静默留空，这里打日志暴露原因
-          this.logger.warn(`Embedding empty for ${input.fileName} (ep=${this.embeddingEp}): ${JSON.stringify(embedData).slice(0, 300)}`);
-        }
-      } catch (err) {
-        this.logger.warn(`Embedding failed: ${(err as Error).message}`);
-      }
+      // Step 2: Doubao Embedding（与商品主图共用 generateEmbedding；空向量回退 '[]'）
+      const embedText = JSON.stringify({ name: input.fileName, ...analysis });
+      const embedding = (await this.generateEmbedding(embedText)) ?? '[]';
 
       return { analysis, tags, embedding, duration: null };
     } catch (err) {

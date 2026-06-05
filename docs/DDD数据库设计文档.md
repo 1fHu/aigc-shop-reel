@@ -231,6 +231,19 @@ RETURNING video_quota;
 | `projects_pkey` | B-tree | `id` | 主键 |
 | `idx_projects_user_id` | B-tree | `user_id` | 列项目列表的核心查询路径 |
 
+**Product Info**
+  {
+    "name": "商品名",
+    "category": "品类(fashion/beauty/home/electronics/food/sports/other)",
+    "selling_points": ["卖点1", "卖点2"],
+    "target_audience": "目标人群",
+    "usage_scene": "使用场景",
+    "price_anchor": "价格",
+    "cover_url": "https://.../xxx.jpg"   // 额外塞进来一份
+  }
+
+
+
 > 后续若加入「按状态筛选 / 全文搜索项目名」热点，可补充 `idx_projects_status` 或 `GIN(to_tsvector('simple', name))`。
 
 **约束与级联**：父级 `users` 删除时级联删除项目，并由 `materials` / `scripts` / `videos` 进一步级联清理。
