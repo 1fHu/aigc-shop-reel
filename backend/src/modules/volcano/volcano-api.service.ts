@@ -45,6 +45,8 @@ export class VolcanoApiService {
   private readonly apiKey: string;
   private readonly doubaoEp: string;
   private readonly seedanceEp: string;
+  /** 是否允许向 Seedance 传参考图（r2v）。仅 2.0 等支持 r2v 的端点可开；默认关（1.5 不传参考图） */
+  private readonly seedanceR2v: boolean;
   private readonly embeddingEp: string;
   private readonly ttsAppId: string;
   private readonly ttsAccessKey: string;
@@ -59,13 +61,14 @@ export class VolcanoApiService {
     this.apiKey = process.env.VOLCANO_ACCESS_KEY || this.config.get<string>('VOLCANO_ACCESS_KEY', '');
     this.doubaoEp = process.env.VOLCANO_DOUBAO_SEED_EP || this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
     this.seedanceEp = process.env.VOLCANO_SEEDANCE_EP || this.config.get<string>('VOLCANO_SEEDANCE_EP', '');
+    this.seedanceR2v = (process.env.VOLCANO_SEEDANCE_R2V_ENABLED || this.config.get<string>('VOLCANO_SEEDANCE_R2V_ENABLED', '')) === 'true';
     this.embeddingEp = process.env.VOLCANO_EMBEDDING_EP || this.config.get<string>('VOLCANO_EMBEDDING_EP', 'doubao-embedding-large');
     this.ttsAppId = process.env.VOLCANO_TTS_APP_ID || this.config.get<string>('VOLCANO_TTS_APP_ID', '');
     this.ttsAccessKey = process.env.VOLCANO_TTS_ACCESS_KEY || this.config.get<string>('VOLCANO_TTS_ACCESS_KEY', '');
     this.ttsApiKey = process.env.VOLCANO_TTS_API_KEY || this.config.get<string>('VOLCANO_TTS_API_KEY', '');
     this.ttsResourceId = process.env.VOLCANO_TTS_RESOURCE_ID || this.config.get<string>('VOLCANO_TTS_RESOURCE_ID', 'seed-tts-2.0');
     this.ttsVoiceId = process.env.TTS_VOICE_ID || this.config.get<string>('TTS_VOICE_ID', 'zh_female_vv_uranus_bigtts');
-    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp || 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}, embeddingEp=${this.embeddingEp}, tts=${this.isTTSConfigured() ? 'SET' : 'MISSING'}, ttsVoice=${this.ttsVoiceId}`);
+    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp || 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}, seedanceR2v=${this.seedanceR2v}, embeddingEp=${this.embeddingEp}, tts=${this.isTTSConfigured() ? 'SET' : 'MISSING'}, ttsVoice=${this.ttsVoiceId}`);
   }
 
   signCallback(taskId: string, secret: string) {
@@ -165,9 +168,16 @@ export class VolcanoApiService {
         content.push({ type: 'image_url', image_url: { url: opts.endImage }, role: 'last_frame' });
       }
 
-      for (const url of imageUrls) {
-        if (url && !url.includes('placehold.co')) {
-          content.push({ type: 'image_url', image_url: { url }, role: 'reference_image' });
+      // 参考图（reference_image）会让接口判定为 r2v 任务，仅 Seedance 2.0 等端点支持。
+      // 由 VOLCANO_SEEDANCE_R2V_ENABLED 开关控制，默认关：1.5 端点下不传参考图（走纯文生/首尾帧），
+      // 否则会报 "task_type r2v does not support model ..."。
+      let refsSent = 0;
+      if (this.seedanceR2v) {
+        for (const url of imageUrls) {
+          if (url && !url.includes('placehold.co')) {
+            content.push({ type: 'image_url', image_url: { url }, role: 'reference_image' });
+            refsSent += 1;
+          }
         }
       }
       content.push({ type: 'text', text: prompt });
@@ -175,7 +185,7 @@ export class VolcanoApiService {
       const body: Record<string, unknown> = { model: this.seedanceEp, content };
 
       const hasFrameControl = !!(opts?.startImage || opts?.endImage);
-      this.logger.log(`Seedance submit: refs=${imageUrls.length} startFrame=${!!opts?.startImage} endFrame=${!!opts?.endImage}`);
+      this.logger.log(`Seedance submit: refs=${refsSent}/${imageUrls.length} (r2v=${this.seedanceR2v}) startFrame=${!!opts?.startImage} endFrame=${!!opts?.endImage}`);
 
       const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks', {
         method: 'POST',

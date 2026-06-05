@@ -307,7 +307,7 @@ export class VideoService {
     });
   }
 
-  async regenerateShot(id: string, index: number, newPrompt?: string) {
+  async regenerateShot(id: string, index: number, newPrompt?: string, keepFrames = false) {
     const video = await this.videoRepo.findOne({ where: { id } });
     if (!video) throw new NotFoundException('视频不存在');
 
@@ -332,29 +332,10 @@ export class VideoService {
       : '';
 
     const prevShot = storyboard.find((s) => s.index === index - 1);
-    const nextShot = storyboard.find((s) => s.index === index + 1);
 
-    const contextImages: string[] = [];
-    // 前一镜结尾帧（保持逻辑连贯）
-    if (prevShot) {
-      const prevPath = join(VIDEO_DIR, `${id}-shot-${prevShot.index}-composited.mp4`);
-      if (!existsSync(prevPath)) {
-        // fallback to raw shot
-      }
-      const realPath = existsSync(prevPath) ? prevPath : join(VIDEO_DIR, `${id}-shot-${prevShot.index}.mp4`);
-      if (existsSync(realPath)) {
-        const frame = await this.extractKeyframeDataUri(id, prevShot.index, realPath);
-        if (frame) contextImages.push(frame);
-      }
-    }
-    // 后一镜首帧（保持衔接）
-    if (nextShot) {
-      const nextPath = join(VIDEO_DIR, `${id}-shot-${nextShot.index}.mp4`);
-      if (existsSync(nextPath)) {
-        const frame = await this.extractFirstFrame(id, nextShot.index, nextPath);
-        if (frame) contextImages.push(frame);
-      }
-    }
+    // 仅当用户勾选保留首尾帧时，用「该片段自己原来的首帧+尾帧」约束新片段开头/结尾，
+    // 使其与原片一致 → 无缝替换、与前后邻居衔接（i2v 首尾帧，1.5 端点即支持）。
+    const frameControl = keepFrames ? await this.extractOwnFrames(id, index) : {};
 
     // 标记为 processing
     await this.taskRepo.update({ videoId: id, shotIndex: index }, { status: 'processing' });
@@ -362,11 +343,8 @@ export class VideoService {
     const refs = await this.prepareReferenceImages(imageUrls);
     const customReq = (video.settings as any)?.custom_requirement || '';
     const prompt = newPrompt || this.buildShotPrompt(shot, productName, productInfo, materialContext, shot.duration || 3, prevShot, customReq);
-    const frameControl = contextImages.length > 0
-      ? { startImage: contextImages[0], endImage: contextImages[1] }
-      : undefined;
 
-    this.logger.log(`Regenerate shot#${index}: startFrame=${!!frameControl?.startImage} endFrame=${!!frameControl?.endImage} refs=${refs.length}, prevShot=${!!prevShot}, nextShot=${!!nextShot}`);
+    this.logger.log(`Regenerate shot#${index}: keepFrames=${keepFrames} startFrame=${!!frameControl.startImage} endFrame=${!!frameControl.endImage} refs=${refs.length}`);
 
     const path = await this.generateShot(id, shot, productName, productInfo, refs, materialContext, shot.duration || 3, undefined, prevShot, customReq, frameControl);
 
@@ -417,7 +395,7 @@ export class VideoService {
   }
 
   /** POST /api/videos/:id/regenerate-shots — 后台异步重新生成选中分镜，保留未选中的，最终合成 */
-  async regenerateShots(id: string, shotIndices: number[]) {
+  async regenerateShots(id: string, shotIndices: number[], keepFrames = false) {
     const video = await this.videoRepo.findOne({ where: { id } });
     if (!video) throw new NotFoundException('视频不存在');
     if (video.status !== 'completed' && video.status !== 'failed') {
@@ -442,7 +420,7 @@ export class VideoService {
     await this.videoRepo.update(id, { status: 'processing' });
 
     // 后台异步处理
-    this.processRegenerateShots(id, normalizedStoryboard, set, video);
+    this.processRegenerateShots(id, normalizedStoryboard, set, video, keepFrames);
     return { id, status: 'processing' };
   }
 
@@ -451,6 +429,7 @@ export class VideoService {
     storyboard: ScriptShot[],
     selectedSet: Set<number>,
     video: Video,
+    keepFrames = false,
   ) {
     const project = await this.projectRepo.findOne({ where: { id: video.projectId } });
     const productInfo = (project?.productInfo || {}) as Record<string, unknown>;
@@ -486,60 +465,36 @@ export class VideoService {
         for (const { index, result } of ttsAll) ttsResults.set(index, result);
       }
 
-      let prevKeyframe: string | null = null;
       for (let i = 0; i < orderedStoryboard.length; i += 1) {
         const shot = orderedStoryboard[i];
         const prevShot = i > 0 ? orderedStoryboard[i - 1] : null;
 
         if (selectedSet.has(shot.index)) {
+          // 仅当用户勾选保留首尾帧时，用「该片段自己原来的首+尾帧」约束新片，
+          // 须在 generateShot 覆盖原片文件之前提取。
+          const frameControl = keepFrames ? await this.extractOwnFrames(id, shot.index) : {};
+
           await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'processing' });
           const tts = ttsResults.get(shot.index) || null;
           const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
-          // 收集前后分镜画面作为首尾帧控制
-          const contextFrames: string[] = [];
-          if (prevKeyframe) contextFrames.push(prevKeyframe);
-          // 后一镜首帧（递进衔接）
-          if (i + 1 < orderedStoryboard.length) {
-            const nextShot = orderedStoryboard[i + 1];
-            const nextPath = join(VIDEO_DIR, `${id}-shot-${nextShot.index}-composited.mp4`);
-            const nextRaw = join(VIDEO_DIR, `${id}-shot-${nextShot.index}.mp4`);
-            const nextFile = existsSync(nextPath) ? nextPath : existsSync(nextRaw) ? nextRaw : '';
-            if (nextFile) {
-              const nextFrame = await this.extractFirstFrame(id, nextShot.index, nextFile);
-              if (nextFrame) contextFrames.push(nextFrame);
-            }
-          }
-          const frameControl = contextFrames.length > 0
-            ? { startImage: contextFrames[0], endImage: contextFrames[1] }
-            : undefined;
           const path = await this.generateShot(id, shot, productName, productInfo, refImages, materialContext, targetDuration, undefined, prevShot || undefined, customReq, frameControl);
           if (path) {
             const composited = await this.compositeShot(id, shot.index, path, tts, savedStyle);
             const finalPath = composited || path;
             await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'completed', previewUrl: `/api/videos/${id}/shots/${shot.index}/file` });
             compositedClips.push(finalPath);
-            prevKeyframe = await this.extractKeyframeDataUri(id, shot.index, finalPath);
           } else {
             await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'failed', errorMsg: '分镜生成失败' });
             compositedClips.push(join(VIDEO_DIR, `${id}-shot-${shot.index}.mp4`));
-            prevKeyframe = null;
           }
         } else {
           // 复用已有分镜：直接用合成版，不做任何重新处理
           const existingComposited = join(VIDEO_DIR, `${id}-shot-${shot.index}-composited.mp4`);
           const existingRaw = join(VIDEO_DIR, `${id}-shot-${shot.index}.mp4`);
-          let keepPath = '';
           if (existsSync(existingComposited)) {
             compositedClips.push(existingComposited);
-            keepPath = existingComposited;
           } else if (existsSync(existingRaw)) {
             compositedClips.push(existingRaw);
-            keepPath = existingRaw;
-          }
-          if (keepPath) {
-            prevKeyframe = await this.extractKeyframeDataUri(id, shot.index, keepPath);
-          } else {
-            prevKeyframe = null;
           }
         }
       }
@@ -865,6 +820,23 @@ export class VideoService {
     } catch {
       return '';
     }
+  }
+
+  /**
+   * 提取某分镜「原片段自己」的首帧 + 尾帧（重生成时约束新片段开头/结尾与原片一致，i2v 首尾帧）。
+   * 原片段文件（composited 优先，其次 raw）不存在则返回空对象。
+   */
+  private async extractOwnFrames(videoId: string, index: number): Promise<{ startImage?: string; endImage?: string }> {
+    const composited = join(VIDEO_DIR, `${videoId}-shot-${index}-composited.mp4`);
+    const raw = join(VIDEO_DIR, `${videoId}-shot-${index}.mp4`);
+    const file = existsSync(composited) ? composited : existsSync(raw) ? raw : '';
+    if (!file) return {};
+    const startImage = await this.extractFirstFrame(videoId, index, file);
+    const endImage = await this.extractKeyframeDataUri(videoId, index, file);
+    const out: { startImage?: string; endImage?: string } = {};
+    if (startImage) out.startImage = startImage;
+    if (endImage) out.endImage = endImage;
+    return out;
   }
 
   private async extractKeyframeDataUri(videoId: string, shotIndex: number, videoPath: string): Promise<string | null> {
