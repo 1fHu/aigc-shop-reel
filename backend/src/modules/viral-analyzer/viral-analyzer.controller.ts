@@ -143,14 +143,13 @@ export class ViralAnalyzerController {
    * 视频流式播放
    * GET /api/viral-analyzer/videos/:id/stream
    */
-  @UseGuards(AuthGuard('jwt'))
+  // 公开端点：原生 <video> 标签无法带 Authorization 头，按不可猜测的 UUID 访问
   @Get('videos/:id/stream')
   async streamVideo(
-    @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
     @Res() res: Response,
   ) {
-    const videoPath = await this.viralAnalyzerService.getVideoPath(id, user.id);
+    const videoPath = await this.viralAnalyzerService.getVideoPathPublic(id);
 
     if (!existsSync(videoPath)) {
       return res.status(404).json({ code: 404, msg: '视频文件不存在' });
@@ -167,14 +166,13 @@ export class ViralAnalyzerController {
    * 获取视频缩略图
    * GET /api/viral-analyzer/videos/:id/thumbnail
    */
-  @UseGuards(AuthGuard('jwt'))
+  // 公开端点：原生 <img> 标签无法带 Authorization 头，按不可猜测的 UUID 访问
   @Get('videos/:id/thumbnail')
   async getThumbnail(
-    @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
     @Res() res: Response,
   ) {
-    const video = await this.viralAnalyzerService.getDetail(id, user.id);
+    const video = await this.viralAnalyzerService.getByIdPublic(id);
 
     if (!video.thumbnailPath || !existsSync(video.thumbnailPath)) {
       // 返回占位图

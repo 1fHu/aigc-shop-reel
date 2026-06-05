@@ -169,6 +169,34 @@ export class ViralAnalyzerService {
   }
 
   /**
+   * 按 ID 获取（不校验归属）—— 供公开的 stream / thumbnail 端点使用。
+   * 这两个接口供原生 <video>/<img> 标签直接加载，无法携带 Authorization 头，
+   * 故按不可猜测的 UUID 公开访问（参考 gene-bank 的公开 stream）。
+   */
+  async getByIdPublic(id: string): Promise<AnalyzedVideo> {
+    const video = await this.analyzedVideoRepo.findOne({ where: { id } });
+
+    if (!video) {
+      throw new NotFoundException('视频不存在');
+    }
+
+    return video;
+  }
+
+  /**
+   * 公开获取视频文件路径（按 UUID，不校验归属）
+   */
+  async getVideoPathPublic(id: string): Promise<string> {
+    const video = await this.getByIdPublic(id);
+
+    if (!fs.existsSync(video.videoPath)) {
+      throw new NotFoundException('视频文件不存在');
+    }
+
+    return video.videoPath;
+  }
+
+  /**
    * 从文件名提取标题
    */
   private extractTitle(filename: string): string {
