@@ -43,11 +43,14 @@ export type TTSResult = {
 export class VolcanoApiService {
   private readonly logger = new Logger(VolcanoApiService.name);
   private readonly apiKey: string;
+  private readonly embedding_apiKey: string;
   private readonly doubaoEp: string;
   private readonly seedanceEp: string;
   /** 是否允许向 Seedance 传参考图（r2v）。仅 2.0 等支持 r2v 的端点可开；默认关（1.5 不传参考图） */
   private readonly seedanceR2v: boolean;
   private readonly embeddingEp: string;
+  /** embedding 输出维度，必须与 DB materials.embedding 列 vector(1024) 一致 */
+  private readonly embeddingDim: number;
   private readonly ttsAppId: string;
   private readonly ttsAccessKey: string;
   private readonly ttsApiKey: string;
@@ -59,16 +62,18 @@ export class VolcanoApiService {
     private readonly minio: MinioStorageService,
   ) {
     this.apiKey = process.env.VOLCANO_ACCESS_KEY || this.config.get<string>('VOLCANO_ACCESS_KEY', '');
+    this.embedding_apiKey = process.env.VOLCANO_EMBEDDING_API_key || this.config.get<string>('VOLCANO_EMBEDDING_API_key', '');
     this.doubaoEp = process.env.VOLCANO_DOUBAO_SEED_EP || this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
     this.seedanceEp = process.env.VOLCANO_SEEDANCE_EP || this.config.get<string>('VOLCANO_SEEDANCE_EP', '');
     this.seedanceR2v = (process.env.VOLCANO_SEEDANCE_R2V_ENABLED || this.config.get<string>('VOLCANO_SEEDANCE_R2V_ENABLED', '')) === 'true';
-    this.embeddingEp = process.env.VOLCANO_EMBEDDING_EP || this.config.get<string>('VOLCANO_EMBEDDING_EP', 'doubao-embedding-large');
+    this.embeddingEp = process.env.VOLCANO_EMBEDDING_EP || this.config.get<string>('VOLCANO_EMBEDDING_EP', '');
+    this.embeddingDim = parseInt(process.env.VOLCANO_EMBEDDING_DIM || this.config.get<string>('VOLCANO_EMBEDDING_DIM', '1024'), 10) || 1024;
     this.ttsAppId = process.env.VOLCANO_TTS_APP_ID || this.config.get<string>('VOLCANO_TTS_APP_ID', '');
     this.ttsAccessKey = process.env.VOLCANO_TTS_ACCESS_KEY || this.config.get<string>('VOLCANO_TTS_ACCESS_KEY', '');
     this.ttsApiKey = process.env.VOLCANO_TTS_API_KEY || this.config.get<string>('VOLCANO_TTS_API_KEY', '');
     this.ttsResourceId = process.env.VOLCANO_TTS_RESOURCE_ID || this.config.get<string>('VOLCANO_TTS_RESOURCE_ID', 'seed-tts-2.0');
     this.ttsVoiceId = process.env.TTS_VOICE_ID || this.config.get<string>('TTS_VOICE_ID', 'zh_female_vv_uranus_bigtts');
-    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp || 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}, seedanceR2v=${this.seedanceR2v}, embeddingEp=${this.embeddingEp}, tts=${this.isTTSConfigured() ? 'SET' : 'MISSING'}, ttsVoice=${this.ttsVoiceId}`);
+    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp || 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}, seedanceR2v=${this.seedanceR2v}, embeddingEp=${this.embeddingEp || 'MISSING'}, embeddingDim=${this.embeddingDim}, tts=${this.isTTSConfigured() ? 'SET' : 'MISSING'}, ttsVoice=${this.ttsVoiceId}`);
   }
 
   signCallback(taskId: string, secret: string) {
@@ -233,23 +238,56 @@ export class VolcanoApiService {
   }
 
   /**
-   * 文本 → Doubao Embedding 向量，返回 pgvector 可写的 JSON 字符串（如 "[0.1,...]"）。
-   * 未配置 Key / 端点无效 / 返回空向量时返回 null（调用方据此存 NULL，pgvector 不接受空向量 '[]'）。
+   * 多模态 Embedding（火山方舟 doubao-embedding-vision）——文本 + 图片融合成一条向量，
+   * 返回 pgvector 可写的 JSON 字符串（如 "[0.1,...]"）。商品主图与素材分析共用本函数，
+   * 保证两类素材落在同一向量空间、可互相检索。
+   *
+   * 走 /embeddings/multimodal 端点：input 是结构化数组（{type:'text'} / {type:'image_url'}），
+   * 与纯文本 /embeddings（input:[字符串]）不同。图片优先用 base64 data URL，避免 dev 下
+   * 火山访问不到 localhost 的 MinIO。未配置 / 失败 / 维度不符时返回 null（调用方据此存 NULL）。
    */
-  async generateEmbedding(text: string): Promise<string | null> {
-    if (!this.apiKey) return null;
+  async generateEmbedding(input: { text?: string; imageBuffer?: Buffer; imageUrl?: string }): Promise<string | null> {
+    const key = this.embedding_apiKey || this.apiKey;
+    // 未配置 Key / 接入点：直接跳过（留 NULL），不打无效请求。配置项见 .env 的 VOLCANO_EMBEDDING_EP
+    if (!key || !this.embeddingEp) {
+      if (!this.embeddingEp) this.logger.warn('VOLCANO_EMBEDDING_EP 未配置，跳过 embedding 生成（向量检索不可用）');
+      return null;
+    }
+
+    // 组多模态 input：文本 + 图片（二者皆可选，但至少要有一个）
+    const content: Array<Record<string, unknown>> = [];
+    if (input.text && input.text.trim()) content.push({ type: 'text', text: input.text.trim() });
+    if (input.imageBuffer) {
+      const mime = this.detectMime(input.imageBuffer);
+      content.push({ type: 'image_url', image_url: { url: `data:${mime};base64,${input.imageBuffer.toString('base64')}` } });
+    } else if (input.imageUrl) {
+      content.push({ type: 'image_url', image_url: { url: input.imageUrl } });
+    }
+    if (content.length === 0) return null;
+
     try {
-      const embedRes = await fetch('https://ark.cn-beijing.volces.com/api/v3/embeddings', {
+      const embedRes = await fetch('https://ark.cn-beijing.volces.com/api/v3/embeddings/multimodal', {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: this.embeddingEp, input: [text] }),
+        headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
+        // dimensions 把输出降到 DB vector(1024)（doubao-embedding-vision 支持降维保兼容）
+        body: JSON.stringify({ model: this.embeddingEp, input: content, encoding_format: 'float', dimensions: this.embeddingDim }),
       });
       const embedData = await embedRes.json();
-      const vec = embedData?.data?.[0]?.embedding;
-      if (vec && Array.isArray(vec) && vec.length > 0) return JSON.stringify(vec);
-      // 拿不到向量（端点无效 / 返回错误体）：不抛错，留 NULL，这里打日志暴露原因
-      this.logger.warn(`Embedding empty (ep=${this.embeddingEp}): ${JSON.stringify(embedData).slice(0, 300)}`);
-      return null;
+      // 多模态返回单条 data.embedding（对象）；兼容纯文本端点的 data[0].embedding（数组）
+      const vec = embedData?.data?.embedding ?? embedData?.data?.[0]?.embedding;
+      if (!vec || !Array.isArray(vec) || vec.length === 0) {
+        // 拿不到向量（端点无效 / 返回错误体）：不抛错，留 NULL，这里打日志暴露原因
+        this.logger.warn(`Embedding empty (ep=${this.embeddingEp}): ${JSON.stringify(embedData).slice(0, 300)}`);
+        return null;
+      }
+      // 维度不匹配会让 pgvector 写入直接报错（进而把素材置 failed），这里提前拦下留 NULL
+      if (vec.length !== this.embeddingDim) {
+        this.logger.error(`Embedding 维度不匹配：模型返回 ${vec.length} 维，DB 列要求 ${this.embeddingDim} 维。请改 VOLCANO_EMBEDDING_DIM 或更换接入点/调整 DB 列后重建索引。`);
+        return null;
+      }
+      const hasImage = !!(input.imageBuffer || input.imageUrl);
+      this.logger.log(`Embedding 生成成功：${vec.length} 维（图片=${hasImage ? '有' : '无'}）预览=[${(vec as number[]).slice(0, 4).map((n) => n.toFixed(4)).join(', ')}, ...]`);
+      return JSON.stringify(vec);
     } catch (err) {
       this.logger.warn(`Embedding failed: ${(err as Error).message}`);
       return null;
@@ -296,9 +334,9 @@ export class VolcanoApiService {
         }
       }
 
-      // Step 2: Doubao Embedding（与商品主图共用 generateEmbedding；空向量回退 '[]'）
+      // Step 2: 多模态 Embedding（图片 + 文本摘要融合；与商品主图共用 generateEmbedding，空向量回退 '[]'）
       const embedText = JSON.stringify({ name: input.fileName, ...analysis });
-      const embedding = (await this.generateEmbedding(embedText)) ?? '[]';
+      const embedding = (await this.generateEmbedding({ text: embedText, imageBuffer: input.buffer })) ?? '[]';
 
       return { analysis, tags, embedding, duration: null };
     } catch (err) {

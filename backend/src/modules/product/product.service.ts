@@ -59,8 +59,8 @@ export class ProductService {
 
     const analysis = { name: aiResult.name, category: aiResult.category, selling_points: aiResult.selling_points, target_audience: aiResult.target_audience, usage_scene: aiResult.usage_scene, price_anchor: aiResult.price_anchor, cover_url: coverUrl };
 
-    // 让主图素材也进向量检索空间：analysis 已含 name/category/卖点等，直接据此生成 embedding
-    const embedding = await this.volcano.generateEmbedding(JSON.stringify(analysis));
+    // 让主图素材也进向量检索空间：多模态 embedding（商品图 + analysis 文本），与素材分析同一空间
+    const embedding = await this.volcano.generateEmbedding({ text: JSON.stringify(analysis), imageBuffer });
 
     // Create material record in materials table
     const material = this.materialRepo.create({
