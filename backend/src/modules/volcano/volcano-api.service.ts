@@ -276,7 +276,7 @@ export class VolcanoApiService {
           model: this.doubaoEp,
           messages: [{ role: 'user', content: [
             { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
-            { type: 'text', text: '分析这张商品素材图片，以JSON返回：{"category":"品类标签","tags":["标签1","标签2","标签3"],"description":"一句话描述素材内容","quality":"画质评估(high/medium/low)","suitable_for":"适用场景"}。只返回JSON。' },
+            { type: 'text', text: '分析这张商品素材图片，以JSON返回：{"summary":"图片主要内容，8个字以内，概括画面在表达什么（如：随心组网、轻薄机身、户外实拍）","tags":["标签1","标签2","标签3"],"description":"一句话描述素材内容","quality":"画质评估(high/medium/low)","suitable_for":"适用场景"}。只返回JSON。' },
           ]}],
           max_tokens: 300,
         }),
