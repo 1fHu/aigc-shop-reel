@@ -1,8 +1,20 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { getAllReferenceVideos, getReferenceVideoById } from './data/reference-videos.data';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository, In } from 'typeorm';
+import {
+  getAllReferenceVideos as getMockReferenceVideos,
+  getReferenceVideoById as getMockReferenceVideoById,
+} from './data/reference-videos.data';
+import { ViralLibrary } from '../../database/entities/viral-library.entity';
+import { AnalyzedVideo } from '../../database/entities/analyzed-video.entity';
 import {
   ReferenceVideo,
   CreativeFactors,
+  VisualStyle,
+  OpeningMethod,
+  NarrationStyle,
+  PaceDensity,
+  CTAForm,
   VisualStyleLabels,
   OpeningMethodLabels,
   NarrationStyleLabels,
@@ -21,31 +33,85 @@ export interface FactorLabelItem {
 export class GeneBankService {
   private readonly logger = new Logger(GeneBankService.name);
 
+  constructor(
+    @InjectRepository(ViralLibrary)
+    private readonly viralLibraryRepo: Repository<ViralLibrary>,
+    @InjectRepository(AnalyzedVideo)
+    private readonly analyzedVideoRepo: Repository<AnalyzedVideo>,
+  ) {}
+
   /**
-   * 获取所有参考视频列表
+   * 获取所有参考视频列表（内置 mock + 用户同步到基因库的视频）
    */
-  getAllReferenceVideos(): ReferenceVideo[] {
+  async getAllReferenceVideos(): Promise<ReferenceVideo[]> {
     this.logger.log('获取所有参考视频');
-    return getAllReferenceVideos();
+    const mockVideos = getMockReferenceVideos();
+
+    const allRecords = await this.viralLibraryRepo.find({
+      where: { platform: 'user-upload' },
+      order: { createdAt: 'DESC' },
+    });
+
+    // 同一视频可能被重复同步，按来源去重（createdAt DESC 排序，保留最新一条）
+    const seen = new Set<string>();
+    const records = allRecords.filter((r) => {
+      const key = r.sourceUrl ?? r.id;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // 批量取回对应 analyzed_videos 的真实时长
+    const analyzedIds = records
+      .map((r) => this.parseAnalyzedId(r.sourceUrl))
+      .filter((v): v is string => !!v);
+    const durationMap = new Map<string, number>();
+    if (analyzedIds.length > 0) {
+      const analyzed = await this.analyzedVideoRepo.find({
+        where: { id: In(analyzedIds) },
+        select: ['id', 'duration'],
+      });
+      analyzed.forEach((a) => durationMap.set(a.id, a.duration ?? 0));
+    }
+
+    const userVideos = records.map((r) => this.toReferenceVideo(r, durationMap));
+    return [...mockVideos, ...userVideos];
   }
 
   /**
-   * 根据 ID 获取参考视频详情
+   * 根据 ID 获取参考视频详情（mock 优先，否则查用户同步库）
    */
-  getReferenceVideoById(id: string): ReferenceVideo {
+  async getReferenceVideoById(id: string): Promise<ReferenceVideo> {
     this.logger.log(`获取参考视频: ${id}`);
-    const video = getReferenceVideoById(id);
-    if (!video) {
+    const mock = getMockReferenceVideoById(id);
+    if (mock) {
+      return mock;
+    }
+
+    const record = await this.viralLibraryRepo.findOne({ where: { id } });
+    if (!record) {
       throw new NotFoundException(`参考视频 ${id} 不存在`);
     }
-    return video;
+
+    const analyzedId = this.parseAnalyzedId(record.sourceUrl);
+    const durationMap = new Map<string, number>();
+    if (analyzedId) {
+      const analyzed = await this.analyzedVideoRepo.findOne({
+        where: { id: analyzedId },
+        select: ['id', 'duration'],
+      });
+      if (analyzed) {
+        durationMap.set(analyzed.id, analyzed.duration ?? 0);
+      }
+    }
+    return this.toReferenceVideo(record, durationMap);
   }
 
   /**
    * 获取参考视频的创作因子（带中文标签）
    */
-  getFactorsWithLabels(videoId: string): FactorLabelItem[] {
-    const video = this.getReferenceVideoById(videoId);
+  async getFactorsWithLabels(videoId: string): Promise<FactorLabelItem[]> {
+    const video = await this.getReferenceVideoById(videoId);
     const factors = video.factors;
 
     return [
@@ -167,5 +233,115 @@ export class GeneBankService {
       value_emphasis: '- 最后一个分镜强调性价比和价值\n- 配音总结价值，例如"xx元享受xx价值"',
     };
     return prompts[form];
+  }
+
+  // ========== 用户同步视频 → ReferenceVideo 映射 ==========
+
+  /** 从 sourceUrl（/api/viral-analyzer/videos/:id/stream）解析 analyzed video id */
+  private parseAnalyzedId(sourceUrl?: string | null): string | null {
+    if (!sourceUrl) return null;
+    const m = /\/videos\/([^/]+)\/stream/.exec(sourceUrl);
+    return m ? m[1] : null;
+  }
+
+  /**
+   * 把用户同步到基因库的 viral_library 记录映射为 ReferenceVideo。
+   * 视频/缩略图统一走 viral-analyzer 端点（已支持 Range 播放），
+   * AI 产出的中文创作因子按关键词归一到 genebank 的枚举值。
+   */
+  private toReferenceVideo(
+    record: ViralLibrary,
+    durationMap: Map<string, number>,
+  ): ReferenceVideo {
+    const report = (record.analysisReport ?? {}) as {
+      style?: string;
+      creative_factors?: {
+        visual_style?: string;
+        opener?: string;
+        narration?: string;
+        pacing?: string;
+        cta?: string;
+      };
+    };
+    const raw = report.creative_factors ?? {};
+    const analyzedId = this.parseAnalyzedId(record.sourceUrl);
+
+    const videoUrl = analyzedId
+      ? `/api/viral-analyzer/videos/${analyzedId}/stream`
+      : record.sourceUrl ?? '';
+    const thumbnailUrl = analyzedId
+      ? `/api/viral-analyzer/videos/${analyzedId}/thumbnail`
+      : record.thumbnailUrl ?? '';
+
+    return {
+      id: record.id,
+      title: record.title ?? '未命名视频',
+      description: report.style ?? '',
+      thumbnailUrl,
+      videoUrl,
+      duration: (analyzedId && durationMap.get(analyzedId)) || 0,
+      factors: {
+        visualStyle: this.normalizeVisualStyle(raw.visual_style),
+        openingMethod: this.normalizeOpeningMethod(raw.opener),
+        narrationStyle: this.normalizeNarrationStyle(raw.narration),
+        paceDensity: this.normalizePaceDensity(raw.pacing),
+        ctaForm: this.normalizeCTAForm(raw.cta),
+      },
+      category: '用户上传',
+      sourceUrl: record.sourceUrl ?? undefined,
+      createdAt: (record.createdAt ?? new Date()).toISOString(),
+    };
+  }
+
+  private normalizeVisualStyle(v?: string): VisualStyle {
+    const s = v ?? '';
+    if (s.includes('电影')) return 'cinematic';
+    if (s.includes('极简') || s.includes('简约')) return 'minimal';
+    if (s.includes('戏剧') || s.includes('冲击')) return 'dramatic';
+    if (s.includes('纪录') || s.includes('纪实')) return 'documentary';
+    if (s.includes('潮流') || s.includes('时尚') || s.includes('商业')) return 'trendy';
+    return 'lifestyle';
+  }
+
+  private normalizeOpeningMethod(v?: string): OpeningMethod {
+    const s = v ?? '';
+    if (s.includes('悬念')) return 'suspense_hook';
+    if (s.includes('痛点') || s.includes('直击') || s.includes('问题') || s.includes('提问')) {
+      return 'pain_point';
+    }
+    if (s.includes('故事')) return 'story_intro';
+    if (s.includes('反差') || s.includes('对比')) return 'contrast';
+    if (s.includes('场景') || s.includes('代入')) return 'scene_setting';
+    return 'direct_display';
+  }
+
+  private normalizeNarrationStyle(v?: string): NarrationStyle {
+    const s = v ?? '';
+    if (s.includes('冷静') || s.includes('知性') || s.includes('理性')) return 'calm_rational';
+    if (s.includes('激情') || s.includes('热情') || s.includes('澎湃')) return 'enthusiastic';
+    if (s.includes('故事') || s.includes('叙述')) return 'storytelling';
+    if (s.includes('专家')) return 'expert';
+    if (s.includes('幽默')) return 'humorous';
+    return 'friendly';
+  }
+
+  private normalizePaceDensity(v?: string): PaceDensity {
+    const s = v ?? '';
+    if (s.includes('快')) return 'fast';
+    if (s.includes('慢')) return 'slow';
+    if (s.includes('变化')) return 'varied';
+    return 'medium';
+  }
+
+  private normalizeCTAForm(v?: string): CTAForm {
+    const s = v ?? '';
+    if (s.includes('报价') || s.includes('价格')) return 'direct_price';
+    if (s.includes('限时') || s.includes('优惠') || s.includes('折扣')) return 'limited_offer';
+    if (s.includes('信任') || s.includes('背书') || s.includes('评价')) return 'trust_building';
+    if (s.includes('紧迫') || s.includes('立即') || s.includes('马上') || s.includes('购买')) {
+      return 'urgency';
+    }
+    if (s.includes('价值')) return 'value_emphasis';
+    return 'soft_guide';
   }
 }

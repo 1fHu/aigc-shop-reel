@@ -38,7 +38,7 @@ export class ScriptService {
     // 如果提供了参考视频 ID，获取其创作因子
     let creativeFactors: CreativeFactors | undefined;
     if (referenceVideoId) {
-      const refVideo = this.geneBank.getReferenceVideoById(referenceVideoId);
+      const refVideo = await this.geneBank.getReferenceVideoById(referenceVideoId);
       creativeFactors = refVideo.factors;
       this.logger.log(`使用参考视频 ${referenceVideoId} 的创作因子`);
     }

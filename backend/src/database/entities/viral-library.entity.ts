@@ -18,7 +18,7 @@ export class ViralLibrary {
   title: string;
 
   @Column({ type: 'varchar', nullable: true, name: 'thumbnail_url' })
-  thumbnailUrl: string;
+  thumbnailUrl: string | null;
 
   @Column({ type: 'jsonb', nullable: true, name: 'analysis_report' })
   analysisReport: object;

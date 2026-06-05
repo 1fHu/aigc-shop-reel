@@ -77,4 +77,11 @@ export const viralAnalyzerService = {
   async delete(id: string): Promise<void> {
     await api.delete(`/viral-analyzer/${id}`);
   },
+
+  /**
+   * 同步到基因库
+   */
+  async syncToGenebank(id: string): Promise<{ message: string; genebank_id: string }> {
+    return await api.post(`/viral-analyzer/${id}/sync-to-genebank`);
+  },
 };

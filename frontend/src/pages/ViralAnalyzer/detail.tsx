@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Button, Spin, Tag, message, Typography, Divider } from 'antd';
-import { ArrowLeftOutlined, ThunderboltOutlined, PlayCircleOutlined } from '@ant-design/icons';
+import { Card, Button, Spin, Tag, message, Typography, Divider, Space } from 'antd';
+import { ArrowLeftOutlined, ThunderboltOutlined, PlayCircleOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { viralAnalyzerService, type AnalyzedVideo } from '@/services/viralAnalyzerService';
 import './detail.css';
 
@@ -12,22 +12,40 @@ const ViralAnalyzerDetail: React.FC = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [video, setVideo] = useState<AnalyzedVideo | null>(null);
+  const [syncing, setSyncing] = useState(false);
 
-  useEffect(() => {
-    if (id) {
-      loadDetail();
-    }
-  }, [id]);
-
-  const loadDetail = async () => {
+  const loadDetail = useCallback(async () => {
     setLoading(true);
     try {
       const data = await viralAnalyzerService.getDetail(id!);
       setVideo(data);
-    } catch (error) {
+    } catch {
       message.error('加载失败');
     } finally {
       setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (id) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      loadDetail();
+    }
+  }, [id, loadDetail]);
+
+  // 同步到基因库
+  const handleSyncToGenebank = async () => {
+    if (!video) return;
+
+    setSyncing(true);
+    try {
+      await viralAnalyzerService.syncToGenebank(video.id);
+      message.success('已同步到基因库，可在参考视频库中查看');
+    } catch (error) {
+      const msg = (error as { response?: { data?: { msg?: string } } }).response?.data?.msg;
+      message.error(msg || '同步失败');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -106,7 +124,14 @@ const ViralAnalyzerDetail: React.FC = () => {
           <Card className="video-card">
             <div className="video-player">
               {video.video_url ? (
-                <video controls src={video.video_url} className="video-element">
+                <video
+                  controls
+                  src={video.video_url}
+                  poster={video.thumbnail_url || undefined}
+                  className="video-element"
+                  preload="metadata"
+                  crossOrigin="anonymous"
+                >
                   您的浏览器不支持视频播放
                 </video>
               ) : (
@@ -197,16 +222,29 @@ const ViralAnalyzerDetail: React.FC = () => {
               )}
 
               {/* 生成剧本按钮 */}
-              <Button
-                type="primary"
-                size="large"
-                block
-                icon={<ThunderboltOutlined />}
-                className="generate-script-btn"
-                onClick={handleGenerateScript}
-              >
-                生成同款 AI 剧本
-              </Button>
+              <Space direction="vertical" size="middle" style={{ width: '100%' }}>
+                <Button
+                  type="default"
+                  size="large"
+                  block
+                  icon={<DatabaseOutlined />}
+                  className="sync-genebank-btn"
+                  onClick={handleSyncToGenebank}
+                  loading={syncing}
+                >
+                  同步到基因库
+                </Button>
+                <Button
+                  type="primary"
+                  size="large"
+                  block
+                  icon={<ThunderboltOutlined />}
+                  className="generate-script-btn"
+                  onClick={handleGenerateScript}
+                >
+                  生成同款 AI 剧本
+                </Button>
+              </Space>
             </>
           )}
         </div>

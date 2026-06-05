@@ -8,6 +8,8 @@ import { Script } from './entities/script.entity';
 import { Video } from './entities/video.entity';
 import { VideoTask } from './entities/video-task.entity';
 import { AnalyzedVideo } from './entities/analyzed-video.entity';
+import { ViralLibrary } from './entities/viral-library.entity';
+import { ViralGene } from './entities/viral-gene.entity';
 
 @Module({
   imports: [
@@ -17,7 +19,7 @@ import { AnalyzedVideo } from './entities/analyzed-video.entity';
       useFactory: (config: ConfigService) => ({
         type: 'postgres',
         url: config.get<string>('DATABASE_URL', 'postgresql://vidcraft:vidcraft@localhost:5432/vidcraft'),
-        entities: [User, Project, Material, Script, Video, VideoTask, AnalyzedVideo],
+        entities: [User, Project, Material, Script, Video, VideoTask, AnalyzedVideo, ViralLibrary, ViralGene],
         synchronize: false,
         logging: config.get('NODE_ENV') === 'development' ? ['error', 'warn'] : ['error'],
         // 连接池：默认 pg pool max=10，前端轮询 + 视频生成并发查询时易排队。给点余量；
@@ -25,7 +27,7 @@ import { AnalyzedVideo } from './entities/analyzed-video.entity';
         extra: { max: 20, connectionTimeoutMillis: 10000 },
       }),
     }),
-    TypeOrmModule.forFeature([User, Project, Material, Script, Video, VideoTask, AnalyzedVideo]),
+    TypeOrmModule.forFeature([User, Project, Material, Script, Video, VideoTask, AnalyzedVideo, ViralLibrary, ViralGene]),
   ],
   exports: [TypeOrmModule],
 })
