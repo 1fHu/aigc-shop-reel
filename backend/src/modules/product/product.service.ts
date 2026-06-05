@@ -90,10 +90,38 @@ export class ProductService {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
     if (!project) throw new NotFoundException('项目不存在');
     const existing = (project.productInfo ?? {}) as Record<string, unknown>;
-    const merged = { ...existing, ...productInfo };
+    const merged = { ...existing, ...productInfo, cover_url: project.coverUrl ?? (existing.cover_url as string) ?? null };
     await this.projectRepo.update(projectId, { productInfo: merged, status: 'material_pending' });
+
+    // 同步主图素材的 analysis，使素材库 grid 卡片/详情与商品信息保持一致。
+    // 主图素材 = 该项目里 thumbnailUrl 等于项目 cover_url 的图片素材（parseImage 落库时三者同源）。
+    await this.syncCoverMaterial(project, productInfo);
+
     const updated = await this.projectRepo.findOne({ where: { id: projectId } });
     return this.toFlatProduct(updated!);
+  }
+
+  /** 把编辑后的商品信息回写到「主图素材」那条 materials 记录（analysis + tags），找不到则跳过 */
+  private async syncCoverMaterial(project: Project, productInfo: UpdateProductDto) {
+    if (!project.coverUrl) return;
+    const coverMaterial = await this.materialRepo.findOne({
+      where: { projectId: project.id, thumbnailUrl: project.coverUrl, fileType: 'image' },
+    });
+    if (!coverMaterial) return;
+    const analysis = {
+      ...((coverMaterial.analysis ?? {}) as Record<string, unknown>),
+      name: productInfo.name,
+      category: productInfo.category,
+      selling_points: productInfo.selling_points,
+      target_audience: productInfo.target_audience,
+      usage_scene: productInfo.usage_scene,
+      price_anchor: productInfo.price_anchor,
+      cover_url: project.coverUrl,
+    };
+    await this.materialRepo.update(coverMaterial.id, {
+      analysis,
+      tags: productInfo.selling_points?.slice(0, 5) ?? [],
+    });
   }
 
   async confirm(projectId: string) {

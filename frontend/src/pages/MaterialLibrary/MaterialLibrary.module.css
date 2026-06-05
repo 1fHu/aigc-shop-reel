@@ -47,6 +47,33 @@
   opacity: 0.94;
 }
 
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.editBtn {
+  height: 36px;
+  padding: 0 16px;
+  border: 1px solid #D1D5DB;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #4648D4;
+  font-weight: 600;
+  font-size: 14px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.editBtn:hover {
+  border-color: #4648D4;
+  background: #F5F5FF;
+}
+
 .filters {
   display: flex;
   align-items: center;

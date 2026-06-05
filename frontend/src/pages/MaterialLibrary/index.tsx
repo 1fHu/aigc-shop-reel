@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Upload, App, Modal } from 'antd';
-import { UploadOutlined, DownOutlined, CloseOutlined, ThunderboltOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { UploadOutlined, DownOutlined, CloseOutlined, ThunderboltOutlined, DeleteOutlined, ExclamationCircleOutlined, EditOutlined } from '@ant-design/icons';
 import type { RcFile } from 'antd/es/upload';
 import { productService } from '@/services/productService';
 import { materialService } from '@/services/materialService';
-import type { MaterialListItem } from '@/types';
+import type { MaterialListItem, ParsedProduct } from '@/types';
+import ManualProductFormModal from '@/components/ManualProductFormModal';
 import styles from './MaterialLibrary.module.css';
 
 type MaterialType = 'all' | 'image' | 'video';
@@ -61,6 +62,9 @@ export default function MaterialLibrary() {
   const [uploadMode, setUploadMode] = useState<'cover' | 'material' | null>(null);
   // 是否已有商品主图：决定头部按钮显示「上传商品主图」还是「上传素材」
   const [hasCover, setHasCover] = useState(false);
+  // 当前商品信息（用于「编辑商品信息」Modal 的初值）；无主图时为 null
+  const [product, setProduct] = useState<ParsedProduct | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const pollingRef = useRef(false);
 
@@ -79,6 +83,7 @@ export default function MaterialLibrary() {
     try {
       const p = await productService.get(pid);
       setHasCover(!!p.cover_url);
+      setProduct(p.name ? p : null);
     } catch {
       // 项目必然存在（已在素材页），失败仅当作"暂无主图"，不额外提示
     }
@@ -175,9 +180,16 @@ export default function MaterialLibrary() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div><h1 className={styles.title}>素材库</h1><p className={styles.subtitle}>上传商品图片，AI 自动解析并生成视频素材</p></div>
-        <button className={styles.uploadBtn} onClick={() => setUploadMode(hasCover ? 'material' : 'cover')}>
-          <UploadOutlined /> {hasCover ? '上传素材' : '上传商品主图'}
-        </button>
+        <div className={styles.headerActions}>
+          {hasCover && (
+            <button className={styles.editBtn} onClick={() => setEditOpen(true)}>
+              <EditOutlined /> 编辑商品信息
+            </button>
+          )}
+          <button className={styles.uploadBtn} onClick={() => setUploadMode(hasCover ? 'material' : 'cover')}>
+            <UploadOutlined /> {hasCover ? '上传素材' : '上传商品主图'}
+          </button>
+        </div>
       </div>
 
       <div className={styles.filters}>
@@ -275,6 +287,20 @@ export default function MaterialLibrary() {
           )}
         </div>
       </Modal>
+
+      {pid && (
+        <ManualProductFormModal
+          open={editOpen}
+          projectId={pid}
+          initialValue={product}
+          onClose={() => setEditOpen(false)}
+          onSaved={(saved) => {
+            setProduct(saved);
+            setHasCover(!!saved.cover_url);
+            loadMaterials();   // 后端已同步主图素材 analysis，刷新 grid 反映新值
+          }}
+        />
+      )}
 
       <button type="button" className={styles.fab} onClick={handleGenerateVideo} title="生成视频">
         <ThunderboltOutlined style={{fontSize:22}}/>
