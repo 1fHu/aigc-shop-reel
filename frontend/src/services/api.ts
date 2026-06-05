@@ -71,15 +71,26 @@ api.interceptors.response.use(
     const serverMsg = error.response?.data?.msg;
 
     if (status === 401) {
-      // 登录接口的 401 由页面自行处理，拦截器不重复 toast
-      const isLoginRequest = error.config?.url?.includes('/auth/login');
-      if (!isLoginRequest) {
-        message.error(serverMsg || '登录已过期，请重新登录');
-      }
+      // 登录/注册/刷新接口的 401 由页面自行处理，拦截器不重复 toast、不跳转
+      const url = error.config?.url ?? '';
+      const isAuthRequest = /\/auth\/(login|register|guest-login|refresh)/.test(url);
+
       localStorage.removeItem('vidcraft_access_token');
       localStorage.removeItem('vidcraft_refresh_token');
-      // TODO: 跳转到登录页（等登录页实现后接入）
-      // window.location.href = '/login';
+      // 同步清掉持久化的 auth store，否则整页刷新后 RequireAuth 仍按 isAuthenticated=true 放行
+      localStorage.removeItem('vidcraft-auth');
+
+      if (!isAuthRequest) {
+        // 已在登录相关页面时不再 toast / 跳转，避免循环
+        const onAuthPage = /\/(login|register|forgot-password|reset-password)/.test(
+          window.location.pathname,
+        );
+        if (!onAuthPage) {
+          message.error(serverMsg || '登录已过期，请重新登录');
+          // 整页跳转：让 auth store 从（已清空的）localStorage 重新初始化为未登录态
+          window.location.href = '/login';
+        }
+      }
     } else if (status === 403) {
       message.error(serverMsg || '没有权限执行此操作');
     } else if (status === 404) {

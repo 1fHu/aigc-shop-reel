@@ -14,12 +14,12 @@ jobs:
       - name: Deploy to server
         env:
           SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
-          GIT_TOKEN: ${{ secrets.GIT_TOKEN }}
           HOST: ${{ secrets.SERVER_HOST }}
         run: |
           echo "$SSH_KEY" | base64 -d > key
           chmod 600 key
-          ssh -i key -o StrictHostKeyChecking=no ubuntu@$HOST "
-            export GIT_TOKEN='$GIT_TOKEN'
-            bash ~/deploy.sh
-          "
+          ssh -i key -o StrictHostKeyChecking=no ubuntu@$HOST '
+            cd ~/vidcraft
+            git pull origin master
+            sudo docker compose -f docker/docker-compose.prod.yml --env-file .env up -d --build
+          '

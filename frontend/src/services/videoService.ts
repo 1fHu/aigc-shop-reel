@@ -136,9 +136,9 @@ export const videoService = {
     return api.post(`/videos/${videoId}/shots/${shotIndex}/regenerate`, {});
   },
 
-  /** 批量重新生成选中分镜，保留未选中，最终合成 */
-  regenerateShots(videoId: string, shotIndices: number[]): Promise<{ id: string; status: string; video_url?: string }> {
-    return api.post(`/videos/${videoId}/regenerate-shots`, { shot_indices: shotIndices });
+  /** 批量重新生成选中分镜，保留未选中，最终合成。keepFrames=true 时用各片段原首尾帧约束新片 */
+  regenerateShots(videoId: string, shotIndices: number[], keepFrames = false): Promise<{ id: string; status: string; video_url?: string }> {
+    return api.post(`/videos/${videoId}/regenerate-shots`, { shot_indices: shotIndices, keep_frames: keepFrames });
   },
 
   /** 用已有分镜文件重新合成最终视频 */

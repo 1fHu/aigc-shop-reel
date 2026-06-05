@@ -22,6 +22,9 @@ import { ViralGene } from './entities/viral-gene.entity';
         entities: [User, Project, Material, Script, Video, VideoTask, AnalyzedVideo, ViralLibrary, ViralGene],
         synchronize: false,
         logging: config.get('NODE_ENV') === 'development' ? ['error', 'warn'] : ['error'],
+        // 连接池：默认 pg pool max=10，前端轮询 + 视频生成并发查询时易排队。给点余量；
+        // 连接获取超时后报错而非无限挂起，避免前端请求卡死（连不上时快速失败）。
+        extra: { max: 20, connectionTimeoutMillis: 10000 },
       }),
     }),
     TypeOrmModule.forFeature([User, Project, Material, Script, Video, VideoTask, AnalyzedVideo, ViralLibrary, ViralGene]),

@@ -54,6 +54,10 @@ export class MinioStorageService implements OnModuleInit {
     await this.getClient().putObject(this.bucketName, key, buffer, buffer.length, {
       'Content-Type': mimeType,
     });
+    const publicBase = this.config.get<string>('MEDIA_PUBLIC_BASE');
+    if (publicBase) {
+      return `${publicBase}/${this.bucketName}/${key}`;
+    }
     const endpoint = this.config.get<string>('MINIO_ENDPOINT', 'localhost');
     const port = this.config.get<number>('MINIO_PORT', 9000);
     return `http://${endpoint}:${port}/${this.bucketName}/${key}`;

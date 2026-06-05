@@ -25,11 +25,6 @@ export const genebankService = {
   async search(_query: ViralSearchQuery = {}): Promise<ViralCard[]> {
     const response: any = await api.get('/gene-bank/reference-videos');
 
-    // 🔍 调试日志 - 检查后端返回的原始数据
-    console.log('=== genebankService.search ===');
-    console.log('后端返回的原始数据（第一个）:', response[0]);
-    console.log('videoUrl 字段:', response[0]?.videoUrl);
-
     // 将后端的 ReferenceVideo 转换为前端的 ViralCard 格式
     const result = response.map((video: any) => ({
       id: video.id,
@@ -63,11 +58,6 @@ export const genebankService = {
       created_at: video.createdAt,
     }));
 
-    // 🔍 调试日志 - 检查转换后的数据
-    console.log('转换后的数据（第一个）:', result[0]);
-    console.log('video_url 字段:', result[0]?.video_url);
-    console.log('===========================');
-
     return result;
   },
 
@@ -77,11 +67,6 @@ export const genebankService = {
    */
   async getById(id: string): Promise<ViralCard> {
     const video: any = await api.get(`/gene-bank/reference-videos/${id}`);
-
-    // 🔍 调试日志
-    console.log('=== genebankService.getById ===');
-    console.log('后端返回的数据:', video);
-    console.log('videoUrl:', video.videoUrl);
 
     return {
       id: video.id,

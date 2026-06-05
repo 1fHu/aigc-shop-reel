@@ -65,7 +65,8 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(password, 10);
     const code = String(Math.floor(100000 + Math.random() * 900000));
     this.store.storeVerificationCode(email, code, passwordHash, nickname);
-    this.emailService.sendVerificationCode(email, code);
+    const sent = await this.emailService.sendVerificationCode(email, code);
+    if (!sent) throw new BadRequestException('验证码发送失败，请稍后重试');
     return { verifyPending: true, email };
   }
 

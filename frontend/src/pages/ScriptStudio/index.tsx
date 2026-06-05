@@ -257,6 +257,7 @@ export default function ScriptStudio() {
   const [regeneratingShots, setRegeneratingShots] = useState(false);
   const [shotSelectOpen, setShotSelectOpen] = useState(false);
   const [selectedShotIndices, setSelectedShotIndices] = useState<number[]>([]);
+  const [keepFrames, setKeepFrames] = useState(false);
 
   const handleGenerateVideo = useCallback(() => {
     if (!scriptId) { message.warning('请先生成或保存剧本'); return; }
@@ -294,12 +295,12 @@ export default function ScriptStudio() {
       if (!latest?.id) { message.error('未找到视频任务'); setRegeneratingShots(false); return; }
       const sorted = [...selectedShotIndices].sort((a, b) => a - b);
       // 批量再生：后端只重生选中的分镜，保留未选中，最终合成
-      await videoService.regenerateShots(latest.id, sorted);
+      await videoService.regenerateShots(latest.id, sorted, keepFrames);
       message.success(`${sorted.length} 个分镜已提交重新生成`);
       navigate(`/projects/${projectId}/video?scriptId=${scriptId}`);
     } catch { message.error('分镜重新生成失败'); }
     setRegeneratingShots(false);
-  }, [projectId, scriptId, selectedShotIndices, navigate, message]);
+  }, [projectId, scriptId, selectedShotIndices, keepFrames, navigate, message]);
 
   const handleViewVideo = useCallback(async () => {
     if (!projectId) return;
@@ -454,8 +455,13 @@ export default function ScriptStudio() {
         confirmLoading={regeneratingShots}
       >
         <p style={{ color: '#6B7280', marginBottom: 12, fontSize: 13 }}>
-          选中分镜将按顺序重新生成，前一个分镜的结尾画面会传给下一个以保证连贯。
+          选中分镜将重新生成，未选中的保留原片，最终自动合成。
         </p>
+        <div style={{ marginBottom: 12 }}>
+          <Checkbox checked={keepFrames} onChange={(e) => setKeepFrames(e.target.checked)}>
+            保留首尾帧衔接（用各片段原首/尾帧约束新片，开头结尾与原片一致、与前后衔接）
+          </Checkbox>
+        </div>
         {scenes.map((s) => (
           <div key={s.index} style={{ marginBottom: 8 }}>
             <Checkbox

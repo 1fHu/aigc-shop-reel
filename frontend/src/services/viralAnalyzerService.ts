@@ -44,6 +44,7 @@ export const viralAnalyzerService = {
     const formData = new FormData();
     formData.append('video', file);
 
+    // axios 拦截器已自动解包 envelope，直接拿 data（约定见 authService）
     return api.post('/viral-analyzer/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
