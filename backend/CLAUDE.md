@@ -249,7 +249,9 @@ npm run db:seed       # 灌入种子数据（scripts/seed-demo-data.sql）
 | `analyzeProductImage()` / `callDoubaoVision()` | 商品图 → 结构化商品信息 | 无 Key 时返回桩结果 |
 | `analyzeMaterial()` | 素材 → Vision 打标 + Embedding(1024 维) 向量 | 无 Key 时返回桩 |
 | `generateScript()` | 商品 → 分镜脚本（配合 `script/director-agent.service.ts`，无 Key 时走「商品感知模板」降级） | 见 director-agent |
-| `generateVideo()`（Seedance 1.5 Pro，支持多参考图）+ `getVideoTaskStatus()` | 分镜 prompt + 参考图 → 视频任务，轮询取片 | 无 Key 时 mock |
+| `generateVideo()`（Seedance）+ `getVideoTaskStatus()` | 分镜 prompt(+首尾帧/参考图) → 视频任务，轮询取片 | 无 Key 时 mock |
+
+> ⚠️ **Seedance content/role 契约**：`generateVideo` 的 `content[]` 里每个 `image_url` **必须带 `role`** —— `first_frame`(首帧) / `last_frame`(尾帧) / `reference_image`(参考图)，否则 400 `role must be specified for image contents`。**首尾帧(i2v)** 所有端点都支持；**参考图(reference_image→r2v)** 只有 **Seedance 2.0** 等端点支持，**1.5-pro 不支持**（否则 400 `task_type r2v does not support model ...`）。因此参考图由开关 `VOLCANO_SEEDANCE_R2V_ENABLED` 控制（默认 `false`=不传参考图），换 2.0 端点后才设 `true`。视频生成流程：全量生成不传首尾帧；批量/单镜重生成可选「该片段原首+尾帧」(`keep_frames`)约束新片。
 
 **素材的创建路径（图片 + 视频上传，异步解析）：**
 ```

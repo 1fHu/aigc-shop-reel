@@ -58,6 +58,33 @@ export default function ScriptStudio() {
   const handleSubColor = (v: string) => { setSubtitleColor(v); localStorage.setItem('vidcraft_sub_color', v); };
   const handleSubFontFamily = (v: string) => { setSubtitleFontFamily(v); localStorage.setItem('vidcraft_sub_font', v); };
 
+  // ---- 读取爆款模板库应用的创作因子 ----
+  useEffect(() => {
+    const appliedData = sessionStorage.getItem('genebank_applied');
+    if (appliedData) {
+      try {
+        const { viral_id, factors } = JSON.parse(appliedData);
+        console.log('=== 应用爆款模板库因子 ===');
+        console.log('来源视频:', viral_id);
+        console.log('创作因子:', factors);
+
+        // 应用创作因子到 factorState
+        setFactorState((prev) => ({
+          ...prev,
+          ...factors,
+        }));
+
+        // 显示提示
+        message.success(`已应用爆款模板「${viral_id}」的创作因子`);
+
+        // 清除 sessionStorage（避免重复应用）
+        sessionStorage.removeItem('genebank_applied');
+      } catch (err) {
+        console.error('解析创作因子失败:', err);
+      }
+    }
+  }, [message]);
+
   // ---- load existing script + factors on mount ----
   useEffect(() => {
     if (!projectId) return;
@@ -90,7 +117,26 @@ export default function ScriptStudio() {
     let cleared = false;
     try {
       const pid = projectId || '';
-      for await (const event of scriptService.generate({ project_id: pid, strategy_type: 'pain_point' })) {
+
+      // 读取爆款模板库应用的参考视频 ID
+      let referenceVideoId: string | undefined;
+      const appliedData = sessionStorage.getItem('genebank_applied');
+      if (appliedData) {
+        try {
+          const { viral_id } = JSON.parse(appliedData);
+          referenceVideoId = viral_id;
+          console.log('🎬 使用爆款模板参考视频:', referenceVideoId);
+        } catch (err) {
+          console.error('解析参考视频ID失败:', err);
+        }
+      }
+
+      // 生成剧本
+      for await (const event of scriptService.generate({
+        project_id: pid,
+        strategy_type: 'pain_point',
+        reference_video_id: referenceVideoId,
+      })) {
         if (event.type === 'scene') {
           if (!cleared) { setScenes([]); cleared = true; }
           setScenes((prev) => [...prev, event.scene]);
@@ -211,6 +257,7 @@ export default function ScriptStudio() {
   const [regeneratingShots, setRegeneratingShots] = useState(false);
   const [shotSelectOpen, setShotSelectOpen] = useState(false);
   const [selectedShotIndices, setSelectedShotIndices] = useState<number[]>([]);
+  const [keepFrames, setKeepFrames] = useState(false);
 
   const handleGenerateVideo = useCallback(() => {
     if (!scriptId) { message.warning('请先生成或保存剧本'); return; }
@@ -248,12 +295,12 @@ export default function ScriptStudio() {
       if (!latest?.id) { message.error('未找到视频任务'); setRegeneratingShots(false); return; }
       const sorted = [...selectedShotIndices].sort((a, b) => a - b);
       // 批量再生：后端只重生选中的分镜，保留未选中，最终合成
-      await videoService.regenerateShots(latest.id, sorted);
+      await videoService.regenerateShots(latest.id, sorted, keepFrames);
       message.success(`${sorted.length} 个分镜已提交重新生成`);
       navigate(`/projects/${projectId}/video?scriptId=${scriptId}`);
     } catch { message.error('分镜重新生成失败'); }
     setRegeneratingShots(false);
-  }, [projectId, scriptId, selectedShotIndices, navigate, message]);
+  }, [projectId, scriptId, selectedShotIndices, keepFrames, navigate, message]);
 
   const handleViewVideo = useCallback(async () => {
     if (!projectId) return;
@@ -408,8 +455,13 @@ export default function ScriptStudio() {
         confirmLoading={regeneratingShots}
       >
         <p style={{ color: '#6B7280', marginBottom: 12, fontSize: 13 }}>
-          选中分镜将按顺序重新生成，前一个分镜的结尾画面会传给下一个以保证连贯。
+          选中分镜将重新生成，未选中的保留原片，最终自动合成。
         </p>
+        <div style={{ marginBottom: 12 }}>
+          <Checkbox checked={keepFrames} onChange={(e) => setKeepFrames(e.target.checked)}>
+            保留首尾帧衔接（用各片段原首/尾帧约束新片，开头结尾与原片一致、与前后衔接）
+          </Checkbox>
+        </div>
         {scenes.map((s) => (
           <div key={s.index} style={{ marginBottom: 8 }}>
             <Checkbox

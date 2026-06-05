@@ -6,9 +6,10 @@ import { ScriptService } from './script.service';
 import { DirectorAgentService } from './director-agent.service';
 import { Script } from '../../database/entities/script.entity';
 import { Project } from '../../database/entities/project.entity';
+import { GeneBankModule } from '../gene-bank/gene-bank.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Script, Project])],
+  imports: [TypeOrmModule.forFeature([Script, Project]), GeneBankModule],
   controllers: [ScriptController, FactorsController],
   providers: [ScriptService, DirectorAgentService],
   exports: [ScriptService, DirectorAgentService],

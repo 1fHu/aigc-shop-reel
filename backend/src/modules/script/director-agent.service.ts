@@ -1,6 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ScriptShot } from './script.service';
+import { CreativeFactors } from '../gene-bank/types/creative-factors.type';
+import { GeneBankService } from '../gene-bank/gene-bank.service';
 
 /** 允许的运镜方式（AI 越界时归一化到 static） */
 const CAMERA_MOTIONS = ['push-in', 'static', 'tracking', 'pan', 'zoom-out', 'handheld'];
@@ -14,7 +16,7 @@ const STRATEGY_LABELS: Record<string, string> = {
 };
 
 /**
- * 导演 Agent —— 根据商品信息 + 创作策略生成多分镜带货脚本。
+ * 导演 Agent —— 根据商品信息 + 创作策略 + 创作因子生成多分镜带货脚本。
  *
  * 真实路径：调用 Doubao（火山方舟 Ark Chat Completions）让模型产出 JSON 分镜数组。
  * 降级路径：未配置 API Key / 调用或解析失败时，回退到「商品感知」的模板分镜
@@ -28,7 +30,10 @@ export class DirectorAgentService {
   private readonly apiKey: string;
   private readonly doubaoEp: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly geneBank: GeneBankService,
+  ) {
     this.apiKey = this.config.get<string>('VOLCANO_ACCESS_KEY', '');
     this.doubaoEp = this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
   }
@@ -37,8 +42,9 @@ export class DirectorAgentService {
   async generateStoryboard(
     productInfo: Record<string, unknown>,
     strategyType: string,
+    creativeFactors?: CreativeFactors,
   ): Promise<ScriptShot[]> {
-    const aiShots = await this.callDoubao(productInfo, strategyType);
+    const aiShots = await this.callDoubao(productInfo, strategyType, creativeFactors);
     if (aiShots && aiShots.length > 0) {
       const normalized = this.normalize(aiShots);
       if (normalized.length > 0) {
@@ -124,16 +130,27 @@ ${context}
   private async callDoubao(
     productInfo: Record<string, unknown>,
     strategyType: string,
+    creativeFactors?: CreativeFactors,
   ): Promise<Partial<ScriptShot>[] | null> {
     if (!this.apiKey || !this.doubaoEp) return null;
     const strategy = STRATEGY_LABELS[strategyType] || strategyType || '通用带货';
-    const prompt = `你是 TikTok 电商带货短视频的导演。请基于商品信息和创作策略，生成 4-6 个分镜的脚本。
+
+    // 基础 prompt
+    let prompt = `你是 TikTok 电商带货短视频的导演。请基于商品信息和创作策略，生成 4-6 个分镜的脚本。
 严格只返回一个 JSON 数组，数组每个元素格式：
 {"description":"画面内容(中文一句话)","camera_motion":"运镜方式，取值之一: push-in/static/tracking/pan/zoom-out/handheld","duration":分镜时长秒数(2-5的整数),"voiceover":"口播文案(中文)","subtitle":"字幕(中文，简短)"}
 分镜应按顺序覆盖：抓眼球的开场 Hook → 产品外观/卖点特写 → 使用场景或效果展示 → 细节/信任背书 → 行动号召 CTA。
 创作策略：${strategy}
-商品信息：${JSON.stringify(productInfo)}
-只返回 JSON 数组本身，不要 markdown 代码块，不要任何额外说明文字。`;
+商品信息：${JSON.stringify(productInfo)}`;
+
+    // 如果提供了创作因子，添加详细的风格指导
+    if (creativeFactors) {
+      const factorPrompt = this.geneBank.factorsToPromptEnhancement(creativeFactors);
+      prompt += `\n\n【重要】请严格遵循以下创作因子：\n${factorPrompt}`;
+      this.logger.log('应用创作因子到 prompt');
+    }
+
+    prompt += '\n\n只返回 JSON 数组本身，不要 markdown 代码块，不要任何额外说明文字。';
 
     try {
       const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
@@ -142,7 +159,7 @@ ${context}
         body: JSON.stringify({
           model: this.doubaoEp,
           messages: [{ role: 'user', content: prompt }],
-          max_tokens: 1200,
+          max_tokens: 1500, // 增加 token 数以支持更详细的因子指导
         }),
       });
       const data = await res.json();

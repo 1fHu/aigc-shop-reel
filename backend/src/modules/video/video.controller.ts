@@ -48,14 +48,14 @@ export class VideoController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post(':id/shots/:index/regenerate')
-  async regenerateShot(@Param('id') id: string, @Param('index') index: string, @Body() body: { new_prompt?: string }) {
-    return ok(await this.videoService.regenerateShot(id, Number(index), body.new_prompt));
+  async regenerateShot(@Param('id') id: string, @Param('index') index: string, @Body() body: { new_prompt?: string; keep_frames?: boolean }) {
+    return ok(await this.videoService.regenerateShot(id, Number(index), body.new_prompt, body.keep_frames ?? false));
   }
 
   @UseGuards(AuthGuard('jwt'))
   @Post(':id/regenerate-shots')
-  async regenerateShots(@Param('id') id: string, @Body() body: { shot_indices: number[] }) {
-    return ok(await this.videoService.regenerateShots(id, body.shot_indices));
+  async regenerateShots(@Param('id') id: string, @Body() body: { shot_indices: number[]; keep_frames?: boolean }) {
+    return ok(await this.videoService.regenerateShots(id, body.shot_indices, body.keep_frames ?? false));
   }
 
   @UseGuards(AuthGuard('jwt'))

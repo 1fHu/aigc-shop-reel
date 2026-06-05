@@ -68,6 +68,7 @@ export interface ViralCard {
   source_url: string | null;
   declared_at: string;              // 合规声明时间
   thumbnail_url: string;
+  video_url?: string;                // 视频 URL（可选）
   status: ViralStatus;
   performance_score: number | null; // 0-100 性能评分
   analysis_report: ViralAnalysisReport;

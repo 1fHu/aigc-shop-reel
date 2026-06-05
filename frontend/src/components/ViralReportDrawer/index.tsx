@@ -104,10 +104,23 @@ export default function ViralReportDrawer({ open, cardId, onClose, onApplyFactor
 
       {!loading && card && (
         <div className={styles.body}>
-          {/* 顶部：视频基本信息 */}
+          {/* 顶部：视频播放器 */}
           <div className={styles.header}>
-            <div className={styles.thumbBox}>
-              <img src={card.thumbnail_url} alt={card.title} />
+            <div className={styles.videoBox}>
+              {card.video_url ? (
+                <video
+                  controls
+                  preload="metadata"
+                  style={{ width: '100%', maxHeight: '400px', borderRadius: '8px', backgroundColor: '#000' }}
+                >
+                  <source src={`http://localhost:3000${card.video_url}`} type="video/mp4" />
+                  您的浏览器不支持视频播放
+                </video>
+              ) : (
+                <div className={styles.thumbBox}>
+                  <img src={card.thumbnail_url} alt={card.title} />
+                </div>
+              )}
               <span className={styles.platformPill}>
                 {VIRAL_PLATFORM_LABELS[card.platform]}
               </span>
@@ -125,9 +138,6 @@ export default function ViralReportDrawer({ open, cardId, onClose, onApplyFactor
                   来源：<a href={card.source_url} target="_blank" rel="noreferrer">{card.source_url}</a>
                 </div>
               )}
-              <div className={styles.complianceHint}>
-                ⚠️ 仅 AI 结构化分析，未存储原视频内容
-              </div>
             </div>
           </div>
 
