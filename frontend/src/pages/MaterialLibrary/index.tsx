@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Upload, App, Modal } from 'antd';
-import { UploadOutlined, DownOutlined, CloseOutlined, ThunderboltOutlined, DeleteOutlined, ExclamationCircleOutlined } from '@ant-design/icons';
+import { UploadOutlined, DownOutlined, CloseOutlined, ThunderboltOutlined, DeleteOutlined, ExclamationCircleOutlined, EditOutlined } from '@ant-design/icons';
 import type { RcFile } from 'antd/es/upload';
 import { productService } from '@/services/productService';
 import { materialService } from '@/services/materialService';
-import type { MaterialListItem } from '@/types';
+import type { MaterialListItem, ParsedProduct } from '@/types';
+import ManualProductFormModal from '@/components/ManualProductFormModal';
 import styles from './MaterialLibrary.module.css';
 
 type MaterialType = 'all' | 'image' | 'video';
@@ -20,6 +21,12 @@ type MaterialItem = {
   time: string;
   fileSize: string;
   fileType: string;
+  // 普通素材字段（来自素材 AI 分析）
+  description?: string;
+  quality?: string;
+  suitableFor?: string;
+  tags?: string[];
+  // 商品主图字段（来自 product.parseImage 顺带建的那条素材）
   category?: string;
   sellingPoints?: string[];
   targetAudience?: string;
@@ -30,16 +37,23 @@ type MaterialItem = {
 
 function toMaterialItem(m: MaterialListItem): MaterialItem {
   const a = m.analysis || {};
+  // 商品主图素材带 selling_points，普通素材没有——据此区分两类卡片展示
+  const isProduct = Array.isArray(a.selling_points);
   return {
     id: m.id,
     type: m.file_type,
-    name: (a.name as string) || m.file_name || '未命名',
+    // 标题：普通素材用 AI 概括的「主要内容」(summary)；商品主图用商品名(name)；都没有回退文件名
+    name: (a.summary as string) || (a.name as string) || m.file_name || '未命名',
     cover: (a.cover_url as string) || m.thumbnail_url || '',
-    tag: m.status === 'ready' ? 'PRODUCT' : undefined,
+    tag: isProduct ? 'PRODUCT' : undefined,
     duration: m.duration ? `${Math.round(m.duration)}s` : undefined,
     time: m.created_at ? new Date(m.created_at).toLocaleDateString('zh-CN') : '',
     fileSize: m.file_size ? `${(m.file_size / 1024 / 1024).toFixed(1)} MB` : '未知',
     fileType: m.file_type === 'video' ? 'video/mp4' : 'image/jpeg',
+    description: a.description as string,
+    quality: a.quality as string,
+    suitableFor: a.suitable_for as string,
+    tags: m.tags,
     category: a.category as string,
     sellingPoints: a.selling_points as string[],
     targetAudience: a.target_audience as string,
@@ -61,6 +75,9 @@ export default function MaterialLibrary() {
   const [uploadMode, setUploadMode] = useState<'cover' | 'material' | null>(null);
   // 是否已有商品主图：决定头部按钮显示「上传商品主图」还是「上传素材」
   const [hasCover, setHasCover] = useState(false);
+  // 当前商品信息（用于「编辑商品信息」Modal 的初值）；无主图时为 null
+  const [product, setProduct] = useState<ParsedProduct | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const pollingRef = useRef(false);
 
@@ -79,6 +96,7 @@ export default function MaterialLibrary() {
     try {
       const p = await productService.get(pid);
       setHasCover(!!p.cover_url);
+      setProduct(p.name ? p : null);
     } catch {
       // 项目必然存在（已在素材页），失败仅当作"暂无主图"，不额外提示
     }
@@ -175,9 +193,16 @@ export default function MaterialLibrary() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div><h1 className={styles.title}>素材库</h1><p className={styles.subtitle}>上传商品图片，AI 自动解析并生成视频素材</p></div>
-        <button className={styles.uploadBtn} onClick={() => setUploadMode(hasCover ? 'material' : 'cover')}>
-          <UploadOutlined /> {hasCover ? '上传素材' : '上传商品主图'}
-        </button>
+        <div className={styles.headerActions}>
+          {hasCover && (
+            <button className={styles.editBtn} onClick={() => setEditOpen(true)}>
+              <EditOutlined /> 编辑商品信息
+            </button>
+          )}
+          <button className={styles.uploadBtn} onClick={() => setUploadMode(hasCover ? 'material' : 'cover')}>
+            <UploadOutlined /> {hasCover ? '上传素材' : '上传商品主图'}
+          </button>
+        </div>
       </div>
 
       <div className={styles.filters}>
@@ -221,7 +246,9 @@ export default function MaterialLibrary() {
               </div>
               <div className={styles.cardBody}>
                 <div className={styles.cardTitle}>{m.name}</div>
-                {m.category && <div style={{fontSize:11,color:'#4648D4',marginTop:2}}>{m.category}</div>}
+                {m.category
+                  ? <div style={{fontSize:11,color:'#4648D4',marginTop:2}}>{m.category}</div>
+                  : m.description && <div style={{fontSize:11,color:'#9CA3AF',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.description}</div>}
                 <div className={styles.cardMeta}><span>{m.time}</span><span className={styles.mono}>{m.fileSize}</span></div>
               </div>
             </div>
@@ -236,11 +263,21 @@ export default function MaterialLibrary() {
           <div className={styles.drawerImage}><img src={active.cover} alt={active.name}/></div>
           <div className={styles.sectionLabel}>素材名称</div><div style={{fontSize:16,fontWeight:500,marginBottom:12}}>{active.name}</div>
           <div className={styles.detailGrid}>
-            <div className={styles.detailCard}><div className={styles.detailLabel}>品类</div><div className={styles.detailValue}>{active.category||'--'}</div></div>
+            {active.category && <div className={styles.detailCard}><div className={styles.detailLabel}>品类</div><div className={styles.detailValue}>{active.category}</div></div>}
+            {active.quality && <div className={styles.detailCard}><div className={styles.detailLabel}>画质</div><div className={styles.detailValue}>{active.quality}</div></div>}
             <div className={styles.detailCard}><div className={styles.detailLabel}>状态</div><div className={styles.detailValue}>{active.status}</div></div>
             <div className={styles.detailCard}><div className={styles.detailLabel}>文件大小</div><div className={styles.detailValue}>{active.fileSize}</div></div>
             <div className={styles.detailCard}><div className={styles.detailLabel}>文件类型</div><div className={styles.detailValue}>{active.fileType}</div></div>
           </div>
+          {active.description && <div style={{marginTop:16}}><div className={styles.sectionLabel}>内容描述</div><div style={{fontSize:13,color:'#6B7280',marginTop:4}}>{active.description}</div></div>}
+          {active.tags && active.tags.length > 0 && (
+            <div style={{marginTop:16}}><div className={styles.sectionLabel}>标签</div>
+              <div style={{display:'flex',flexWrap:'wrap',gap:6,marginTop:8}}>
+                {active.tags.map((t)=><span key={t} style={{fontSize:12,color:'#4648D4',background:'#F5F5FF',border:'1px solid #E0E0FF',borderRadius:999,padding:'2px 10px'}}>{t}</span>)}
+              </div>
+            </div>
+          )}
+          {active.suitableFor && <div style={{marginTop:16}}><div className={styles.sectionLabel}>适用场景</div><div style={{fontSize:13,color:'#6B7280',marginTop:4}}>{active.suitableFor}</div></div>}
           {active.sellingPoints && active.sellingPoints.length > 0 && (
             <div style={{marginTop:16}}><div className={styles.sectionLabel}>核心卖点</div><ul style={{margin:'8px 0 0',paddingLeft:16,fontSize:13,color:'#6B7280',lineHeight:1.8}}>{active.sellingPoints.map((p:string)=><li key={p}>{p}</li>)}</ul></div>
           )}
@@ -275,6 +312,20 @@ export default function MaterialLibrary() {
           )}
         </div>
       </Modal>
+
+      {pid && (
+        <ManualProductFormModal
+          open={editOpen}
+          projectId={pid}
+          initialValue={product}
+          onClose={() => setEditOpen(false)}
+          onSaved={(saved) => {
+            setProduct(saved);
+            setHasCover(!!saved.cover_url);
+            loadMaterials();   // 后端已同步主图素材 analysis，刷新 grid 反映新值
+          }}
+        />
+      )}
 
       <button type="button" className={styles.fab} onClick={handleGenerateVideo} title="生成视频">
         <ThunderboltOutlined style={{fontSize:22}}/>

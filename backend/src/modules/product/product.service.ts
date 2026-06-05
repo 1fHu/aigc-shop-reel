@@ -41,22 +41,26 @@ export class ProductService {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
     if (!project) throw new NotFoundException('项目不存在');
 
-    const aiResult = await this.volcano.analyzeProductImage(imageName, imageBuffer);
-
-    // Upload to MinIO
-    let fileUrl = '';
-    if (imageBuffer) {
+    // Vision 解析与 MinIO 上传互不依赖，并行跑（MinIO 上传时间被 Vision 调用覆盖）
+    const uploadPromise = (async (): Promise<string> => {
+      if (!imageBuffer) return '';
       const fileExt = imageName.split('.').pop() || 'jpg';
       const key = `projects/${projectId}/products/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${fileExt}`;
-      try { fileUrl = await this.minio.uploadFile(key, imageBuffer, 'image/jpeg'); }
-      catch (err) { this.logger.warn(`MinIO upload failed: ${(err as Error).message}`); }
-    }
+      try { return await this.minio.uploadFile(key, imageBuffer, 'image/jpeg'); }
+      catch (err) { this.logger.warn(`MinIO upload failed: ${(err as Error).message}`); return ''; }
+    })();
+    const [aiResult, fileUrl] = await Promise.all([
+      this.volcano.analyzeProductImage(imageName, imageBuffer),
+      uploadPromise,
+    ]);
 
     const coverUrl = fileUrl || `https://placehold.co/400x600/E2E8F0/475569?text=${encodeURIComponent(aiResult.name)}`;
     const productInfo = { ...aiResult, cover_url: coverUrl };
 
-    // Update project product_info
-    await this.projectRepo.update(projectId, { productInfo, coverUrl, status: 'material_pending' });
+    const analysis = { name: aiResult.name, category: aiResult.category, selling_points: aiResult.selling_points, target_audience: aiResult.target_audience, usage_scene: aiResult.usage_scene, price_anchor: aiResult.price_anchor, cover_url: coverUrl };
+
+    // 让主图素材也进向量检索空间：多模态 embedding（商品图 + analysis 文本），与素材分析同一空间
+    const embedding = await this.volcano.generateEmbedding({ text: JSON.stringify(analysis), imageBuffer });
 
     // Create material record in materials table
     const material = this.materialRepo.create({
@@ -65,13 +69,19 @@ export class ProductService {
       fileType: 'image',
       fileName: imageName,
       fileSize: imageBuffer?.length || 0,
-      analysis: { name: aiResult.name, category: aiResult.category, selling_points: aiResult.selling_points, target_audience: aiResult.target_audience, usage_scene: aiResult.usage_scene, price_anchor: aiResult.price_anchor, cover_url: coverUrl },
+      analysis,
+      embedding: embedding || null,
       tags: aiResult.selling_points?.slice(0, 5) || [],
       thumbnailUrl: coverUrl,
       status: 'ready',
       slices: [],
     } as Material);
-    const savedMaterial = await this.materialRepo.save(material);
+
+    // 更新项目 product_info 与建素材记录互不依赖，并行写
+    const [, savedMaterial] = await Promise.all([
+      this.projectRepo.update(projectId, { productInfo, coverUrl, status: 'material_pending' }),
+      this.materialRepo.save(material),
+    ]);
 
     return { ...productInfo, material_id: savedMaterial.id };
   }
@@ -80,10 +90,38 @@ export class ProductService {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
     if (!project) throw new NotFoundException('项目不存在');
     const existing = (project.productInfo ?? {}) as Record<string, unknown>;
-    const merged = { ...existing, ...productInfo };
+    const merged = { ...existing, ...productInfo, cover_url: project.coverUrl ?? (existing.cover_url as string) ?? null };
     await this.projectRepo.update(projectId, { productInfo: merged, status: 'material_pending' });
+
+    // 同步主图素材的 analysis，使素材库 grid 卡片/详情与商品信息保持一致。
+    // 主图素材 = 该项目里 thumbnailUrl 等于项目 cover_url 的图片素材（parseImage 落库时三者同源）。
+    await this.syncCoverMaterial(project, productInfo);
+
     const updated = await this.projectRepo.findOne({ where: { id: projectId } });
     return this.toFlatProduct(updated!);
+  }
+
+  /** 把编辑后的商品信息回写到「主图素材」那条 materials 记录（analysis + tags），找不到则跳过 */
+  private async syncCoverMaterial(project: Project, productInfo: UpdateProductDto) {
+    if (!project.coverUrl) return;
+    const coverMaterial = await this.materialRepo.findOne({
+      where: { projectId: project.id, thumbnailUrl: project.coverUrl, fileType: 'image' },
+    });
+    if (!coverMaterial) return;
+    const analysis = {
+      ...((coverMaterial.analysis ?? {}) as Record<string, unknown>),
+      name: productInfo.name,
+      category: productInfo.category,
+      selling_points: productInfo.selling_points,
+      target_audience: productInfo.target_audience,
+      usage_scene: productInfo.usage_scene,
+      price_anchor: productInfo.price_anchor,
+      cover_url: project.coverUrl,
+    };
+    await this.materialRepo.update(coverMaterial.id, {
+      analysis,
+      tags: productInfo.selling_points?.slice(0, 5) ?? [],
+    });
   }
 
   async confirm(projectId: string) {
