@@ -153,19 +153,26 @@ export class VolcanoApiService {
       return null;
     }
     try {
+      // Seedance 要求 content 内每个 image_url 必须带 role：
+      // first_frame=首帧、last_frame=尾帧、reference_image=参考图（多参考，1.5 Pro 支持）
       const content: unknown[] = [];
+
+      // 首尾帧控制：通过 content 内 image_url 的 role 指定，而非顶层参数
+      if (opts?.startImage) {
+        content.push({ type: 'image_url', image_url: { url: opts.startImage }, role: 'first_frame' });
+      }
+      if (opts?.endImage) {
+        content.push({ type: 'image_url', image_url: { url: opts.endImage }, role: 'last_frame' });
+      }
+
       for (const url of imageUrls) {
         if (url && !url.includes('placehold.co')) {
-          content.push({ type: 'image_url', image_url: { url } });
+          content.push({ type: 'image_url', image_url: { url }, role: 'reference_image' });
         }
       }
       content.push({ type: 'text', text: prompt });
 
       const body: Record<string, unknown> = { model: this.seedanceEp, content };
-
-      // 首尾帧控制：start_image 约束视频第一帧，end_image 约束最后一帧
-      if (opts?.startImage) body.start_image = opts.startImage;
-      if (opts?.endImage) body.end_image = opts.endImage;
 
       const hasFrameControl = !!(opts?.startImage || opts?.endImage);
       this.logger.log(`Seedance submit: refs=${imageUrls.length} startFrame=${!!opts?.startImage} endFrame=${!!opts?.endImage}`);
