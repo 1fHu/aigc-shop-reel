@@ -96,6 +96,7 @@ CREATE TABLE videos (
     status VARCHAR(20) DEFAULT 'pending',
     trace_id VARCHAR(36),
     generation_cost FLOAT,
+    settings JSONB,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
