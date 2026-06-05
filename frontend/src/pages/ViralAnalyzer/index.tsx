@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, message, Card, List, Tag, Button, Empty, Spin } from 'antd';
 import { InboxOutlined, PlayCircleOutlined, DeleteOutlined, ThunderboltOutlined } from '@ant-design/icons';
@@ -18,22 +18,23 @@ const ViralAnalyzer: React.FC = () => {
   const limit = 12;
 
   // 加载视频列表
-  const loadVideos = async () => {
+  const loadVideos = useCallback(async () => {
     setLoading(true);
     try {
       const data = await viralAnalyzerService.getList({ page, limit });
       setVideos(data.items);
       setTotal(data.total);
-    } catch (error) {
+    } catch {
       message.error('加载失败');
     } finally {
       setLoading(false);
     }
-  };
+  }, [page]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadVideos();
-  }, [page]);
+  }, [loadVideos]);
 
   // 上传配置
   const uploadProps: UploadProps = {
@@ -62,9 +63,10 @@ const ViralAnalyzer: React.FC = () => {
         onSuccess?.(result);
         // 刷新列表
         loadVideos();
-      } catch (error: any) {
-        message.error(error.response?.data?.msg || '上传失败');
-        onError?.(error);
+      } catch (error) {
+        const msg = (error as { response?: { data?: { msg?: string } } }).response?.data?.msg;
+        message.error(msg || '上传失败');
+        onError?.(error as Error);
       } finally {
         setUploading(false);
       }
@@ -78,7 +80,7 @@ const ViralAnalyzer: React.FC = () => {
       await viralAnalyzerService.delete(id);
       message.success('删除成功');
       loadVideos();
-    } catch (error) {
+    } catch {
       message.error('删除失败');
     }
   };

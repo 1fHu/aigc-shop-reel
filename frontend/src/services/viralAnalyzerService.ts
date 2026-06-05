@@ -44,13 +44,11 @@ export const viralAnalyzerService = {
     const formData = new FormData();
     formData.append('video', file);
 
-    const response = await api.post('/viral-analyzer/upload', formData, {
+    return api.post('/viral-analyzer/upload', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
     });
-
-    return response.data.data;
   },
 
   /**
@@ -62,16 +60,14 @@ export const viralAnalyzerService = {
     page: number;
     limit: number;
   }> {
-    const response = await api.get('/viral-analyzer/list', { params });
-    return response.data.data;
+    return api.get('/viral-analyzer/list', { params });
   },
 
   /**
    * 获取拆解详情
    */
   async getDetail(id: string): Promise<AnalyzedVideo> {
-    const response = await api.get(`/viral-analyzer/${id}`);
-    return response.data.data;
+    return api.get(`/viral-analyzer/${id}`);
   },
 
   /**
@@ -79,5 +75,12 @@ export const viralAnalyzerService = {
    */
   async delete(id: string): Promise<void> {
     await api.delete(`/viral-analyzer/${id}`);
+  },
+
+  /**
+   * 同步到基因库
+   */
+  async syncToGenebank(id: string): Promise<{ message: string; genebank_id: string }> {
+    return await api.post(`/viral-analyzer/${id}/sync-to-genebank`);
   },
 };

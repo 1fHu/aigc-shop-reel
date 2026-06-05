@@ -2,17 +2,25 @@ import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AnalyzedVideo } from '../../database/entities/analyzed-video.entity';
+import { ViralLibrary } from '../../database/entities/viral-library.entity';
 import * as fs from 'fs';
 import * as path from 'path';
+import { VideoFrameExtractor } from './helpers/video-frame-extractor';
+import { AIAnalyzerService } from './services/ai-analyzer.service';
 
 @Injectable()
 export class ViralAnalyzerService {
   private readonly logger = new Logger(ViralAnalyzerService.name);
+  private readonly aiAnalyzer: AIAnalyzerService;
 
   constructor(
     @InjectRepository(AnalyzedVideo)
     private readonly analyzedVideoRepo: Repository<AnalyzedVideo>,
-  ) {}
+    @InjectRepository(ViralLibrary)
+    private readonly viralLibraryRepo: Repository<ViralLibrary>,
+  ) {
+    this.aiAnalyzer = new AIAnalyzerService();
+  }
 
   /**
    * 创建视频拆解任务
@@ -52,43 +60,55 @@ export class ViralAnalyzerService {
       // 更新状态为 analyzing
       await this.analyzedVideoRepo.update(videoId, { status: 'analyzing' });
 
-      // TODO: 实现实际的 AI 分析逻辑
+      const video = await this.analyzedVideoRepo.findOne({ where: { id: videoId } });
+      if (!video) {
+        throw new Error('视频记录不存在');
+      }
+
       // 1. 提取视频关键帧
-      // 2. 调用 LLM 分析
-      // 3. 提取创作因子
+      const framesDir = path.join(process.cwd(), '../uploads/temp-frames', videoId);
+      this.logger.log(`提取关键帧到: ${framesDir}`);
 
-      // 模拟分析过程
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      const frames = await VideoFrameExtractor.extractKeyFrames(
+        video.videoPath,
+        framesDir,
+        10, // 提取10帧
+      );
+      this.logger.log(`提取了 ${frames.length} 个关键帧`);
 
-      // 模拟分析结果
-      const mockAnalysis = {
-        hook: {
-          time_range: '00:00 — 00:03',
-          content: '大特写产品在光下旋转，伴 0.5s 重低音 sting，瞬间锁定注意力。',
-        },
-        selling_points: [
-          '40dB 主动降噪 · 直接 demo 对比',
-          '14 小时续航 · 数字翻牌动效',
-          '3 麦克风通话降噪 · 真人示范',
-        ],
-        pacing: '9 个分镜 / 30 秒，平均 3.3s 一镜，高密度叙事，符合 Z 世代节奏。',
-        style: '冷色调 + 局部金色暖光，质感工业风，与产品科技感高度协调。',
-      };
+      // 2. 生成缩略图
+      const thumbnailDir = path.join(process.cwd(), '../uploads/analyzed-videos/thumbnails');
+      const thumbnailPath = path.join(thumbnailDir, `${videoId}.jpg`);
 
-      const mockFactors = {
-        visual_style: '极简主义',
-        opener: '悬念诱导',
-        narration: '冷静知性',
-        pacing: '快节奏（3s/镜）',
-        cta: '限时优惠',
-      };
+      try {
+        await VideoFrameExtractor.extractThumbnail(video.videoPath, thumbnailPath);
+        this.logger.log(`生成缩略图: ${thumbnailPath}`);
+      } catch (err) {
+        this.logger.warn('缩略图生成失败，继续分析', err);
+      }
 
-      // 更新分析结果
+      // 3. AI 分析
+      this.logger.log('调用 AI 分析...');
+      const result = await this.aiAnalyzer.analyzeVideo(frames);
+
+      // 4. 更新数据库
       await this.analyzedVideoRepo.update(videoId, {
         status: 'completed',
-        analysis: mockAnalysis,
-        creativeFactors: mockFactors,
+        analysis: {
+          hook: result.hook,
+          selling_points: result.selling_points,
+          pacing: result.pacing,
+          style: result.style,
+        },
+        creativeFactors: result.creative_factors,
+        thumbnailPath: fs.existsSync(thumbnailPath) ? thumbnailPath : undefined,
       });
+
+      // 5. 清理临时文件
+      if (fs.existsSync(framesDir)) {
+        fs.rmSync(framesDir, { recursive: true });
+        this.logger.log('已清理临时帧文件');
+      }
 
       this.logger.log(`视频分析完成: ${videoId}`);
     } catch (error) {
@@ -130,6 +150,12 @@ export class ViralAnalyzerService {
       throw new NotFoundException('视频不存在');
     }
 
+    // 添加虚拟字段（使用下划线命名）
+    (video as any).video_url = `/api/viral-analyzer/videos/${video.id}/stream`;
+    (video as any).thumbnail_url = video.thumbnailPath
+      ? `/api/viral-analyzer/videos/${video.id}/thumbnail`
+      : null;
+
     return video;
   }
 
@@ -169,6 +195,21 @@ export class ViralAnalyzerService {
   }
 
   /**
+   * 公开获取视频（用于视频流和缩略图，不需要用户认证）
+   */
+  async getVideoByIdPublic(id: string): Promise<AnalyzedVideo> {
+    const video = await this.analyzedVideoRepo.findOne({
+      where: { id },
+    });
+
+    if (!video) {
+      throw new NotFoundException('视频不存在');
+    }
+
+    return video;
+  }
+
+  /**
    * 从文件名提取标题
    */
   private extractTitle(filename: string): string {
@@ -176,5 +217,73 @@ export class ViralAnalyzerService {
     const nameWithoutExt = path.parse(filename).name;
     // 限制长度
     return nameWithoutExt.slice(0, 100);
+  }
+
+  /**
+   * 同步到 GeneBank（病毒基因库）
+   */
+  async syncToGenebank(videoId: string, userId: string): Promise<ViralLibrary> {
+    this.logger.log(`同步视频到基因库: ${videoId}`);
+
+    const video = await this.getDetail(videoId, userId);
+
+    // 检查是否已完成分析
+    if (video.status !== 'completed') {
+      throw new Error('视频尚未完成分析');
+    }
+
+    if (!video.analysis || !video.creativeFactors) {
+      throw new Error('视频分析结果不完整');
+    }
+
+    // 复制视频文件到 GeneBank 目录
+    const genebankVideoDir = path.join(process.cwd(), '../uploads/genebank-videos');
+    if (!fs.existsSync(genebankVideoDir)) {
+      fs.mkdirSync(genebankVideoDir, { recursive: true });
+    }
+
+    const newVideoPath = path.join(genebankVideoDir, `${video.id}${path.extname(video.videoPath)}`);
+    if (!fs.existsSync(newVideoPath)) {
+      fs.copyFileSync(video.videoPath, newVideoPath);
+    }
+
+    // 复制缩略图
+    let thumbnailUrl = null;
+    if (video.thumbnailPath && fs.existsSync(video.thumbnailPath)) {
+      const genebankThumbnailDir = path.join(process.cwd(), '../uploads/genebank-thumbnails');
+      if (!fs.existsSync(genebankThumbnailDir)) {
+        fs.mkdirSync(genebankThumbnailDir, { recursive: true });
+      }
+
+      const newThumbnailPath = path.join(genebankThumbnailDir, `${video.id}.jpg`);
+      fs.copyFileSync(video.thumbnailPath, newThumbnailPath);
+      thumbnailUrl = `/api/gene-bank/thumbnails/${video.id}.jpg`;
+    }
+
+    // 构建分析报告（GeneBank 格式）
+    const analysisReport = {
+      hook: video.analysis.hook,
+      selling_points: video.analysis.selling_points,
+      pacing: video.analysis.pacing,
+      style: video.analysis.style,
+      creative_factors: video.creativeFactors,
+      analyzed_at: new Date().toISOString(),
+      source: 'viral-analyzer',
+    };
+
+    // 创建 GeneBank 记录
+    const genebankEntry = new ViralLibrary();
+    genebankEntry.sourceUrl = `/api/viral-analyzer/videos/${video.id}/stream`;
+    genebankEntry.platform = 'user-upload';
+    genebankEntry.title = video.title;
+    genebankEntry.thumbnailUrl = thumbnailUrl;
+    genebankEntry.analysisReport = analysisReport;
+    genebankEntry.status = 'completed';
+
+    const saved = await this.viralLibraryRepo.save(genebankEntry);
+
+    this.logger.log(`视频已同步到基因库: ${saved.id}`);
+
+    return saved;
   }
 }

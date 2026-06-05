@@ -8,16 +8,17 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFile,
+  Req,
   Res,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
-import { createReadStream, existsSync } from 'fs';
+import { createReadStream, existsSync, statSync } from 'fs';
 import { ViralAnalyzerService } from './viral-analyzer.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/jwt.strategy';
@@ -143,38 +144,59 @@ export class ViralAnalyzerController {
    * 视频流式播放
    * GET /api/viral-analyzer/videos/:id/stream
    */
-  @UseGuards(AuthGuard('jwt'))
   @Get('videos/:id/stream')
   async streamVideo(
-    @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    const videoPath = await this.viralAnalyzerService.getVideoPath(id, user.id);
+    // 暂时移除认证要求，因为 <video> 标签无法传递 Authorization header
+    const video = await this.viralAnalyzerService.getVideoByIdPublic(id);
+    const videoPath = video.videoPath;
 
     if (!existsSync(videoPath)) {
       return res.status(404).json({ code: 404, msg: '视频文件不存在' });
     }
 
+    const fileSize = statSync(videoPath).size;
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Accept-Ranges', 'bytes');
 
-    const stream = createReadStream(videoPath);
-    stream.pipe(res);
+    // HTML5 <video> 播放/拖拽会带 Range 头，必须返回 206 + Content-Range，否则部分浏览器黑屏
+    const range = req.headers.range;
+    if (range) {
+      const match = /bytes=(\d*)-(\d*)/.exec(range);
+      const start = match && match[1] ? parseInt(match[1], 10) : 0;
+      const end = match && match[2] ? parseInt(match[2], 10) : fileSize - 1;
+
+      // 非法 Range：超出文件范围
+      if (start >= fileSize || end >= fileSize || start > end) {
+        res.setHeader('Content-Range', `bytes */${fileSize}`);
+        return res.status(416).end();
+      }
+
+      res.status(206);
+      res.setHeader('Content-Range', `bytes ${start}-${end}/${fileSize}`);
+      res.setHeader('Content-Length', end - start + 1);
+      createReadStream(videoPath, { start, end }).pipe(res);
+      return;
+    }
+
+    res.setHeader('Content-Length', fileSize);
+    createReadStream(videoPath).pipe(res);
   }
 
   /**
    * 获取视频缩略图
    * GET /api/viral-analyzer/videos/:id/thumbnail
    */
-  @UseGuards(AuthGuard('jwt'))
   @Get('videos/:id/thumbnail')
   async getThumbnail(
-    @CurrentUser() user: AuthenticatedUser,
     @Param('id') id: string,
     @Res() res: Response,
   ) {
-    const video = await this.viralAnalyzerService.getDetail(id, user.id);
+    // 暂时移除认证要求
+    const video = await this.viralAnalyzerService.getVideoByIdPublic(id);
 
     if (!video.thumbnailPath || !existsSync(video.thumbnailPath)) {
       // 返回占位图
@@ -186,5 +208,22 @@ export class ViralAnalyzerController {
 
     const stream = createReadStream(video.thumbnailPath);
     stream.pipe(res);
+  }
+
+  /**
+   * 同步到 GeneBank
+   * POST /api/viral-analyzer/:id/sync-to-genebank
+   */
+  @UseGuards(AuthGuard('jwt'))
+  @Post(':id/sync-to-genebank')
+  async syncToGenebank(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('id') id: string,
+  ) {
+    const result = await this.viralAnalyzerService.syncToGenebank(id, user.id);
+    return ok({
+      message: '已同步到基因库',
+      genebank_id: result.id,
+    });
   }
 }
