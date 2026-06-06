@@ -15,8 +15,8 @@ export class AIAnalyzerService {
 
   constructor() {
     // 使用火山方舟 Doubao-Seed-2.0-pro (支持视觉)
-    this.apiKey = process.env.ARK_API_KEY || 'ark-1249de72-68c5-4737-8777-789f626d0a3b-c7bc9';
-    this.endpoint = process.env.ARK_ENDPOINT || 'ep-20260514115629-vhldw';
+    this.apiKey = process.env.ARK_API_KEY || '';
+    this.endpoint = process.env.ARK_ENDPOINT || '';
   }
 
   /**
