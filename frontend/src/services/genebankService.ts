@@ -186,6 +186,7 @@ function mapPaceDensity(density: string): string {
 
 function mapCTAForm(form: string): string {
   const map: Record<string, string> = {
+    'none': '无',
     'direct_price': '直接报价',
     'limited_offer': '限时优惠',
     'soft_guide': '软性引导',

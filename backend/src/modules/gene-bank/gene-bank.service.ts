@@ -167,10 +167,13 @@ export class GeneBankService {
       '',
       `4. 节奏密度：${PaceDensityLabels[factors.paceDensity]}`,
       this.getPaceDensityPrompt(factors.paceDensity),
-      '',
-      `5. CTA 形式：${CTAFormLabels[factors.ctaForm]}`,
-      this.getCTAFormPrompt(factors.ctaForm),
     ];
+
+    // CTA 形式为可选：仅当因子明确指定（非 none）时才注入行动号召指导，
+    // 否则不加 CTA，保持平缓真实的种草氛围（默认无 CTA）。
+    if (factors.ctaForm !== 'none') {
+      parts.push('', `5. CTA 形式：${CTAFormLabels[factors.ctaForm]}`, this.getCTAFormPrompt(factors.ctaForm));
+    }
 
     return parts.join('\n');
   }
@@ -225,6 +228,7 @@ export class GeneBankService {
 
   private getCTAFormPrompt(form: CreativeFactors['ctaForm']): string {
     const prompts = {
+      none: '- 不要加入行动号召分镜，结尾以产品展示或信任背书自然收束',
       direct_price: '- 最后一个分镜直接报价或显示价格\n- 配音直接说价格，例如"现在只要xx元"',
       limited_offer: '- 最后一个分镜强调限时优惠或稀缺性\n- 配音强调时间限制，例如"限时特惠，仅剩xx件"',
       soft_guide: '- 最后一个分镜温和引导，不强推销\n- 配音引导了解，例如"点击下方了解更多"',
@@ -342,6 +346,8 @@ export class GeneBankService {
       return 'urgency';
     }
     if (s.includes('价值')) return 'value_emphasis';
-    return 'soft_guide';
+    if (s.includes('引导') || s.includes('了解更多') || s.includes('点击')) return 'soft_guide';
+    // 分析未明确指出行动号召时，默认无 CTA（可选因子，按需才加入）
+    return 'none';
   }
 }

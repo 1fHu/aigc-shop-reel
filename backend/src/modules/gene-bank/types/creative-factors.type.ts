@@ -39,6 +39,7 @@ export type PaceDensity =
 
 /** CTA 形式 */
 export type CTAForm =
+  | 'none'             // 无（不含行动号召，默认）
   | 'direct_price'     // 直接报价
   | 'limited_offer'    // 限时优惠
   | 'soft_guide'       // 软性引导
@@ -91,6 +92,7 @@ export const PaceDensityLabels: Record<PaceDensity, string> = {
 };
 
 export const CTAFormLabels: Record<CTAForm, string> = {
+  none: '无',
   direct_price: '直接报价',
   limited_offer: '限时优惠',
   soft_guide: '软性引导',

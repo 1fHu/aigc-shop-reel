@@ -134,14 +134,21 @@ ${context}
   ): Promise<Partial<ScriptShot>[] | null> {
     if (!this.apiKey || !this.doubaoEp) return null;
     const strategy = STRATEGY_LABELS[strategyType] || strategyType || '通用带货';
+    // CTA 可选：仅当创作因子明确指定（非 none）时才加入行动号召，否则默认不含 CTA。
+    const wantsCta = !!creativeFactors && creativeFactors.ctaForm !== 'none';
 
     // 基础 prompt
     let prompt = `你是 TikTok 电商带货短视频的导演。请基于商品信息和创作策略，生成 4-6 个分镜的脚本。
 严格只返回一个 JSON 数组，数组每个元素格式：
 {"description":"画面内容(中文一句话)","camera_motion":"运镜方式，取值之一: push-in/static/tracking/pan/zoom-out/handheld","duration":分镜时长秒数(2-5的整数),"voiceover":"口播文案(中文)","subtitle":"字幕(中文，简短)"}
-分镜应按顺序覆盖：抓眼球的开场 Hook → 产品外观/卖点特写 → 使用场景或效果展示 → 细节/信任背书 → 行动号召 CTA。
+分镜应按顺序覆盖：抓眼球的开场 Hook → 产品外观/卖点特写 → 使用场景或效果展示 → 细节/信任背书
 创作策略：${strategy}
 商品信息：${JSON.stringify(productInfo)}`;
+
+    // 默认不加行动号召；只有因子明确要求 CTA 时才允许出现下单引导分镜
+    if (!wantsCta) {
+      prompt += `\n不要加入"行动号召/下单引导(CTA)"类分镜（如"立即下单""点击购买"），结尾以产品展示、使用效果或信任背书自然收束，保持平缓真实的种草氛围。`;
+    }
 
     // 如果提供了创作因子，添加详细的风格指导
     if (creativeFactors) {
@@ -207,7 +214,6 @@ ${context}
       : [];
     const audience = (productInfo.target_audience as string) || '懂生活的你';
     const scene = (productInfo.usage_scene as string) || '日常使用';
-    const cta = strategyType === 'promotion' ? '限时优惠，立即下单' : '点击下方立即拥有';
 
     const hookByStrategy: Record<string, string> = {
       pain_point: `还在被同类问题困扰？${name} 帮你解决`,
@@ -251,15 +257,6 @@ ${context}
         duration: 3,
         voiceover: points[1] ? `而且${points[1]}` : `特别适合${audience}`,
         subtitle: points[1] || audience,
-        bgm: 'Modern Beat',
-        reference_image_url: null,
-      },
-      {
-        description: '行动号召 CTA',
-        camera_motion: 'static',
-        duration: 3,
-        voiceover: cta,
-        subtitle: cta,
         bgm: 'Modern Beat',
         reference_image_url: null,
       },
