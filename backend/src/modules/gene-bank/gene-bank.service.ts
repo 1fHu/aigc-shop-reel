@@ -10,16 +10,16 @@ import { AnalyzedVideo } from '../../database/entities/analyzed-video.entity';
 import {
   ReferenceVideo,
   CreativeFactors,
-  VisualStyle,
-  OpeningMethod,
-  NarrationStyle,
-  PaceDensity,
-  CTAForm,
   VisualStyleLabels,
   OpeningMethodLabels,
   NarrationStyleLabels,
   PaceDensityLabels,
   CTAFormLabels,
+  normalizeVisualStyle,
+  normalizeOpeningMethod,
+  normalizeNarrationStyle,
+  normalizePaceDensity,
+  normalizeCTAForm,
 } from './types/creative-factors.type';
 
 export interface FactorLabelItem {
@@ -285,69 +285,15 @@ export class GeneBankService {
       videoUrl,
       duration: (analyzedId && durationMap.get(analyzedId)) || 0,
       factors: {
-        visualStyle: this.normalizeVisualStyle(raw.visual_style),
-        openingMethod: this.normalizeOpeningMethod(raw.opener),
-        narrationStyle: this.normalizeNarrationStyle(raw.narration),
-        paceDensity: this.normalizePaceDensity(raw.pacing),
-        ctaForm: this.normalizeCTAForm(raw.cta),
+        visualStyle: normalizeVisualStyle(raw.visual_style),
+        openingMethod: normalizeOpeningMethod(raw.opener),
+        narrationStyle: normalizeNarrationStyle(raw.narration),
+        paceDensity: normalizePaceDensity(raw.pacing),
+        ctaForm: normalizeCTAForm(raw.cta),
       },
       category: '用户上传',
       sourceUrl: record.sourceUrl ?? undefined,
       createdAt: (record.createdAt ?? new Date()).toISOString(),
     };
-  }
-
-  private normalizeVisualStyle(v?: string): VisualStyle {
-    const s = v ?? '';
-    if (s.includes('电影')) return 'cinematic';
-    if (s.includes('极简') || s.includes('简约')) return 'minimal';
-    if (s.includes('戏剧') || s.includes('冲击')) return 'dramatic';
-    if (s.includes('纪录') || s.includes('纪实')) return 'documentary';
-    if (s.includes('潮流') || s.includes('时尚') || s.includes('商业')) return 'trendy';
-    return 'lifestyle';
-  }
-
-  private normalizeOpeningMethod(v?: string): OpeningMethod {
-    const s = v ?? '';
-    if (s.includes('悬念')) return 'suspense_hook';
-    if (s.includes('痛点') || s.includes('直击') || s.includes('问题') || s.includes('提问')) {
-      return 'pain_point';
-    }
-    if (s.includes('故事')) return 'story_intro';
-    if (s.includes('反差') || s.includes('对比')) return 'contrast';
-    if (s.includes('场景') || s.includes('代入')) return 'scene_setting';
-    return 'direct_display';
-  }
-
-  private normalizeNarrationStyle(v?: string): NarrationStyle {
-    const s = v ?? '';
-    if (s.includes('冷静') || s.includes('知性') || s.includes('理性')) return 'calm_rational';
-    if (s.includes('激情') || s.includes('热情') || s.includes('澎湃')) return 'enthusiastic';
-    if (s.includes('故事') || s.includes('叙述')) return 'storytelling';
-    if (s.includes('专家')) return 'expert';
-    if (s.includes('幽默')) return 'humorous';
-    return 'friendly';
-  }
-
-  private normalizePaceDensity(v?: string): PaceDensity {
-    const s = v ?? '';
-    if (s.includes('快')) return 'fast';
-    if (s.includes('慢')) return 'slow';
-    if (s.includes('变化')) return 'varied';
-    return 'medium';
-  }
-
-  private normalizeCTAForm(v?: string): CTAForm {
-    const s = v ?? '';
-    if (s.includes('报价') || s.includes('价格')) return 'direct_price';
-    if (s.includes('限时') || s.includes('优惠') || s.includes('折扣')) return 'limited_offer';
-    if (s.includes('信任') || s.includes('背书') || s.includes('评价')) return 'trust_building';
-    if (s.includes('紧迫') || s.includes('立即') || s.includes('马上') || s.includes('购买')) {
-      return 'urgency';
-    }
-    if (s.includes('价值')) return 'value_emphasis';
-    if (s.includes('引导') || s.includes('了解更多') || s.includes('点击')) return 'soft_guide';
-    // 分析未明确指出行动号召时，默认无 CTA（可选因子，按需才加入）
-    return 'none';
   }
 }
