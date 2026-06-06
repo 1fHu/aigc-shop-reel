@@ -175,6 +175,24 @@ CREATE TABLE diagnosis_reports (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- 13. analyzed_videos（爆款视频拆解：用户上传视频 → AI 拆解创作手法）
+CREATE TABLE analyzed_videos (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL,
+    title VARCHAR(255) NOT NULL,
+    original_filename VARCHAR(255) NOT NULL,
+    video_path VARCHAR(500) NOT NULL,
+    thumbnail_path VARCHAR(500),
+    duration INT,
+    file_size BIGINT,
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'analyzing', 'completed', 'failed')),
+    error_message TEXT,
+    analysis JSONB,
+    creative_factors JSONB,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- ============================================================
 -- HNSW INDEXES on vector columns
 -- ============================================================
@@ -199,3 +217,6 @@ CREATE INDEX idx_diagnosis_reports_video_id ON diagnosis_reports(video_id);
 CREATE INDEX idx_viral_genes_category ON viral_genes(category);
 CREATE INDEX idx_viral_library_platform ON viral_library(platform);
 CREATE INDEX idx_viral_library_status ON viral_library(status);
+CREATE INDEX idx_analyzed_videos_user_id ON analyzed_videos(user_id);
+CREATE INDEX idx_analyzed_videos_status ON analyzed_videos(status);
+CREATE INDEX idx_analyzed_videos_created_at ON analyzed_videos(created_at DESC);

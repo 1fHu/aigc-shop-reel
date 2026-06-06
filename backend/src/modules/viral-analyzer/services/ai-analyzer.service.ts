@@ -14,9 +14,15 @@ export class AIAnalyzerService {
   private readonly baseUrl = 'https://ark.cn-beijing.volces.com/api/v3';
 
   constructor() {
-    // 使用火山方舟 Doubao-Seed-2.0-pro (支持视觉)
-    this.apiKey = process.env.ARK_API_KEY || '';
-    this.endpoint = process.env.ARK_ENDPOINT || '';
+    // 使用火山方舟 Doubao 视觉模型。统一复用项目的 VOLCANO_* 配置（与 volcano-api.service 一致），
+    // 兼容旧的 ARK_* 命名作为回退。
+    this.apiKey = process.env.VOLCANO_ACCESS_KEY || process.env.ARK_API_KEY || '';
+    this.endpoint = process.env.VOLCANO_DOUBAO_SEED_EP || process.env.ARK_ENDPOINT || '';
+    if (!this.apiKey || !this.endpoint) {
+      this.logger.warn(
+        'VOLCANO_ACCESS_KEY / VOLCANO_DOUBAO_SEED_EP 未配置，AI 视频拆解将返回 401',
+      );
+    }
   }
 
   /**
@@ -79,7 +85,8 @@ export class AIAnalyzerService {
       return this.parseAnalysisResult(content);
     } catch (error) {
       this.logger.error('AI 分析失败', error);
-      throw new Error(`AI 分析失败: ${error.message}`);
+      const msg = error instanceof Error ? error.message : String(error);
+      throw new Error(`AI 分析失败: ${msg}`);
     }
   }
 
