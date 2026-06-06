@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { App, Skeleton, Modal, Checkbox } from 'antd';
 import { RocketOutlined, SaveOutlined, ThunderboltFilled, PlaySquareOutlined, ReloadOutlined } from '@ant-design/icons';
@@ -32,6 +32,10 @@ export default function ScriptStudio() {
   const [loading, setLoading] = useState(!!projectId);
   const [generating, setGenerating] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
+  // 从爆款模板库带入的参考视频 ID。挂载时从 sessionStorage 捕获到 ref，
+  // 因为 sessionStorage 读完即清，生成时不能再依赖它（否则永远是 undefined）。
+  // 用 ref 而非 state：只在生成时读取，无需触发重渲染。
+  const referenceVideoIdRef = useRef<string | undefined>(undefined);
   const [factorState, setFactorState] = useState<FactorState>({
     visual_style: '电影级精致',
     opener: '利益点切入',
@@ -64,11 +68,12 @@ export default function ScriptStudio() {
     if (appliedData) {
       try {
         const { viral_id, factors } = JSON.parse(appliedData);
-        console.log('=== 应用爆款模板库因子 ===');
-        console.log('来源视频:', viral_id);
-        console.log('创作因子:', factors);
 
-        // 应用创作因子到 factorState
+        // 捕获参考视频 ID 到 ref，供生成时透传给后端（清除 sessionStorage 后仍可用）
+        referenceVideoIdRef.current = viral_id;
+
+        // 应用创作因子到 factorState（挂载时一次性从外部来源初始化，故禁用该规则）
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setFactorState((prev) => ({
           ...prev,
           ...factors,
@@ -77,7 +82,7 @@ export default function ScriptStudio() {
         // 显示提示
         message.success(`已应用爆款模板「${viral_id}」的创作因子`);
 
-        // 清除 sessionStorage（避免重复应用）
+        // 清除 sessionStorage（避免重复应用）；viral_id 已存入 state
         sessionStorage.removeItem('genebank_applied');
       } catch (err) {
         console.error('解析创作因子失败:', err);
@@ -118,24 +123,12 @@ export default function ScriptStudio() {
     try {
       const pid = projectId || '';
 
-      // 读取爆款模板库应用的参考视频 ID
-      let referenceVideoId: string | undefined;
-      const appliedData = sessionStorage.getItem('genebank_applied');
-      if (appliedData) {
-        try {
-          const { viral_id } = JSON.parse(appliedData);
-          referenceVideoId = viral_id;
-          console.log('🎬 使用爆款模板参考视频:', referenceVideoId);
-        } catch (err) {
-          console.error('解析参考视频ID失败:', err);
-        }
-      }
-
+      // 参考视频 ID 来自挂载时捕获的 ref（sessionStorage 已清空，不能再读）
       // 生成剧本
       for await (const event of scriptService.generate({
         project_id: pid,
         strategy_type: 'pain_point',
-        reference_video_id: referenceVideoId,
+        reference_video_id: referenceVideoIdRef.current,
       })) {
         if (event.type === 'scene') {
           if (!cleared) { setScenes([]); cleared = true; }
