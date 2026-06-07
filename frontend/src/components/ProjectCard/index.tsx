@@ -21,9 +21,13 @@ interface Props {
 }
 
 const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string }> = {
-  completed: { label: 'Completed', color: 'success' },
-  in_progress: { label: 'Generating', color: 'warning' },
+  material_pending: { label: '素材待上传', color: 'default' },
+  script_pending: { label: '剧本待生成', color: 'processing' },
+  video_pending: { label: '视频待生成', color: 'warning' },
+  finished: { label: '已完成', color: 'success' },
   draft: { label: '草稿', color: 'default' },
+  in_progress: { label: '生成中', color: 'warning' },
+  completed: { label: '已完成', color: 'success' },
 };
 
 function relativeTime(iso: string): string {
@@ -49,7 +53,7 @@ export default function ProjectCard({
   const navigate = useNavigate();
   const { modal } = App.useApp();
   const statusCfg = STATUS_CONFIG[project.status] ?? { label: project.status, color: 'default' };
-  const isGenerating = project.status === 'in_progress';
+  const isGenerating = project.status === 'script_pending' || project.status === 'video_pending' || project.status === 'in_progress';
 
   const handleDelete = () => {
     modal.confirm({

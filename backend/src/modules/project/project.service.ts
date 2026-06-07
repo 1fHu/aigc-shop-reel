@@ -14,7 +14,7 @@ export class ProjectService {
       userId,
       name: input.name,
       description: input.description || '',
-      status: 'draft',
+      status: 'material_pending',
     });
     const saved = await this.projectRepo.save(project);
     return {

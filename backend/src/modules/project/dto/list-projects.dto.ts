@@ -20,6 +20,6 @@ export class ListProjectsDto {
   keyword?: string = '';
 
   @IsOptional()
-  @IsIn(['draft', 'in_progress', 'completed', 'all'])
+  @IsIn(['draft', 'confirmed', 'material_pending', 'script_pending', 'video_pending', 'finished', 'in_progress', 'completed', 'all'])
   status?: string = 'all';
 }

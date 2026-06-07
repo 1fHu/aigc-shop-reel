@@ -19,16 +19,28 @@ type ViewMode = 'grid' | 'list';
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: 'all',         label: '全部' },
-  { value: 'completed',   label: '已完成' },
-  { value: 'in_progress', label: '生成中' },
-  { value: 'draft',       label: '草稿' },
+  { value: 'finished',       label: '已完成' },
+  { value: 'video_pending',  label: '视频待生成' },
+  { value: 'script_pending', label: '剧本待生成' },
+  { value: 'material_pending', label: '素材待上传' },
 ];
 
 const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string }> = {
-  completed: { label: 'Completed', color: 'success' },
-  in_progress: { label: 'Generating', color: 'warning' },
+  material_pending: { label: '素材待上传', color: 'default' },
+  script_pending: { label: '剧本待生成', color: 'processing' },
+  video_pending: { label: '视频待生成', color: 'warning' },
+  finished: { label: '已完成', color: 'success' },
   draft: { label: '草稿', color: 'default' },
+  in_progress: { label: '生成中', color: 'warning' },
+  completed: { label: '已完成', color: 'success' },
 };
+
+function progressByStatus(status: ProjectStatus): number | undefined {
+  if (status === 'script_pending') return 35;
+  if (status === 'video_pending') return 80;
+  if (status === 'in_progress') return 75;
+  return undefined;
+}
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -221,7 +233,7 @@ export default function Projects() {
             <ProjectCard
               key={p.id}
               project={p}
-              renderProgress={p.status === 'in_progress' ? 75 : undefined}
+              renderProgress={progressByStatus(p.status)}
               onOpen={() => openProject(p)}
               onDeleted={() => setProjects((cur) => cur.filter((item) => item.id !== p.id))}
             />

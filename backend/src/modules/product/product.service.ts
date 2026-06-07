@@ -6,6 +6,7 @@ import { MinioStorageService } from '../../common/minio-storage.service';
 import { Project } from '../../database/entities/project.entity';
 import { Material } from '../../database/entities/material.entity';
 import { UpdateProductDto } from './dto/update-product.dto';
+import { promoteProjectStatus } from '../../common/project-status';
 
 @Injectable()
 export class ProductService {
@@ -83,6 +84,11 @@ export class ProductService {
       this.materialRepo.save(material),
     ]);
 
+    await this.projectRepo.increment({ id: projectId }, 'materialCount', 1);
+    await this.projectRepo.update(projectId, {
+      status: promoteProjectStatus(project.status, 'script_pending'),
+    });
+
     return { ...productInfo, material_id: savedMaterial.id };
   }
 
@@ -91,7 +97,8 @@ export class ProductService {
     if (!project) throw new NotFoundException('项目不存在');
     const existing = (project.productInfo ?? {}) as Record<string, unknown>;
     const merged = { ...existing, ...productInfo, cover_url: project.coverUrl ?? (existing.cover_url as string) ?? null };
-    await this.projectRepo.update(projectId, { productInfo: merged, status: 'material_pending' });
+    const nextStatus = project.materialCount > 0 ? 'script_pending' : 'material_pending';
+    await this.projectRepo.update(projectId, { productInfo: merged, status: promoteProjectStatus(project.status, nextStatus) });
 
     // 同步主图素材的 analysis，使素材库 grid 卡片/详情与商品信息保持一致。
     // 主图素材 = 该项目里 thumbnailUrl 等于项目 cover_url 的图片素材（parseImage 落库时三者同源）。
@@ -127,8 +134,10 @@ export class ProductService {
   async confirm(projectId: string) {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
     if (!project) throw new NotFoundException('项目不存在');
-    await this.projectRepo.update(projectId, { status: 'material_pending' });
-    return { project_id: projectId, status: 'material_pending' };
+    const nextStatus = project.materialCount > 0 ? 'script_pending' : 'material_pending';
+    const status = promoteProjectStatus(project.status, nextStatus);
+    await this.projectRepo.update(projectId, { status });
+    return { project_id: projectId, status };
   }
 
   async getByProjectId(projectId: string) {

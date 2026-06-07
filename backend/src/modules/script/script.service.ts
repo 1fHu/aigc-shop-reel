@@ -12,6 +12,7 @@ import {
   resolveFromCreativeFactors,
   getFactorGroups,
 } from '../gene-bank/types/creative-factors.type';
+import { promoteProjectStatus } from '../../common/project-status';
 
 export type ScriptShot = {
   index: number;
@@ -85,6 +86,11 @@ export class ScriptService {
       status: 'draft',
     });
     const saved = await this.scriptRepo.save(script);
+
+    await this.projectRepo.increment({ id: projectId }, 'scriptCount', 1);
+    await this.projectRepo.update(projectId, {
+      status: promoteProjectStatus(project.status, 'video_pending'),
+    });
 
     return {
       id: saved.id,

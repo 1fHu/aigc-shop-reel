@@ -7,6 +7,7 @@ import { readFile, unlink } from 'fs/promises';
 import { Material } from '../../database/entities/material.entity';
 import { Project } from '../../database/entities/project.entity';
 import { MinioStorageService } from '../../common/minio-storage.service';
+import { promoteProjectStatus } from '../../common/project-status';
 
 /**
  * 上传约束：
@@ -97,6 +98,9 @@ export class MaterialService {
           thumbnail_url: saved.thumbnailUrl,
         });
       }
+
+      await this.projectRepo.increment({ id: projectId }, 'materialCount', results.length);
+      await this.projectRepo.update(projectId, { status: promoteProjectStatus(project.status, 'script_pending') });
       return results;
     } finally {
       await Promise.all(tempPaths.map((p) => unlink(p).catch(() => undefined)));
@@ -152,8 +156,17 @@ export class MaterialService {
   }
 
   async delete(id: string, userId: string) {
-    await this.loadOwned(id, userId);
+    const material = await this.loadOwned(id, userId);
     await this.materialRepo.delete(id);
+    // 删除的若是商品主图素材（parseImage 落库时 thumbnailUrl 与项目 cover_url 同源），
+    // 连带清空项目的 product_info / cover_url。这样前端素材库「上传素材」按钮会回退为
+    // 「上传商品主图」，重新上传主图即覆盖原商品信息。
+    if (material.fileType === 'image' && material.projectId) {
+      const project = await this.projectRepo.findOne({ where: { id: material.projectId } });
+      if (project?.coverUrl && project.coverUrl === material.thumbnailUrl) {
+        await this.projectRepo.update(project.id, { productInfo: null as unknown as object, coverUrl: null as unknown as string });
+      }
+    }
     return { deleted: true, referenced_shots: 0 };
   }
 
