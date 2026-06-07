@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Card, Button, Spin, Tag, message, Typography, Divider, Space, Modal, List, Empty } from 'antd';
-import { ArrowLeftOutlined, ThunderboltOutlined, PlayCircleOutlined, DatabaseOutlined } from '@ant-design/icons';
+import { Card, Button, Spin, Tag, message, Typography, Divider, Space } from 'antd';
+import { ArrowLeftOutlined, PlayCircleOutlined, DatabaseOutlined } from '@ant-design/icons';
 import { viralAnalyzerService, type AnalyzedVideo } from '@/services/viralAnalyzerService';
-import { projectService } from '@/services/projectService';
-import type { ProjectListItem } from '@/types';
 import './detail.css';
 
 const { Title, Paragraph, Text } = Typography;
@@ -15,11 +13,6 @@ const ViralAnalyzerDetail: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [video, setVideo] = useState<AnalyzedVideo | null>(null);
   const [syncing, setSyncing] = useState(false);
-  // —— "生成同款 AI 剧本" 的目标项目选择 ——
-  // 剧本按项目商品生成，故需先让用户选一个项目，再带着拆解出的创作因子进剧本工作台。
-  const [pickProjectOpen, setPickProjectOpen] = useState(false);
-  const [projects, setProjects] = useState<ProjectListItem[]>([]);
-  const [projectsLoading, setProjectsLoading] = useState(false);
 
   const loadDetail = useCallback(async () => {
     setLoading(true);
@@ -54,37 +47,6 @@ const ViralAnalyzerDetail: React.FC = () => {
     } finally {
       setSyncing(false);
     }
-  };
-
-  // 生成同款 AI 剧本：先弹项目选择（剧本需绑定到某个项目的商品）
-  const handleGenerateScript = () => {
-    if (!video?.creative_factors) {
-      message.warning('暂无创作因子数据');
-      return;
-    }
-    setPickProjectOpen(true);
-    setProjectsLoading(true);
-    projectService
-      .list({ page: 1, limit: 50 })
-      .then((items) => setProjects(items))
-      .catch(() => { /* 拦截器统一 toast */ })
-      .finally(() => setProjectsLoading(false));
-  };
-
-  // 选定目标项目 → 把拆解出的创作因子暂存 sessionStorage，进入该项目的剧本工作台。
-  // 不带 viral_id：直接靠 factors 透传给剧本生成（无需先同步到基因库）。
-  const handleChooseProject = (projectId: string) => {
-    if (!video?.creative_factors) return;
-    sessionStorage.setItem(
-      'genebank_applied',
-      JSON.stringify({
-        factors: video.creative_factors,
-        applied_at: new Date().toISOString(),
-      })
-    );
-    setPickProjectOpen(false);
-    message.success('已应用创作因子，正在进入剧本工作台…');
-    navigate(`/projects/${projectId}/script`);
   };
 
   // 状态标签
@@ -251,58 +213,11 @@ const ViralAnalyzerDetail: React.FC = () => {
                 >
                   同步到基因库
                 </Button>
-                <Button
-                  type="primary"
-                  size="large"
-                  block
-                  icon={<ThunderboltOutlined />}
-                  className="generate-script-btn"
-                  onClick={handleGenerateScript}
-                >
-                  生成同款 AI 剧本
-                </Button>
               </Space>
             </>
           )}
         </div>
       </div>
-
-      {/* 选择目标项目：剧本生成需绑定到某个项目的商品 */}
-      <Modal
-        open={pickProjectOpen}
-        title="选择要应用到的项目"
-        onCancel={() => setPickProjectOpen(false)}
-        footer={null}
-        destroyOnClose
-      >
-        {projectsLoading ? (
-          <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <Spin />
-          </div>
-        ) : projects.length === 0 ? (
-          <Empty description="还没有项目，先去创建一个">
-            <Button type="primary" onClick={() => navigate('/projects')}>
-              去创建项目
-            </Button>
-          </Empty>
-        ) : (
-          <List
-            dataSource={projects}
-            style={{ maxHeight: 420, overflow: 'auto' }}
-            renderItem={(p) => (
-              <List.Item
-                actions={[
-                  <Button key="pick" type="link" onClick={() => handleChooseProject(p.id)}>
-                    应用到此项目 →
-                  </Button>,
-                ]}
-              >
-                <List.Item.Meta title={p.name} description={`${p.video_count} 个视频`} />
-              </List.Item>
-            )}
-          />
-        )}
-      </Modal>
     </div>
   );
 };
