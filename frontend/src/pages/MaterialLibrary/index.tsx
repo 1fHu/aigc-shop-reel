@@ -158,6 +158,8 @@ export default function MaterialLibrary() {
     return false;
   };
 
+  // 函数名沿用 handleGenerateVideo（历史命名，对应右下角浮动按钮），
+  // 实际行为是跳转到「生成剧本」页（ScriptStudio），并非直接生成视频。
   const handleGenerateVideo = () => {
     if (!pid) { message.warning('请先创建项目'); return; }
     const ready = materials.filter((m) => m.status === 'ready');
@@ -180,6 +182,9 @@ export default function MaterialLibrary() {
           setMaterials((prev) => prev.filter((m) => m.id !== item.id));
           if (active?.id === item.id) setActive(null);
           message.success('素材已删除');
+          // 删的若是商品主图（PRODUCT 卡片），后端会连带清空项目商品信息/主图，
+          // 重新拉一次商品状态：hasCover 变 false → 上传按钮回退为「上传商品主图」。
+          if (item.tag === 'PRODUCT') await loadProduct();
         } catch {
           // 拦截器已统一 toast
         } finally {
@@ -327,9 +332,9 @@ export default function MaterialLibrary() {
         />
       )}
 
-      <button type="button" className={styles.fab} onClick={handleGenerateVideo} title="生成视频">
+      <button type="button" className={styles.fab} onClick={handleGenerateVideo} title="生成剧本">
         <ThunderboltOutlined style={{fontSize:22}}/>
-        <span>生成视频</span>
+        <span>生成剧本</span>
       </button>
     </div>
   );

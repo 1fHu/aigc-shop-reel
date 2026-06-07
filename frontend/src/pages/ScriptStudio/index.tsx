@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { App, Skeleton, Modal, Checkbox } from 'antd';
+import { App, Skeleton, Modal, Checkbox, Spin } from 'antd';
 import { RocketOutlined, SaveOutlined, ThunderboltFilled, PlaySquareOutlined, ReloadOutlined, FireOutlined } from '@ant-design/icons';
 import { scriptService } from '@/services/scriptService';
 import { videoService } from '@/services/videoService';
@@ -126,20 +126,21 @@ export default function ScriptStudio() {
   }, [projectId]);
 
   // ---- handlers ----
-  const handleGenerate = useCallback(async () => {
+  const handleGenerate = useCallback(async (overrideFactors?: FactorState) => {
     setGenerating(true);
     let cleared = false;
     try {
       const pid = projectId || '';
 
       // 参考视频 ID 来自挂载时捕获的 ref（sessionStorage 已清空，不能再读）
-      // 生成剧本
+      // 生成剧本：爆款仿写选模板时把刚应用的因子作为 overrideFactors 直接传入，
+      // 避免 setFactorState 异步未生效导致用到旧因子。
       for await (const event of scriptService.generate({
         project_id: pid,
         strategy_type: 'pain_point',
         reference_video_id: referenceVideoIdRef.current,
         // 把因子面板当前选择一并回传，后端据此注入分镜 prompt（优先级高于参考视频）
-        factors: factorState,
+        factors: overrideFactors ?? factorState,
       })) {
         if (event.type === 'scene') {
           if (!cleared) { setScenes([]); cleared = true; }
@@ -275,14 +276,17 @@ export default function ScriptStudio() {
     }
   }, [message]);
 
-  // 选中爆款模板：把推荐因子写入面板 + 记下参考视频 ID（供生成时透传），提示用户去生成
+  // 选中爆款模板：把推荐因子写入面板 + 记下参考视频 ID（供生成时透传），随即直接开始生成
   const handleApplyViral = useCallback((card: ViralCard) => {
     const rec = card.analysis_report?.recommended_factors;
-    if (rec) setFactorState((prev) => ({ ...prev, ...rec }));
+    const nextFactors: FactorState = rec ? { ...factorState, ...rec } : factorState;
+    if (rec) setFactorState(nextFactors);
     referenceVideoIdRef.current = card.id;
     setViralModalOpen(false);
-    message.success(`已应用爆款模板「${card.title}」的创作因子，请点击「生成剧本」生成`);
-  }, [message]);
+    message.success(`已应用爆款模板「${card.title}」的创作因子，开始生成剧本`);
+    // 直接用刚应用的因子生成（不能依赖 setFactorState 的异步结果）
+    handleGenerate(nextFactors);
+  }, [factorState, message, handleGenerate]);
 
   // ---- video / shot generation ----
   const [regeneratingShots, setRegeneratingShots] = useState(false);
@@ -344,6 +348,48 @@ export default function ScriptStudio() {
 
   const totalDuration = scenes.reduce((sum, s) => sum + (s.duration || 3), 0);
 
+  // 爆款仿写选模板 Modal（空态与编辑态共用，避免空态点击「爆款仿写」无弹窗）
+  const viralModalEl = (
+    <Modal
+      title="爆款仿写 — 选择参考模板"
+      open={viralModalOpen}
+      onCancel={() => setViralModalOpen(false)}
+      footer={null}
+      width={780}
+    >
+      <p style={{ color: '#6B7280', marginBottom: 12, fontSize: 13 }}>
+        选择一个爆款模板，将其创作因子（风格 / 开场 / 口播 / 节奏 / CTA）应用到当前剧本并立即生成同款。
+      </p>
+      {viralLoading ? (
+        <Skeleton active paragraph={{ rows: 6 }} />
+      ) : viralCards.length === 0 ? (
+        <div className={styles.viralEmpty}>暂无爆款模板</div>
+      ) : (
+        <div className={styles.viralGrid}>
+          {viralCards.map((card) => {
+            const rec = card.analysis_report?.recommended_factors;
+            const chips = rec
+              ? [rec.visual_style, rec.opener, rec.narration, rec.pacing, rec.cta].filter((v) => v && v !== '无')
+              : [];
+            return (
+              <div key={card.id} className={styles.viralCard} onClick={() => handleApplyViral(card)}>
+                <img src={card.thumbnail_url} alt={card.title} className={styles.viralThumb} />
+                <div className={styles.viralBody}>
+                  <div className={styles.viralTitle}>{card.title}</div>
+                  <div className={styles.viralChips}>
+                    {chips.map((v) => (
+                      <span key={v} className={styles.viralChip}>{v}</span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Modal>
+  );
+
   // ---- loading state ----
   if (loading) {
     return (
@@ -355,8 +401,23 @@ export default function ScriptStudio() {
     );
   }
 
+  // ---- 生成中（尚无分镜）：停留在入口界面展示「加速生成剧本中」 ----
+  if (generating && !scenes.length) {
+    return (
+      <div className={styles.shell}>
+        <div className={styles.page}>
+          <div className={styles.emptyState}>
+            <Spin size="large" />
+            <h2 style={{ marginTop: 24 }}>加速生成剧本中…</h2>
+            <p>AI 正在基于商品信息逐镜生成分镜剧本，请稍候</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // ---- empty state ----
-  if (!scenes.length && !generating) {
+  if (!scenes.length) {
     return (
       <div className={styles.shell}>
         <div className={styles.page}>
@@ -366,7 +427,7 @@ export default function ScriptStudio() {
             <div className={styles.emptyActions}>
               <button
                 className={styles.genBtn}
-                onClick={handleGenerate}
+                onClick={() => handleGenerate()}
                 disabled={generating}
               >
                 <ThunderboltFilled /> 生成剧本
@@ -381,6 +442,7 @@ export default function ScriptStudio() {
             </div>
           </div>
         </div>
+        {viralModalEl}
       </div>
     );
   }
@@ -397,7 +459,7 @@ export default function ScriptStudio() {
           <button className={styles.viralBtn} onClick={handleOpenViral}>
             <FireOutlined style={{ fontSize: 12, marginRight: 4 }} /> 爆款仿写
           </button>
-          <button className={styles.generateBtn} onClick={handleGenerate} disabled={generating}>
+          <button className={styles.generateBtn} onClick={() => handleGenerate()} disabled={generating}>
             <ThunderboltFilled style={{ fontSize: 12, marginRight: 4 }} /> 生成剧本
           </button>
         </div>
@@ -488,45 +550,8 @@ export default function ScriptStudio() {
         </div>
       </div>
 
-      {/* ====== 爆款仿写：选模板 Modal ====== */}
-      <Modal
-        title="爆款仿写 — 选择参考模板"
-        open={viralModalOpen}
-        onCancel={() => setViralModalOpen(false)}
-        footer={null}
-        width={780}
-      >
-        <p style={{ color: '#6B7280', marginBottom: 12, fontSize: 13 }}>
-          选择一个爆款模板，将其创作因子（风格 / 开场 / 口播 / 节奏 / CTA）应用到当前剧本，随后点击「生成剧本」生成同款。
-        </p>
-        {viralLoading ? (
-          <Skeleton active paragraph={{ rows: 6 }} />
-        ) : viralCards.length === 0 ? (
-          <div className={styles.viralEmpty}>暂无爆款模板</div>
-        ) : (
-          <div className={styles.viralGrid}>
-            {viralCards.map((card) => {
-              const rec = card.analysis_report?.recommended_factors;
-              const chips = rec
-                ? [rec.visual_style, rec.opener, rec.narration, rec.pacing, rec.cta].filter((v) => v && v !== '无')
-                : [];
-              return (
-                <div key={card.id} className={styles.viralCard} onClick={() => handleApplyViral(card)}>
-                  <img src={card.thumbnail_url} alt={card.title} className={styles.viralThumb} />
-                  <div className={styles.viralBody}>
-                    <div className={styles.viralTitle}>{card.title}</div>
-                    <div className={styles.viralChips}>
-                      {chips.map((v) => (
-                        <span key={v} className={styles.viralChip}>{v}</span>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </Modal>
+      {/* ====== 爆款仿写：选模板 Modal（空态/编辑态共用） ====== */}
+      {viralModalEl}
 
       {/* ====== 分镜选择 Modal ====== */}
       <Modal
