@@ -7,7 +7,6 @@ import {
   PlayCircleOutlined,
   ShoppingCartOutlined,
   PlusOutlined,
-  CloudUploadOutlined,
   ThunderboltOutlined,
   RiseOutlined,
 } from '@ant-design/icons';
@@ -25,8 +24,9 @@ import StatCard from '@/components/StatCard';
 import ProjectCard from '@/components/ProjectCard';
 import NewProjectModal from '@/components/NewProjectModal';
 import { dashboardService } from '@/services/dashboardService';
+import { projectService } from '@/services/projectService';
 import { useAuthStore, selectUser } from '@/stores/authStore';
-import type { DashboardOverview, StatCardData } from '@/types';
+import type { DashboardOverview, ProjectListItem, StatCardData } from '@/types';
 import styles from './Dashboard.module.css';
 
 const STAT_VARIANT_MAP: Record<StatCardData['key'], 'brand' | 'sky' | 'violet' | 'red'> = {
@@ -58,14 +58,31 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
+  const [recentProjects, setRecentProjects] = useState<ProjectListItem[]>([]);
 
   useEffect(() => {
     let cancelled = false;
-    dashboardService
-      .getOverview()
-      .then((resp) => { if (!cancelled) setData(resp); })
-      .catch(() => { /* 拦截器已 toast */ })
-      .finally(() => { if (!cancelled) setLoading(false); });
+    Promise.allSettled([
+      dashboardService.getOverview(),
+      projectService.list({ page: 1, limit: 50 }),
+    ]).then(([overviewResult, projectsResult]) => {
+      if (cancelled) return;
+
+      if (overviewResult.status === 'fulfilled') {
+        setData(overviewResult.value);
+      }
+
+      if (projectsResult.status === 'fulfilled') {
+        const sortedRecent = [...projectsResult.value]
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+          .slice(0, 2);
+        setRecentProjects(sortedRecent);
+      } else if (overviewResult.status === 'fulfilled') {
+        setRecentProjects(overviewResult.value.recent_projects.slice(0, 2));
+      }
+
+      setLoading(false);
+    });
     return () => { cancelled = true; };
   }, []);
 
@@ -107,7 +124,6 @@ export default function Dashboard() {
         </div>
         <div className={styles.headerActions}>
           <Button icon={<PlusOutlined />} onClick={() => setNewProjectOpen(true)}>新建项目</Button>
-          <Button icon={<CloudUploadOutlined />} onClick={() => setNewProjectOpen(true)}>上传素材</Button>
         </div>
       </div>
 
@@ -136,15 +152,21 @@ export default function Dashboard() {
             <button className={styles.viewAll} onClick={() => navigate('/projects')}>查看全部 →</button>
           </div>
           <div className={styles.recentGrid}>
-            {data.recent_projects.map((p, i) => (
-              <ProjectCard
-                key={p.id}
-                project={p}
-                views={i === 0 ? '4.2k' : i === 2 ? '12.8k' : i === 3 ? '8.5k' : undefined}
-                topTag={i === 0 ? 'TIKTOK READY' : undefined}
-                renderProgress={p.status === 'in_progress' ? 85 : undefined}
-              />
-            ))}
+            {recentProjects.length > 0 ? (
+              recentProjects.map((p, i) => (
+                <ProjectCard
+                  key={p.id}
+                  project={p}
+                  views={i === 0 ? '4.2k' : '12.8k'}
+                  topTag={i === 0 ? 'TIKTOK READY' : undefined}
+                  renderProgress={p.status === 'in_progress' ? 85 : undefined}
+                />
+              ))
+            ) : (
+              <div style={{ gridColumn: '1 / -1', color: '#6B7280', fontSize: 14 }}>
+                暂无最近项目
+              </div>
+            )}
           </div>
         </div>
 

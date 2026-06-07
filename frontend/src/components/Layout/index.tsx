@@ -58,7 +58,6 @@ export default function AppLayout() {
   const [createOpen, setCreateOpen] = useState(false);
 
   const showGuestBanner = isGuest && !bannerDismissed;
-  const showProjectTabs = ['/', '/projects'].includes(location.pathname);
 
   const navItems: NavItem[] = [
     { key: '/',              label: 'Dashboard',        icon: <AppstoreOutlined /> },
@@ -166,15 +165,6 @@ export default function AppLayout() {
               variant="filled"
             />
           </div>
-
-          {showProjectTabs && (
-            <div className={styles.tabs}>
-              <button className={`${styles.tab} ${styles.tabActive}`}>所有项目</button>
-              <button className={styles.tab}>最近使用</button>
-              <button className={styles.tab}>团队共享</button>
-            </div>
-          )}
-          {!showProjectTabs && <div />}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button className={styles.upgrade}>Upgrade Pro</button>
