@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { App, Skeleton, Modal, Checkbox } from 'antd';
-import { RocketOutlined, SaveOutlined, ThunderboltFilled, PlaySquareOutlined, ReloadOutlined } from '@ant-design/icons';
+import { RocketOutlined, SaveOutlined, ThunderboltFilled, PlaySquareOutlined, ReloadOutlined, FireOutlined } from '@ant-design/icons';
 import { scriptService } from '@/services/scriptService';
 import { videoService } from '@/services/videoService';
-import type { Scene, FactorGroup, FactorState, FactorKey, ScriptHistoryEntry } from '@/types';
+import { genebankService } from '@/services/genebankService';
+import type { Scene, FactorGroup, FactorState, FactorKey, ScriptHistoryEntry, ViralCard } from '@/types';
 import ShotTimeline from './ShotTimeline';
 import ShotEditor from './ShotEditor';
 import FactorPanel from './FactorPanel';
@@ -20,6 +21,16 @@ const DEFAULT_SCENE: Omit<Scene, 'id' | 'index'> = {
   subtitle: '',
 };
 
+// 默认创作因子：值必须落在后端 GET /api/factors 的预设选项内，否则面板无 chip 高亮。
+// cta 默认「无」= 不带行动号召（与"CTA 可选/默认无"的设计一致）。
+const DEFAULT_FACTOR_STATE: FactorState = {
+  visual_style: '电影级精致',
+  opener: '直接展示',
+  narration: '冷静知性',
+  pacing: '中节奏',
+  cta: '无',
+};
+
 export default function ScriptStudio() {
   const navigate = useNavigate();
   const { id: projectId } = useParams<{ id: string }>();
@@ -32,13 +43,14 @@ export default function ScriptStudio() {
   const [loading, setLoading] = useState(!!projectId);
   const [generating, setGenerating] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
-  const [factorState, setFactorState] = useState<FactorState>({
-    visual_style: '电影级精致',
-    opener: '利益点切入',
-    narration: '冷静知性',
-    pacing: '中节奏',
-    cta: '直接报价',
-  });
+  // 从爆款模板库带入的参考视频 ID。挂载时从 sessionStorage 捕获到 ref，
+  // 因为 sessionStorage 读完即清，生成时不能再依赖它（否则永远是 undefined）。
+  // 用 ref 而非 state：只在生成时读取，无需触发重渲染。
+  const referenceVideoIdRef = useRef<string | undefined>(undefined);
+  const [factorState, setFactorState] = useState<FactorState>(DEFAULT_FACTOR_STATE);
+  // 当前因子是否仍为系统默认（用户改过任意一维 / 应用过模板即为「自定义因子」）
+  const isDefaultFactors = (Object.keys(DEFAULT_FACTOR_STATE) as FactorKey[])
+    .every((k) => factorState[k] === DEFAULT_FACTOR_STATE[k]);
   const [factors, setFactors] = useState<FactorGroup[]>([]);
   const [history, setHistory] = useState<ScriptHistoryEntry[]>([]);
   const [applyingFactor, setApplyingFactor] = useState(false);
@@ -64,20 +76,22 @@ export default function ScriptStudio() {
     if (appliedData) {
       try {
         const { viral_id, factors } = JSON.parse(appliedData);
-        console.log('=== 应用爆款模板库因子 ===');
-        console.log('来源视频:', viral_id);
-        console.log('创作因子:', factors);
 
-        // 应用创作因子到 factorState
+        // 捕获参考视频 ID 到 ref，供生成时透传给后端（清除 sessionStorage 后仍可用）。
+        // 视频拆解页直接带因子、不带 viral_id，此时仅靠 factors 透传，ref 保持 undefined。
+        if (viral_id) referenceVideoIdRef.current = viral_id;
+
+        // 应用创作因子到 factorState（挂载时一次性从外部来源初始化，故禁用该规则）
+        // eslint-disable-next-line react-hooks/set-state-in-effect
         setFactorState((prev) => ({
           ...prev,
           ...factors,
         }));
 
         // 显示提示
-        message.success(`已应用爆款模板「${viral_id}」的创作因子`);
+        message.success(viral_id ? `已应用爆款模板「${viral_id}」的创作因子` : '已应用拆解视频的创作因子');
 
-        // 清除 sessionStorage（避免重复应用）
+        // 清除 sessionStorage（避免重复应用）；viral_id 已存入 state
         sessionStorage.removeItem('genebank_applied');
       } catch (err) {
         console.error('解析创作因子失败:', err);
@@ -118,24 +132,14 @@ export default function ScriptStudio() {
     try {
       const pid = projectId || '';
 
-      // 读取爆款模板库应用的参考视频 ID
-      let referenceVideoId: string | undefined;
-      const appliedData = sessionStorage.getItem('genebank_applied');
-      if (appliedData) {
-        try {
-          const { viral_id } = JSON.parse(appliedData);
-          referenceVideoId = viral_id;
-          console.log('🎬 使用爆款模板参考视频:', referenceVideoId);
-        } catch (err) {
-          console.error('解析参考视频ID失败:', err);
-        }
-      }
-
+      // 参考视频 ID 来自挂载时捕获的 ref（sessionStorage 已清空，不能再读）
       // 生成剧本
       for await (const event of scriptService.generate({
         project_id: pid,
         strategy_type: 'pain_point',
-        reference_video_id: referenceVideoId,
+        reference_video_id: referenceVideoIdRef.current,
+        // 把因子面板当前选择一并回传，后端据此注入分镜 prompt（优先级高于参考视频）
+        factors: factorState,
       })) {
         if (event.type === 'scene') {
           if (!cleared) { setScenes([]); cleared = true; }
@@ -149,7 +153,7 @@ export default function ScriptStudio() {
       message.error('剧本生成失败');
       setGenerating(false);
     }
-  }, [projectId, message]);
+  }, [projectId, message, factorState]);
 
   const handleSave = useCallback(async () => {
     if (!scriptId) return;
@@ -199,7 +203,8 @@ export default function ScriptStudio() {
       const resp = await fetch(`/api/scripts/${scriptId}/regenerate-shot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ shot_index: index }),
+        // 带上当前因子面板选择，重生的分镜与全片风格保持统一
+        body: JSON.stringify({ shot_index: index, factors: factorState }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       // 后端返回 SSE 格式: data: {...}\n\n
@@ -216,7 +221,7 @@ export default function ScriptStudio() {
     } finally {
       setRegenerating(false);
     }
-  }, [scriptId, message]);
+  }, [scriptId, message, factorState]);
 
   const handleFactorChange = useCallback(async (key: FactorKey, value: string) => {
     const previousValue = factorState[key];
@@ -252,6 +257,32 @@ export default function ScriptStudio() {
       setApplyingFactor(false);
     }
   }, [scriptId, factors, factorState, message]);
+
+  // ---- 爆款仿写：选模板 → 应用因子 ----
+  const [viralModalOpen, setViralModalOpen] = useState(false);
+  const [viralCards, setViralCards] = useState<ViralCard[]>([]);
+  const [viralLoading, setViralLoading] = useState(false);
+
+  const handleOpenViral = useCallback(async () => {
+    setViralModalOpen(true);
+    setViralLoading(true);
+    try {
+      setViralCards(await genebankService.search());
+    } catch {
+      message.error('加载爆款模板失败');
+    } finally {
+      setViralLoading(false);
+    }
+  }, [message]);
+
+  // 选中爆款模板：把推荐因子写入面板 + 记下参考视频 ID（供生成时透传），提示用户去生成
+  const handleApplyViral = useCallback((card: ViralCard) => {
+    const rec = card.analysis_report?.recommended_factors;
+    if (rec) setFactorState((prev) => ({ ...prev, ...rec }));
+    referenceVideoIdRef.current = card.id;
+    setViralModalOpen(false);
+    message.success(`已应用爆款模板「${card.title}」的创作因子，请点击「生成剧本」生成`);
+  }, [message]);
 
   // ---- video / shot generation ----
   const [regeneratingShots, setRegeneratingShots] = useState(false);
@@ -332,13 +363,22 @@ export default function ScriptStudio() {
           <div className={styles.emptyState}>
             <h2>分镜编辑</h2>
             <p>基于商品信息，AI 自动生成带货视频分镜剧本，也可手动逐镜编辑</p>
-            <button
-              className={styles.genBtn}
-              onClick={handleGenerate}
-              disabled={generating}
-            >
-              <ThunderboltFilled /> AI 生成剧本
-            </button>
+            <div className={styles.emptyActions}>
+              <button
+                className={styles.genBtn}
+                onClick={handleGenerate}
+                disabled={generating}
+              >
+                <ThunderboltFilled /> 生成剧本
+              </button>
+              <button
+                className={styles.genBtn}
+                onClick={handleOpenViral}
+                style={{ background: '#F3F4F6', color: '#374151' }}
+              >
+                <FireOutlined /> 爆款仿写
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -352,14 +392,17 @@ export default function ScriptStudio() {
     <div className={styles.shell}>
       {/* ====== Toolbar ====== */}
       <div className={styles.toolbar}>
-        <div className={styles.modeSegment}>
-          <button className={styles.modeBtn} disabled title="即将上线">爆款仿写</button>
-          <button className={styles.modeBtn} disabled title="即将上线">灵感模板</button>
-          <button className={`${styles.modeBtn} ${styles.modeBtnActive}`} onClick={handleGenerate}>
-            <ThunderboltFilled style={{ fontSize: 11, marginRight: 2 }} /> AI 生成剧本
+        <div className={styles.toolbarLeft}>
+          <span className={styles.modeTitle}>AI 生成剧本</span>
+          <button className={styles.viralBtn} onClick={handleOpenViral}>
+            <FireOutlined style={{ fontSize: 12, marginRight: 4 }} /> 爆款仿写
+          </button>
+          <button className={styles.generateBtn} onClick={handleGenerate} disabled={generating}>
+            <ThunderboltFilled style={{ fontSize: 12, marginRight: 4 }} /> 生成剧本
           </button>
         </div>
         <div className={styles.toolbarRight}>
+          <span className={styles.saveHint}>删减镜头或编辑分镜字段后点击</span>
           <button className={styles.saveBtn} onClick={handleSave} disabled={!scriptId || generating}>
             <SaveOutlined /> 保存
           </button>
@@ -384,6 +427,7 @@ export default function ScriptStudio() {
         <FactorPanel
           factors={factors}
           factorState={factorState}
+          isDefault={isDefaultFactors}
           history={history}
           applying={applyingFactor}
           onFactorChange={handleFactorChange}
@@ -443,6 +487,46 @@ export default function ScriptStudio() {
           </button>
         </div>
       </div>
+
+      {/* ====== 爆款仿写：选模板 Modal ====== */}
+      <Modal
+        title="爆款仿写 — 选择参考模板"
+        open={viralModalOpen}
+        onCancel={() => setViralModalOpen(false)}
+        footer={null}
+        width={780}
+      >
+        <p style={{ color: '#6B7280', marginBottom: 12, fontSize: 13 }}>
+          选择一个爆款模板，将其创作因子（风格 / 开场 / 口播 / 节奏 / CTA）应用到当前剧本，随后点击「生成剧本」生成同款。
+        </p>
+        {viralLoading ? (
+          <Skeleton active paragraph={{ rows: 6 }} />
+        ) : viralCards.length === 0 ? (
+          <div className={styles.viralEmpty}>暂无爆款模板</div>
+        ) : (
+          <div className={styles.viralGrid}>
+            {viralCards.map((card) => {
+              const rec = card.analysis_report?.recommended_factors;
+              const chips = rec
+                ? [rec.visual_style, rec.opener, rec.narration, rec.pacing, rec.cta].filter((v) => v && v !== '无')
+                : [];
+              return (
+                <div key={card.id} className={styles.viralCard} onClick={() => handleApplyViral(card)}>
+                  <img src={card.thumbnail_url} alt={card.title} className={styles.viralThumb} />
+                  <div className={styles.viralBody}>
+                    <div className={styles.viralTitle}>{card.title}</div>
+                    <div className={styles.viralChips}>
+                      {chips.map((v) => (
+                        <span key={v} className={styles.viralChip}>{v}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
 
       {/* ====== 分镜选择 Modal ====== */}
       <Modal

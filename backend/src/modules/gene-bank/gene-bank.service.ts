@@ -10,16 +10,18 @@ import { AnalyzedVideo } from '../../database/entities/analyzed-video.entity';
 import {
   ReferenceVideo,
   CreativeFactors,
-  VisualStyle,
-  OpeningMethod,
-  NarrationStyle,
-  PaceDensity,
-  CTAForm,
+  ResolvedCreativeFactors,
+  ResolvedFactor,
   VisualStyleLabels,
   OpeningMethodLabels,
   NarrationStyleLabels,
   PaceDensityLabels,
   CTAFormLabels,
+  normalizeVisualStyle,
+  normalizeOpeningMethod,
+  normalizeNarrationStyle,
+  normalizePaceDensity,
+  normalizeCTAForm,
 } from './types/creative-factors.type';
 
 export interface FactorLabelItem {
@@ -149,30 +151,51 @@ export class GeneBankService {
   }
 
   /**
-   * 将创作因子转换为 prompt 增强文本
-   * 这个文本会被注入到 director-agent 的 prompt 中
+   * 将创作因子转换为 prompt 增强文本，注入到 director-agent 的 prompt 中。
+   * 接受解析后的因子（ResolvedCreativeFactors）：
+   * - 命中预设（code）→ 走该维度的详细指导文案；
+   * - 自定义文本（custom）→ 原样注入，要求模型严格按自定义描述创作；
+   * - 空维度 → 跳过（动态编号，不留空洞）。
    */
-  factorsToPromptEnhancement(factors: CreativeFactors): string {
-    const parts: string[] = [
-      '请严格按照以下创作因子生成剧本：',
-      '',
-      `1. 视觉风格：${VisualStyleLabels[factors.visualStyle]}`,
-      this.getVisualStylePrompt(factors.visualStyle),
-      '',
-      `2. 开场手法：${OpeningMethodLabels[factors.openingMethod]}`,
-      this.getOpeningMethodPrompt(factors.openingMethod),
-      '',
-      `3. 旁白风格：${NarrationStyleLabels[factors.narrationStyle]}`,
-      this.getNarrationStylePrompt(factors.narrationStyle),
-      '',
-      `4. 节奏密度：${PaceDensityLabels[factors.paceDensity]}`,
-      this.getPaceDensityPrompt(factors.paceDensity),
-      '',
-      `5. CTA 形式：${CTAFormLabels[factors.ctaForm]}`,
-      this.getCTAFormPrompt(factors.ctaForm),
-    ];
+  factorsToPromptEnhancement(factors: ResolvedCreativeFactors): string {
+    const parts: string[] = ['请严格按照以下创作因子生成剧本：'];
+    let n = 0;
+    const add = (label: string, display: string, guidance: string) => {
+      if (!display && !guidance) return;
+      n += 1;
+      parts.push('', `${n}. ${label}：${display}`, guidance);
+    };
+
+    add('视觉风格', this.factorDisplay(factors.visualStyle, VisualStyleLabels), this.guidance(factors.visualStyle, (c) => this.getVisualStylePrompt(c)));
+    add('开场手法', this.factorDisplay(factors.openingMethod, OpeningMethodLabels), this.guidance(factors.openingMethod, (c) => this.getOpeningMethodPrompt(c)));
+    add('旁白风格', this.factorDisplay(factors.narrationStyle, NarrationStyleLabels), this.guidance(factors.narrationStyle, (c) => this.getNarrationStylePrompt(c)));
+    add('节奏密度', this.factorDisplay(factors.paceDensity, PaceDensityLabels), this.guidance(factors.paceDensity, (c) => this.getPaceDensityPrompt(c)));
+
+    // CTA 始终显式输出（包括「无」）：当为 none / 未指定时也要写出「CTA 形式：无」并强约束。
+    // 否则大模型常因商品信息里的折扣/促销/价格等内容擅自输出行动号召，需在此明确禁止。
+    const cta = factors.ctaForm;
+    if (cta.custom) {
+      add('CTA 形式', cta.custom, this.guidance(cta, (c) => this.getCTAFormPrompt(c)));
+    } else {
+      const code = cta.code ?? 'none';
+      add('CTA 形式', CTAFormLabels[code], this.getCTAFormPrompt(code));
+    }
 
     return parts.join('\n');
+  }
+
+  /** 维度展示名：自定义优先原文，否则取预设中文标签 */
+  private factorDisplay(rf: ResolvedFactor<string>, labels: Record<string, string>): string {
+    if (rf.custom) return rf.custom;
+    if (rf.code) return labels[rf.code] ?? rf.code;
+    return '';
+  }
+
+  /** 维度指导：自定义文本走通用「按原文执行」，预设走各自详细文案 */
+  private guidance<C extends string>(rf: ResolvedFactor<C>, codePrompt: (c: C) => string): string {
+    if (rf.custom) return `- 自定义要求：${rf.custom}\n- 请严格按上述自定义描述执行，不要套用其它预设风格`;
+    if (rf.code) return codePrompt(rf.code);
+    return '';
   }
 
   // ========== 各维度的详细 prompt 指导 ==========
@@ -225,6 +248,7 @@ export class GeneBankService {
 
   private getCTAFormPrompt(form: CreativeFactors['ctaForm']): string {
     const prompts = {
+      none: '- 全片不得出现任何行动号召/下单引导（如"立即下单""点击购买""加入购物车""划到主页"等）\n- 即使商品信息中包含折扣、促销、限时、降价、优惠券、价格等内容，也一律不得在画面/配音/字幕中提及价格或引导购买\n- 结尾以产品展示、使用效果或信任背书自然收束，保持平缓真实的种草氛围',
       direct_price: '- 最后一个分镜直接报价或显示价格\n- 配音直接说价格，例如"现在只要xx元"',
       limited_offer: '- 最后一个分镜强调限时优惠或稀缺性\n- 配音强调时间限制，例如"限时特惠，仅剩xx件"',
       soft_guide: '- 最后一个分镜温和引导，不强推销\n- 配音引导了解，例如"点击下方了解更多"',
@@ -281,67 +305,15 @@ export class GeneBankService {
       videoUrl,
       duration: (analyzedId && durationMap.get(analyzedId)) || 0,
       factors: {
-        visualStyle: this.normalizeVisualStyle(raw.visual_style),
-        openingMethod: this.normalizeOpeningMethod(raw.opener),
-        narrationStyle: this.normalizeNarrationStyle(raw.narration),
-        paceDensity: this.normalizePaceDensity(raw.pacing),
-        ctaForm: this.normalizeCTAForm(raw.cta),
+        visualStyle: normalizeVisualStyle(raw.visual_style),
+        openingMethod: normalizeOpeningMethod(raw.opener),
+        narrationStyle: normalizeNarrationStyle(raw.narration),
+        paceDensity: normalizePaceDensity(raw.pacing),
+        ctaForm: normalizeCTAForm(raw.cta),
       },
       category: '用户上传',
       sourceUrl: record.sourceUrl ?? undefined,
       createdAt: (record.createdAt ?? new Date()).toISOString(),
     };
-  }
-
-  private normalizeVisualStyle(v?: string): VisualStyle {
-    const s = v ?? '';
-    if (s.includes('电影')) return 'cinematic';
-    if (s.includes('极简') || s.includes('简约')) return 'minimal';
-    if (s.includes('戏剧') || s.includes('冲击')) return 'dramatic';
-    if (s.includes('纪录') || s.includes('纪实')) return 'documentary';
-    if (s.includes('潮流') || s.includes('时尚') || s.includes('商业')) return 'trendy';
-    return 'lifestyle';
-  }
-
-  private normalizeOpeningMethod(v?: string): OpeningMethod {
-    const s = v ?? '';
-    if (s.includes('悬念')) return 'suspense_hook';
-    if (s.includes('痛点') || s.includes('直击') || s.includes('问题') || s.includes('提问')) {
-      return 'pain_point';
-    }
-    if (s.includes('故事')) return 'story_intro';
-    if (s.includes('反差') || s.includes('对比')) return 'contrast';
-    if (s.includes('场景') || s.includes('代入')) return 'scene_setting';
-    return 'direct_display';
-  }
-
-  private normalizeNarrationStyle(v?: string): NarrationStyle {
-    const s = v ?? '';
-    if (s.includes('冷静') || s.includes('知性') || s.includes('理性')) return 'calm_rational';
-    if (s.includes('激情') || s.includes('热情') || s.includes('澎湃')) return 'enthusiastic';
-    if (s.includes('故事') || s.includes('叙述')) return 'storytelling';
-    if (s.includes('专家')) return 'expert';
-    if (s.includes('幽默')) return 'humorous';
-    return 'friendly';
-  }
-
-  private normalizePaceDensity(v?: string): PaceDensity {
-    const s = v ?? '';
-    if (s.includes('快')) return 'fast';
-    if (s.includes('慢')) return 'slow';
-    if (s.includes('变化')) return 'varied';
-    return 'medium';
-  }
-
-  private normalizeCTAForm(v?: string): CTAForm {
-    const s = v ?? '';
-    if (s.includes('报价') || s.includes('价格')) return 'direct_price';
-    if (s.includes('限时') || s.includes('优惠') || s.includes('折扣')) return 'limited_offer';
-    if (s.includes('信任') || s.includes('背书') || s.includes('评价')) return 'trust_building';
-    if (s.includes('紧迫') || s.includes('立即') || s.includes('马上') || s.includes('购买')) {
-      return 'urgency';
-    }
-    if (s.includes('价值')) return 'value_emphasis';
-    return 'soft_guide';
   }
 }

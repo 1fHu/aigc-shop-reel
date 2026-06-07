@@ -23,6 +23,7 @@ import { ViralAnalyzerService } from './viral-analyzer.service';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { AuthenticatedUser } from '../auth/jwt.strategy';
 import { ok } from '../../common/api-response';
+import { creativeFactorsToLabels } from '../gene-bank/types/creative-factors.type';
 
 @Controller('api/viral-analyzer')
 export class ViralAnalyzerController {
@@ -124,7 +125,10 @@ export class ViralAnalyzerController {
       status: video.status,
       error_message: video.errorMessage,
       analysis: video.analysis,
-      creative_factors: video.creativeFactors,
+      // 存储的是标准枚举码，展示时映射回中文标签（历史中文数据原样透传）
+      creative_factors: video.creativeFactors
+        ? creativeFactorsToLabels(video.creativeFactors)
+        : null,
       created_at: video.createdAt,
     });
   }

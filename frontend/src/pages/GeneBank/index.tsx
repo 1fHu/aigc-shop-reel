@@ -1,15 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Input, Skeleton, App } from 'antd';
+import { Input, Skeleton, App, Modal, List, Button, Empty, Spin } from 'antd';
 import { SearchOutlined, FireOutlined, ClockCircleOutlined, StarFilled } from '@ant-design/icons';
 
 import ViralReportDrawer from '@/components/ViralReportDrawer';
 import { genebankService } from '@/services/genebankService';
+import { projectService } from '@/services/projectService';
 import {
   VIRAL_PLATFORM_LABELS,
   type ViralCard,
   type ViralPlatform,
   type ViralRecommendedFactors,
+  type ProjectListItem,
 } from '@/types';
 import styles from './GeneBank.module.css';
 
@@ -66,6 +68,15 @@ export default function GeneBank() {
   const [platform, setPlatform] = useState<ViralPlatform | 'all'>('all');
   const [openId, setOpenId] = useState<string | null>(null);
 
+  // —— "应用因子并去剧本" 的目标项目选择 ——
+  // 应用因子需要一个真实 project_id（剧本生成按项目商品生成），故先让用户选项目。
+  const [pendingApply, setPendingApply] = useState<{
+    cardId: string;
+    factors: Partial<ViralRecommendedFactors>;
+  } | null>(null);
+  const [projects, setProjects] = useState<ProjectListItem[]>([]);
+  const [projectsLoading, setProjectsLoading] = useState(false);
+
   useEffect(() => {
     let cancelled = false;
     genebankService
@@ -96,17 +107,28 @@ export default function GeneBank() {
     });
   }, [cards, category, platform, keyword]);
 
+  // 用户在抽屉点"应用因子并去剧本" → 暂存待应用因子并弹出项目选择
   const handleApplyFactors = (cardId: string, factors: Partial<ViralRecommendedFactors>) => {
-    // 暂存到 sessionStorage，ScriptStudio 进入时读出并预设
-    // ⚠️ Backend coordination: 待与后端约定如何把这些因子带给 POST /scripts/generate
+    setPendingApply({ cardId, factors });
+    setProjectsLoading(true);
+    projectService
+      .list({ page: 1, limit: 50 })
+      .then((items) => setProjects(items))
+      .catch(() => { /* 拦截器统一 toast */ })
+      .finally(() => setProjectsLoading(false));
+  };
+
+  // 选定目标项目 → 暂存因子到 sessionStorage，跳到该项目的剧本工作台
+  const handleChooseProject = (projectId: string) => {
+    if (!pendingApply) return;
     sessionStorage.setItem('genebank_applied', JSON.stringify({
-      viral_id: cardId,
-      factors,
+      viral_id: pendingApply.cardId,
+      factors: pendingApply.factors,
       applied_at: new Date().toISOString(),
     }));
-    message.success('因子已保存，进入剧本编辑可看到预设');
-    // 暂时跳 ScriptStudio（顶层入口，无项目 id 时用 demo）
-    navigate('/script-studio');
+    setPendingApply(null);
+    message.success('已应用因子，正在进入剧本工作台…');
+    navigate(`/projects/${projectId}/script`);
   };
 
   return (
@@ -229,6 +251,46 @@ export default function GeneBank() {
         onClose={() => setOpenId(null)}
         onApplyFactors={handleApplyFactors}
       />
+
+      {/* 选择目标项目：应用因子需绑定到某个项目的剧本生成 */}
+      <Modal
+        open={pendingApply !== null}
+        title="选择要应用到的项目"
+        onCancel={() => setPendingApply(null)}
+        footer={null}
+        destroyOnClose
+      >
+        {projectsLoading ? (
+          <div style={{ textAlign: 'center', padding: '32px 0' }}>
+            <Spin />
+          </div>
+        ) : projects.length === 0 ? (
+          <Empty description="还没有项目，先去创建一个">
+            <Button type="primary" onClick={() => navigate('/projects')}>
+              去创建项目
+            </Button>
+          </Empty>
+        ) : (
+          <List
+            dataSource={projects}
+            style={{ maxHeight: 420, overflow: 'auto' }}
+            renderItem={(p) => (
+              <List.Item
+                actions={[
+                  <Button key="pick" type="link" onClick={() => handleChooseProject(p.id)}>
+                    应用到此项目 →
+                  </Button>,
+                ]}
+              >
+                <List.Item.Meta
+                  title={p.name}
+                  description={`${p.video_count} 个视频 · 更新于 ${relativeTime(p.updated_at)}`}
+                />
+              </List.Item>
+            )}
+          />
+        )}
+      </Modal>
     </div>
   );
 }

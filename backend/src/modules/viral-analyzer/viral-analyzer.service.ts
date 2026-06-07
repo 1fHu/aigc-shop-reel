@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { VideoFrameExtractor } from './helpers/video-frame-extractor';
 import { AIAnalyzerService } from './services/ai-analyzer.service';
+import { normalizeCreativeFactors } from '../gene-bank/types/creative-factors.type';
 
 @Injectable()
 export class ViralAnalyzerService {
@@ -92,6 +93,8 @@ export class ViralAnalyzerService {
       const result = await this.aiAnalyzer.analyzeVideo(frames);
 
       // 4. 更新数据库
+      //    创作因子归一成标准 CreativeFactors 枚举码后落库，保证与基因库/剧本生成同一套枚举对齐。
+      //    （展示时由 controller 经 creativeFactorsToLabels 映射回中文）
       await this.analyzedVideoRepo.update(videoId, {
         status: 'completed',
         analysis: {
@@ -100,7 +103,7 @@ export class ViralAnalyzerService {
           pacing: result.pacing,
           style: result.style,
         },
-        creativeFactors: result.creative_factors,
+        creativeFactors: normalizeCreativeFactors(result.creative_factors),
         thumbnailPath: fs.existsSync(thumbnailPath) ? thumbnailPath : undefined,
       });
 
@@ -266,7 +269,8 @@ export class ViralAnalyzerService {
       selling_points: video.analysis.selling_points,
       pacing: video.analysis.pacing,
       style: video.analysis.style,
-      creative_factors: video.creativeFactors,
+      // 幂等归一：新记录已是枚举码原样返回，历史中文记录也会被纠正为枚举码
+      creative_factors: normalizeCreativeFactors(video.creativeFactors),
       analyzed_at: new Date().toISOString(),
       source: 'viral-analyzer',
     };
