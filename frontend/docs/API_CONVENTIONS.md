@@ -314,7 +314,7 @@ VITE_USE_MOCK=true   # 前端 mock，后端没起也能跑
 - `POST /api/analytics/:video_id/diagnose` — 触发诊断 Agent
 - `GET /api/analytics/:video_id/diagnosis` — 诊断报告
 
-### Viral Library / Gene Bank
+### Gene Bank
 - `GET /api/viral-library/search` — 优质视频检索
 - `POST /api/viral-library/import-url` — URL 导入异步拆解
 - `POST /api/viral-library/upload-analyze` — 上传视频拆解

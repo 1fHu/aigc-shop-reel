@@ -1,7 +1,7 @@
 /**
- * 爆款模板库（GeneBank / Viral Library）相关类型
+ * 爆款模板库（Gene Bank）相关类型
  *
- * 端点：`/api/viral-library/*`（后端 viral-library 模块）
+ * 端点：`/api/viral-library/*`（后端 Gene Bank 模块的兼容接口）
  * 前端页面：`/gene-bank`（ProjectEntryModal "风格模板" 入口跳过来）
  *
  * 说明：
@@ -76,7 +76,7 @@ export interface ViralCard {
 }
 
 /**
- * 列表查询参数（GET /api/viral-library/search）
+ * 列表查询参数（GET /api/viral-library/search，Gene Bank 列表）
  */
 export interface ViralSearchQuery {
   keyword?: string;
@@ -88,7 +88,7 @@ export interface ViralSearchQuery {
 }
 
 /**
- * POST /api/viral-library/import-url 响应
+ * POST /api/viral-library/import-url 响应（Gene Bank 导入）
  * 异步触发拆解，返回 task_id
  */
 export interface ViralImportResult {
@@ -98,7 +98,7 @@ export interface ViralImportResult {
 }
 
 /**
- * POST /api/viral-library/:id/reference 响应
+ * POST /api/viral-library/:id/reference 响应（Gene Bank 借鉴）
  * 将此爆款应用为剧本参考
  */
 export interface ViralReferenceResult {

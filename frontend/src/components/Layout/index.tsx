@@ -4,7 +4,6 @@ import { Input, Dropdown, App, type MenuProps } from 'antd';
 import {
   AppstoreOutlined,
   FolderOpenOutlined,
-  RobotOutlined,
   FireOutlined,
   BarChartOutlined,
   QuestionCircleOutlined,
@@ -64,8 +63,7 @@ export default function AppLayout() {
   const navItems: NavItem[] = [
     { key: '/',              label: 'Dashboard',        icon: <AppstoreOutlined /> },
     { key: '/projects',      label: 'Projects',         icon: <FolderOpenOutlined /> },
-    { key: '/gene-bank',     label: 'AI Factory',       icon: <RobotOutlined /> },
-    { key: '/viral-library', label: 'Viral Library',    icon: <FireOutlined /> },
+    { key: '/gene-bank',     label: 'Gene Bank',        icon: <FireOutlined /> },
     { key: '/viral-analyzer', label: 'Video Analyzer',   icon: <VideoCameraOutlined /> },
     { key: '/analytics',     label: 'Analytics',        icon: <BarChartOutlined /> },
   ];

@@ -3,7 +3,7 @@ import type { ViralCard } from '@/types';
 
 /**
  * 爆款模板库 Mock
- * 对应后端 `backend/src/modules/viral-library/`
+ * 对应后端 Gene Bank 模块（兼容 `backend/src/modules/viral-library/` 路由）
  *
  * 数据 shape 与 backend `MockStoreService.searchViralLibrary` 一致，
  * 但**额外补了** selling_points / highlights / visual_palette / recommended_factors —
@@ -320,7 +320,7 @@ const mockCards: ViralCard[] = [
 // ============ 处理器 ============
 
 export const genebankHandlers = [
-  // GET /api/viral-library/search
+  // GET /api/viral-library/search（Gene Bank）
   http.get('/api/viral-library/search', ({ request }) => {
     const url = new URL(request.url);
     const keyword  = url.searchParams.get('keyword')?.toLowerCase() || '';
@@ -339,7 +339,7 @@ export const genebankHandlers = [
     });
   }),
 
-  // GET /api/viral-library/:id
+  // GET /api/viral-library/:id（Gene Bank）
   http.get('/api/viral-library/:id', ({ params }) => {
     const card = mockCards.find((c) => c.id === String(params.id));
     if (!card) {
@@ -353,7 +353,7 @@ export const genebankHandlers = [
     });
   }),
 
-  // POST /api/viral-library/import-url
+  // POST /api/viral-library/import-url（Gene Bank）
   http.post('/api/viral-library/import-url', async ({ request }) => {
     const body = (await request.json()) as { url: string; category?: string };
     const id = `viral-${Date.now()}`;
@@ -364,7 +364,7 @@ export const genebankHandlers = [
     });
   }),
 
-  // POST /api/viral-library/:id/reference
+  // POST /api/viral-library/:id/reference（Gene Bank）
   http.post('/api/viral-library/:id/reference', async ({ params, request }) => {
     const body = (await request.json()) as { script_id: string };
     return HttpResponse.json({

@@ -991,7 +991,7 @@ Doubao Vision 对整段素材的多模态摘要。
 | `产品测评型` | — |
 | `情感故事型` | — |
 | `限时促销型` | — |
-| `爆款仿写` | 来自 viral library / gene |
+| `爆款仿写` | 来自 gene bank / gene |
 | `模板融合` | 来自灵感模板 |
 
 `status`：`draft` / `generating` / `completed` / `archived`。
