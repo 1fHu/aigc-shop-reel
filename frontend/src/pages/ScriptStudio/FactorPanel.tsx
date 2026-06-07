@@ -1,5 +1,5 @@
 import { CheckCircleFilled } from '@ant-design/icons';
-import { Select, Switch, Slider, Input } from 'antd';
+import { Select, Switch, Slider, Input, Tag } from 'antd';
 import type { FactorGroup, FactorState, FactorKey, ScriptHistoryEntry } from '@/types';
 import styles from './ScriptStudio.module.css';
 
@@ -13,9 +13,14 @@ const FONT_FAMILIES = [
 
 const PRESET_COLORS = ['#FFFFFF', '#FFD700', '#00FF88', '#FF6B6B', '#64B5F6', '#FF9800'];
 
+/** 每个因子维度都附带的「自定义」选项标签 */
+const CUSTOM_LABEL = '自定义';
+
 interface FactorPanelProps {
   factors: FactorGroup[];
   factorState: FactorState;
+  /** 当前因子是否仍为系统默认（用于标题旁「默认因子 / 自定义因子」标签） */
+  isDefault: boolean;
   history: ScriptHistoryEntry[];
   applying: boolean;
   onFactorChange: (key: FactorKey, value: string) => void;
@@ -38,6 +43,7 @@ interface FactorPanelProps {
 export default function FactorPanel({
   factors,
   factorState,
+  isDefault,
   history,
   applying,
   onFactorChange,
@@ -60,6 +66,9 @@ export default function FactorPanel({
     <div className={styles.factors}>
       <div className={styles.colHead}>
         <span className={styles.colTitle}>创作因子</span>
+        <Tag color={isDefault ? 'default' : 'blue'} style={{ marginInlineEnd: 0 }}>
+          {isDefault ? '默认因子' : '自定义因子'}
+        </Tag>
         <span style={{
           fontSize: 11,
           color: applying ? '#F59E0B' : '#10B981',
@@ -72,23 +81,48 @@ export default function FactorPanel({
         </span>
       </div>
       <div className={styles.factorsBody}>
-        {factors.map((group) => (
-          <div key={group.key} className={styles.factorGroupBlock}>
-            <div className={styles.factorGroupLabel}>{group.label}</div>
-            <div className={styles.factorChips}>
-              {group.options.map((opt) => (
+        {factors.map((group) => {
+          const current = factorState[group.key];
+          // 当前值不在预设选项里 = 处于「自定义」态（含从外部带入的非标准值）
+          const isCustom = current !== undefined && !group.options.includes(current);
+          return (
+            <div key={group.key} className={styles.factorGroupBlock}>
+              <div className={styles.factorGroupLabel}>{group.label}</div>
+              <div className={styles.factorChips}>
+                {group.options.map((opt) => (
+                  <button
+                    key={opt}
+                    className={`${styles.chip} ${current === opt ? styles.chipActive : ''}`}
+                    onClick={() => onFactorChange(group.key, opt)}
+                    disabled={applying}
+                  >
+                    {opt}
+                  </button>
+                ))}
                 <button
-                  key={opt}
-                  className={`${styles.chip} ${factorState[group.key] === opt ? styles.chipActive : ''}`}
-                  onClick={() => onFactorChange(group.key, opt)}
+                  key="__custom__"
+                  className={`${styles.chip} ${isCustom ? styles.chipActive : ''}`}
+                  // 进入自定义态：清空当前值（不再匹配任何预设），露出输入框
+                  onClick={() => { if (!isCustom) onFactorChange(group.key, ''); }}
                   disabled={applying}
                 >
-                  {opt}
+                  {CUSTOM_LABEL}
                 </button>
-              ))}
+              </div>
+              {isCustom && (
+                <Input
+                  size="small"
+                  value={current}
+                  onChange={(e) => onFactorChange(group.key, e.target.value)}
+                  placeholder={`输入自定义${group.label}…`}
+                  disabled={applying}
+                  style={{ marginTop: 6 }}
+                  allowClear
+                />
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
 
         {history.length > 0 && (
           <>

@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ScriptShot } from './script.service';
-import { CreativeFactors } from '../gene-bank/types/creative-factors.type';
+import { ResolvedCreativeFactors, isNoneCtaFactor } from '../gene-bank/types/creative-factors.type';
 import { GeneBankService } from '../gene-bank/gene-bank.service';
 
 /** 允许的运镜方式（AI 越界时归一化到 static） */
@@ -38,11 +38,15 @@ export class DirectorAgentService {
     this.doubaoEp = this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
   }
 
-  /** 生成分镜脚本（多镜头）。返回归一化后的 ScriptShot[] */
+  /**
+   * 生成分镜脚本（多镜头）。返回归一化后的 ScriptShot[]。
+   * creativeFactors 必传（调用方保证：无因子时传空解析结果 resolveCreativeFactors({})），
+   * 故内部无需再判空。
+   */
   async generateStoryboard(
     productInfo: Record<string, unknown>,
     strategyType: string,
-    creativeFactors?: CreativeFactors,
+    creativeFactors: ResolvedCreativeFactors,
   ): Promise<ScriptShot[]> {
     const aiShots = await this.callDoubao(productInfo, strategyType, creativeFactors);
     if (aiShots && aiShots.length > 0) {
@@ -130,12 +134,12 @@ ${context}
   private async callDoubao(
     productInfo: Record<string, unknown>,
     strategyType: string,
-    creativeFactors?: CreativeFactors,
+    creativeFactors: ResolvedCreativeFactors,
   ): Promise<Partial<ScriptShot>[] | null> {
     if (!this.apiKey || !this.doubaoEp) return null;
     const strategy = STRATEGY_LABELS[strategyType] || strategyType || '通用带货';
-    // CTA 可选：仅当创作因子明确指定（非 none）时才加入行动号召，否则默认不含 CTA。
-    const wantsCta = !!creativeFactors && creativeFactors.ctaForm !== 'none';
+    // CTA 可选：仅当创作因子明确指定（非 none，含自定义 CTA 文本）时才加入行动号召，否则默认不含 CTA。
+    const wantsCta = !isNoneCtaFactor(creativeFactors.ctaForm);
 
     // 基础 prompt
     let prompt = `你是 TikTok 电商带货短视频的导演。请基于商品信息和创作策略，生成 4-6 个分镜的脚本。
@@ -150,12 +154,10 @@ ${context}
       prompt += `\n不要加入"行动号召/下单引导(CTA)"类分镜（如"立即下单""点击购买"），结尾以产品展示、使用效果或信任背书自然收束，保持平缓真实的种草氛围。`;
     }
 
-    // 如果提供了创作因子，添加详细的风格指导
-    if (creativeFactors) {
-      const factorPrompt = this.geneBank.factorsToPromptEnhancement(creativeFactors);
-      prompt += `\n\n【重要】请严格遵循以下创作因子：\n${factorPrompt}`;
-      this.logger.log('应用创作因子到 prompt');
-    }
+    // 添加详细的风格指导（空因子时 factorsToPromptEnhancement 仅返回标题行，不影响生成）
+    const factorPrompt = this.geneBank.factorsToPromptEnhancement(creativeFactors);
+    prompt += `\n\n【重要】请严格遵循以下创作因子：\n${factorPrompt}`;
+    this.logger.log('应用创作因子到 prompt');
 
     prompt += '\n\n只返回 JSON 数组本身，不要 markdown 代码块，不要任何额外说明文字。';
 

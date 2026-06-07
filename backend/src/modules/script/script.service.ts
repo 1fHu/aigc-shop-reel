@@ -6,9 +6,10 @@ import { Project } from '../../database/entities/project.entity';
 import { DirectorAgentService } from './director-agent.service';
 import { GeneBankService } from '../gene-bank/gene-bank.service';
 import {
-  CreativeFactors,
+  ResolvedCreativeFactors,
   CreativeFactorsSnake,
-  toCreativeFactors,
+  resolveCreativeFactors,
+  resolveFromCreativeFactors,
   getFactorGroups,
 } from '../gene-bank/types/creative-factors.type';
 
@@ -47,14 +48,18 @@ export class ScriptService {
 
     // 创作因子优先级：前端因子面板显式传入(factorsOverride) > 参考视频(referenceVideoId)。
     // 面板的值由参考视频初始化，故用户在面板上的改动天然覆盖参考视频，符合所见即所得。
-    let creativeFactors: CreativeFactors | undefined;
+    // creativeFactors 恒有值（无来源时空解析），director 据此免去判空。
+    let creativeFactors: ResolvedCreativeFactors;
     if (factorsOverride && Object.values(factorsOverride).some((v) => v)) {
-      creativeFactors = toCreativeFactors(factorsOverride);
+      creativeFactors = resolveCreativeFactors(factorsOverride);
       this.logger.log('使用前端因子面板传入的创作因子');
     } else if (referenceVideoId) {
       const refVideo = await this.geneBank.getReferenceVideoById(referenceVideoId);
-      creativeFactors = refVideo.factors;
+      creativeFactors = resolveFromCreativeFactors(refVideo.factors);
       this.logger.log(`使用参考视频 ${referenceVideoId} 的创作因子`);
+    } else {
+      creativeFactors = resolveCreativeFactors({});
+      this.logger.log('未指定创作因子，使用空因子（不注入风格约束）');
     }
 
     const storyboard = await this.director.generateStoryboard(productInfo, strategyType, creativeFactors);

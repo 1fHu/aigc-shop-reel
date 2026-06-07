@@ -230,19 +230,80 @@ export function creativeFactorsToLabels(factors?: Partial<CreativeFactorsSnake>)
   };
 }
 
-/**
- * 把（中文/自由文本/枚举码）snake_case 因子整体转换成 director-agent 需要的
- * CreativeFactors（camelCase 枚举码）。先归一成枚举码，再换名，保证健壮。
- */
-export function toCreativeFactors(raw?: Partial<CreativeFactorsSnake>): CreativeFactors {
-  const n = normalizeCreativeFactors(raw);
+// ============================================================
+// 解析层：区分「已知预设」与「自定义自由文本」
+// 因子面板新增了「自定义」选项，用户可输入任意文本。不能再像 normalize 那样
+// 一律模糊匹配成枚举码（会吞掉自定义意图），而要保留原文交给 prompt。
+// ============================================================
+
+/** 单维度解析结果：命中预设给 code，否则给 custom 原文（两者互斥，空维度二者皆无） */
+export interface ResolvedFactor<Code extends string> {
+  code?: Code;
+  custom?: string;
+}
+
+/** 五维度解析结果 */
+export interface ResolvedCreativeFactors {
+  visualStyle: ResolvedFactor<VisualStyle>;
+  openingMethod: ResolvedFactor<OpeningMethod>;
+  narrationStyle: ResolvedFactor<NarrationStyle>;
+  paceDensity: ResolvedFactor<PaceDensity>;
+  ctaForm: ResolvedFactor<CTAForm>;
+}
+
+/** 中文标签 → 枚举码 反查表，用于判断输入是否为「已知预设标签」 */
+function reverseLabels<C extends string>(labels: Record<C, string>): Map<string, C> {
+  const m = new Map<string, C>();
+  (Object.entries(labels) as [C, string][]).forEach(([code, label]) => m.set(label, code));
+  return m;
+}
+const VISUAL_STYLE_BY_LABEL = reverseLabels(VisualStyleLabels);
+const OPENING_METHOD_BY_LABEL = reverseLabels(OpeningMethodLabels);
+const NARRATION_STYLE_BY_LABEL = reverseLabels(NarrationStyleLabels);
+const PACE_DENSITY_BY_LABEL = reverseLabels(PaceDensityLabels);
+const CTA_FORM_BY_LABEL = reverseLabels(CTAFormLabels);
+
+/** 单维度解析：枚举码 / 已知中文标签 → {code}；其余非空文本 → {custom}；空 → {} */
+function resolveOne<C extends string>(
+  raw: string | undefined,
+  codes: Set<C>,
+  byLabel: Map<string, C>,
+): ResolvedFactor<C> {
+  const s = (raw ?? '').trim();
+  if (!s) return {};
+  if (codes.has(s as C)) return { code: s as C };
+  const code = byLabel.get(s);
+  if (code) return { code };
+  return { custom: s };
+}
+
+/** 把（可能含自定义文本的）snake_case 因子解析成 ResolvedCreativeFactors */
+export function resolveCreativeFactors(raw?: Partial<CreativeFactorsSnake>): ResolvedCreativeFactors {
   return {
-    visualStyle: n.visual_style as VisualStyle,
-    openingMethod: n.opener as OpeningMethod,
-    narrationStyle: n.narration as NarrationStyle,
-    paceDensity: n.pacing as PaceDensity,
-    ctaForm: n.cta as CTAForm,
+    visualStyle: resolveOne(raw?.visual_style, VISUAL_STYLE_CODES, VISUAL_STYLE_BY_LABEL),
+    openingMethod: resolveOne(raw?.opener, OPENING_METHOD_CODES, OPENING_METHOD_BY_LABEL),
+    narrationStyle: resolveOne(raw?.narration, NARRATION_STYLE_CODES, NARRATION_STYLE_BY_LABEL),
+    paceDensity: resolveOne(raw?.pacing, PACE_DENSITY_CODES, PACE_DENSITY_BY_LABEL),
+    ctaForm: resolveOne(raw?.cta, CTA_FORM_CODES, CTA_FORM_BY_LABEL),
   };
+}
+
+/** 参考视频的纯枚举因子（CreativeFactors）包装成同一解析结构，统一 prompt 出口 */
+export function resolveFromCreativeFactors(f: CreativeFactors): ResolvedCreativeFactors {
+  return {
+    visualStyle: { code: f.visualStyle },
+    openingMethod: { code: f.openingMethod },
+    narrationStyle: { code: f.narrationStyle },
+    paceDensity: { code: f.paceDensity },
+    ctaForm: { code: f.ctaForm },
+  };
+}
+
+/** CTA 维度是否「无」：自定义文本视为有 CTA；否则仅 code==='none' 或空算无 */
+export function isNoneCtaFactor(rf: ResolvedFactor<CTAForm>): boolean {
+  if (rf.custom && rf.custom.trim()) return false;
+  if (rf.code && rf.code !== 'none') return false;
+  return true;
 }
 
 /** GET /api/factors 因子库一项：维度 key + 中文名 + 可选中文标签列表（与前端 FactorGroup 对齐） */

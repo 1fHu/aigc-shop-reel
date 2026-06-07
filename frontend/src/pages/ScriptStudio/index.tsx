@@ -20,6 +20,16 @@ const DEFAULT_SCENE: Omit<Scene, 'id' | 'index'> = {
   subtitle: '',
 };
 
+// 默认创作因子：值必须落在后端 GET /api/factors 的预设选项内，否则面板无 chip 高亮。
+// cta 默认「无」= 不带行动号召（与"CTA 可选/默认无"的设计一致）。
+const DEFAULT_FACTOR_STATE: FactorState = {
+  visual_style: '电影级精致',
+  opener: '直接展示',
+  narration: '冷静知性',
+  pacing: '中节奏',
+  cta: '无',
+};
+
 export default function ScriptStudio() {
   const navigate = useNavigate();
   const { id: projectId } = useParams<{ id: string }>();
@@ -36,13 +46,10 @@ export default function ScriptStudio() {
   // 因为 sessionStorage 读完即清，生成时不能再依赖它（否则永远是 undefined）。
   // 用 ref 而非 state：只在生成时读取，无需触发重渲染。
   const referenceVideoIdRef = useRef<string | undefined>(undefined);
-  const [factorState, setFactorState] = useState<FactorState>({
-    visual_style: '电影级精致',
-    opener: '利益点切入',
-    narration: '冷静知性',
-    pacing: '中节奏',
-    cta: '直接报价',
-  });
+  const [factorState, setFactorState] = useState<FactorState>(DEFAULT_FACTOR_STATE);
+  // 当前因子是否仍为系统默认（用户改过任意一维 / 应用过模板即为「自定义因子」）
+  const isDefaultFactors = (Object.keys(DEFAULT_FACTOR_STATE) as FactorKey[])
+    .every((k) => factorState[k] === DEFAULT_FACTOR_STATE[k]);
   const [factors, setFactors] = useState<FactorGroup[]>([]);
   const [history, setHistory] = useState<ScriptHistoryEntry[]>([]);
   const [applyingFactor, setApplyingFactor] = useState(false);
@@ -380,6 +387,7 @@ export default function ScriptStudio() {
         <FactorPanel
           factors={factors}
           factorState={factorState}
+          isDefault={isDefaultFactors}
           history={history}
           applying={applyingFactor}
           onFactorChange={handleFactorChange}

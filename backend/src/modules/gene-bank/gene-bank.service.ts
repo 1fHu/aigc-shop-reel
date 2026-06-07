@@ -10,6 +10,9 @@ import { AnalyzedVideo } from '../../database/entities/analyzed-video.entity';
 import {
   ReferenceVideo,
   CreativeFactors,
+  ResolvedCreativeFactors,
+  ResolvedFactor,
+  isNoneCtaFactor,
   VisualStyleLabels,
   OpeningMethodLabels,
   NarrationStyleLabels,
@@ -149,33 +152,46 @@ export class GeneBankService {
   }
 
   /**
-   * 将创作因子转换为 prompt 增强文本
-   * 这个文本会被注入到 director-agent 的 prompt 中
+   * 将创作因子转换为 prompt 增强文本，注入到 director-agent 的 prompt 中。
+   * 接受解析后的因子（ResolvedCreativeFactors）：
+   * - 命中预设（code）→ 走该维度的详细指导文案；
+   * - 自定义文本（custom）→ 原样注入，要求模型严格按自定义描述创作；
+   * - 空维度 → 跳过（动态编号，不留空洞）。
    */
-  factorsToPromptEnhancement(factors: CreativeFactors): string {
-    const parts: string[] = [
-      '请严格按照以下创作因子生成剧本：',
-      '',
-      `1. 视觉风格：${VisualStyleLabels[factors.visualStyle]}`,
-      this.getVisualStylePrompt(factors.visualStyle),
-      '',
-      `2. 开场手法：${OpeningMethodLabels[factors.openingMethod]}`,
-      this.getOpeningMethodPrompt(factors.openingMethod),
-      '',
-      `3. 旁白风格：${NarrationStyleLabels[factors.narrationStyle]}`,
-      this.getNarrationStylePrompt(factors.narrationStyle),
-      '',
-      `4. 节奏密度：${PaceDensityLabels[factors.paceDensity]}`,
-      this.getPaceDensityPrompt(factors.paceDensity),
-    ];
+  factorsToPromptEnhancement(factors: ResolvedCreativeFactors): string {
+    const parts: string[] = ['请严格按照以下创作因子生成剧本：'];
+    let n = 0;
+    const add = (label: string, display: string, guidance: string) => {
+      if (!display && !guidance) return;
+      n += 1;
+      parts.push('', `${n}. ${label}：${display}`, guidance);
+    };
 
-    // CTA 形式为可选：仅当因子明确指定（非 none）时才注入行动号召指导，
-    // 否则不加 CTA，保持平缓真实的种草氛围（默认无 CTA）。
-    if (factors.ctaForm !== 'none') {
-      parts.push('', `5. CTA 形式：${CTAFormLabels[factors.ctaForm]}`, this.getCTAFormPrompt(factors.ctaForm));
+    add('视觉风格', this.factorDisplay(factors.visualStyle, VisualStyleLabels), this.guidance(factors.visualStyle, (c) => this.getVisualStylePrompt(c)));
+    add('开场手法', this.factorDisplay(factors.openingMethod, OpeningMethodLabels), this.guidance(factors.openingMethod, (c) => this.getOpeningMethodPrompt(c)));
+    add('旁白风格', this.factorDisplay(factors.narrationStyle, NarrationStyleLabels), this.guidance(factors.narrationStyle, (c) => this.getNarrationStylePrompt(c)));
+    add('节奏密度', this.factorDisplay(factors.paceDensity, PaceDensityLabels), this.guidance(factors.paceDensity, (c) => this.getPaceDensityPrompt(c)));
+
+    // CTA 可选：仅当指定（非 none、或为自定义文本）时才注入行动号召指导。
+    if (!isNoneCtaFactor(factors.ctaForm)) {
+      add('CTA 形式', this.factorDisplay(factors.ctaForm, CTAFormLabels), this.guidance(factors.ctaForm, (c) => this.getCTAFormPrompt(c)));
     }
 
     return parts.join('\n');
+  }
+
+  /** 维度展示名：自定义优先原文，否则取预设中文标签 */
+  private factorDisplay(rf: ResolvedFactor<string>, labels: Record<string, string>): string {
+    if (rf.custom) return rf.custom;
+    if (rf.code) return labels[rf.code] ?? rf.code;
+    return '';
+  }
+
+  /** 维度指导：自定义文本走通用「按原文执行」，预设走各自详细文案 */
+  private guidance<C extends string>(rf: ResolvedFactor<C>, codePrompt: (c: C) => string): string {
+    if (rf.custom) return `- 自定义要求：${rf.custom}\n- 请严格按上述自定义描述执行，不要套用其它预设风格`;
+    if (rf.code) return codePrompt(rf.code);
+    return '';
   }
 
   // ========== 各维度的详细 prompt 指导 ==========
