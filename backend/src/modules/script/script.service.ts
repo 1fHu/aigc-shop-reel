@@ -129,7 +129,12 @@ export class ScriptService {
     return { id, updated_at: new Date().toISOString(), total_duration: storyboard.reduce((sum, s) => sum + (s.duration || 3), 0) };
   }
 
-  async regenerateShot(id: string, shotIndex: number, _newPrompt?: string) {
+  async regenerateShot(
+    id: string,
+    shotIndex: number,
+    factorsOverride?: Partial<CreativeFactorsSnake>,
+    _newPrompt?: string,
+  ) {
     const script = await this.scriptRepo.findOne({ where: { id } });
     if (!script) throw new NotFoundException('剧本不存在');
     const storyboard = (script.storyboard as ScriptShot[]) || [];
@@ -139,7 +144,13 @@ export class ScriptService {
     const project = await this.projectRepo.findOne({ where: { id: script.projectId } });
     const productInfo = (project?.productInfo || {}) as Record<string, unknown>;
 
-    const regenerated = await this.director.regenerateShot(productInfo, storyboard, shotIndex);
+    // 重生分镜也带上创作因子，保持与全片风格统一（无则空解析，不注入约束）
+    const creativeFactors =
+      factorsOverride && Object.values(factorsOverride).some((v) => v)
+        ? resolveCreativeFactors(factorsOverride)
+        : resolveCreativeFactors({});
+
+    const regenerated = await this.director.regenerateShot(productInfo, storyboard, shotIndex, creativeFactors);
     if (regenerated) {
       // 更新 storyboard 中对应分镜
       const updated = storyboard.map((s) => (s.index === shotIndex ? { ...regenerated, index: shotIndex } : s));

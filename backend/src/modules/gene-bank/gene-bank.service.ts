@@ -12,7 +12,6 @@ import {
   CreativeFactors,
   ResolvedCreativeFactors,
   ResolvedFactor,
-  isNoneCtaFactor,
   VisualStyleLabels,
   OpeningMethodLabels,
   NarrationStyleLabels,
@@ -172,9 +171,14 @@ export class GeneBankService {
     add('旁白风格', this.factorDisplay(factors.narrationStyle, NarrationStyleLabels), this.guidance(factors.narrationStyle, (c) => this.getNarrationStylePrompt(c)));
     add('节奏密度', this.factorDisplay(factors.paceDensity, PaceDensityLabels), this.guidance(factors.paceDensity, (c) => this.getPaceDensityPrompt(c)));
 
-    // CTA 可选：仅当指定（非 none、或为自定义文本）时才注入行动号召指导。
-    if (!isNoneCtaFactor(factors.ctaForm)) {
-      add('CTA 形式', this.factorDisplay(factors.ctaForm, CTAFormLabels), this.guidance(factors.ctaForm, (c) => this.getCTAFormPrompt(c)));
+    // CTA 始终显式输出（包括「无」）：当为 none / 未指定时也要写出「CTA 形式：无」并强约束。
+    // 否则大模型常因商品信息里的折扣/促销/价格等内容擅自输出行动号召，需在此明确禁止。
+    const cta = factors.ctaForm;
+    if (cta.custom) {
+      add('CTA 形式', cta.custom, this.guidance(cta, (c) => this.getCTAFormPrompt(c)));
+    } else {
+      const code = cta.code ?? 'none';
+      add('CTA 形式', CTAFormLabels[code], this.getCTAFormPrompt(code));
     }
 
     return parts.join('\n');
@@ -244,7 +248,7 @@ export class GeneBankService {
 
   private getCTAFormPrompt(form: CreativeFactors['ctaForm']): string {
     const prompts = {
-      none: '- 不要加入行动号召分镜，结尾以产品展示或信任背书自然收束',
+      none: '- 全片不得出现任何行动号召/下单引导（如"立即下单""点击购买""加入购物车""划到主页"等）\n- 即使商品信息中包含折扣、促销、限时、降价、优惠券、价格等内容，也一律不得在画面/配音/字幕中提及价格或引导购买\n- 结尾以产品展示、使用效果或信任背书自然收束，保持平缓真实的种草氛围',
       direct_price: '- 最后一个分镜直接报价或显示价格\n- 配音直接说价格，例如"现在只要xx元"',
       limited_offer: '- 最后一个分镜强调限时优惠或稀缺性\n- 配音强调时间限制，例如"限时特惠，仅剩xx件"',
       soft_guide: '- 最后一个分镜温和引导，不强推销\n- 配音引导了解，例如"点击下方了解更多"',

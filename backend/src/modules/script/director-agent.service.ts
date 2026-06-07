@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { ScriptShot } from './script.service';
-import { ResolvedCreativeFactors, isNoneCtaFactor } from '../gene-bank/types/creative-factors.type';
+import { ResolvedCreativeFactors } from '../gene-bank/types/creative-factors.type';
 import { GeneBankService } from '../gene-bank/gene-bank.service';
 
 /** 允许的运镜方式（AI 越界时归一化到 static） */
@@ -60,18 +60,19 @@ export class DirectorAgentService {
     return this.fallback(productInfo, strategyType);
   }
 
-  /** 单镜重生：根据上下文（前后分镜 + 商品信息）用 AI 重写一个分镜 */
+  /** 单镜重生：根据上下文（前后分镜 + 商品信息 + 创作因子）用 AI 重写一个分镜 */
   async regenerateShot(
     productInfo: Record<string, unknown>,
     storyboard: ScriptShot[],
     shotIndex: number,
+    creativeFactors: ResolvedCreativeFactors,
   ): Promise<ScriptShot | null> {
     const shot = storyboard.find((s) => s.index === shotIndex);
     if (!shot) return null;
     const prevShot = storyboard.find((s) => s.index === shotIndex - 1);
     const nextShot = storyboard.find((s) => s.index === shotIndex + 1);
 
-    const aiShot = await this.callDoubaoRegenerate(productInfo, shot, prevShot, nextShot);
+    const aiShot = await this.callDoubaoRegenerate(productInfo, shot, prevShot, nextShot, creativeFactors);
     if (aiShot) {
       const [normalized] = this.normalize([aiShot]);
       if (normalized) return normalized;
@@ -85,15 +86,19 @@ export class DirectorAgentService {
   private async callDoubaoRegenerate(
     productInfo: Record<string, unknown>,
     target: ScriptShot,
-    prevShot?: ScriptShot,
-    nextShot?: ScriptShot,
+    prevShot: ScriptShot | undefined,
+    nextShot: ScriptShot | undefined,
+    creativeFactors: ResolvedCreativeFactors,
   ): Promise<Partial<ScriptShot> | null> {
     if (!this.apiKey || !this.doubaoEp) return null;
-    const name = (productInfo.name as string) || '商品';
     const contextParts: string[] = [];
     if (prevShot) contextParts.push(`前一镜：${prevShot.description}（配音：${prevShot.voiceover || '无'}）`);
     if (nextShot) contextParts.push(`后一镜：${nextShot.description}（配音：${nextShot.voiceover || '无'}）`);
     const context = contextParts.length ? `\n上下文（用于保持连贯）：\n${contextParts.join('\n')}` : '';
+
+    // 注入本片整体创作因子：重生的分镜需与全片视觉风格/口播语气统一。
+    // 开场/节奏/CTA 属整体设定，框定为"仅供参考"，避免在中间镜强行套用首镜/全片级指令。
+    const factorPrompt = this.geneBank.factorsToPromptEnhancement(creativeFactors);
 
     const prompt = `你是 TikTok 电商带货短视频导演。请重写下面这个分镜，保持风格和前后连贯，但文案/运镜要有变化。
 ${context}
@@ -105,10 +110,14 @@ ${context}
 
 商品信息：${JSON.stringify(productInfo)}
 
+【本片整体创作因子】请让本镜在视觉风格与口播语气上与之统一；其中开场手法、节奏密度为整体结构设定，本镜不必强行体现；但 CTA 约束必须严格遵守（尤其当 CTA 为"无"时，本镜也不得出现任何下单引导或折扣/促销/价格信息）：
+${factorPrompt}
+
 返回一个 JSON 对象（不是数组）：
 {"description":"新的画面描述(中文一句话)","camera_motion":"push-in/static/tracking/pan/zoom-out/handheld","duration":秒数(2-5)","voiceover":"新的口播文案(中文)","subtitle":"新的字幕(简短)"}
 只返回 JSON 对象本身，不要 markdown，不要额外文字。`;
-
+    // give me log for prompt
+    // this.logger.log(`prompt for regeneration: ${prompt}`);
     try {
       const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/chat/completions', {
         method: 'POST',
@@ -138,8 +147,6 @@ ${context}
   ): Promise<Partial<ScriptShot>[] | null> {
     if (!this.apiKey || !this.doubaoEp) return null;
     const strategy = STRATEGY_LABELS[strategyType] || strategyType || '通用带货';
-    // CTA 可选：仅当创作因子明确指定（非 none，含自定义 CTA 文本）时才加入行动号召，否则默认不含 CTA。
-    const wantsCta = !isNoneCtaFactor(creativeFactors.ctaForm);
 
     // 基础 prompt
     let prompt = `你是 TikTok 电商带货短视频的导演。请基于商品信息和创作策略，生成 4-6 个分镜的脚本。
@@ -149,12 +156,7 @@ ${context}
 创作策略：${strategy}
 商品信息：${JSON.stringify(productInfo)}`;
 
-    // 默认不加行动号召；只有因子明确要求 CTA 时才允许出现下单引导分镜
-    if (!wantsCta) {
-      prompt += `\n不要加入"行动号召/下单引导(CTA)"类分镜（如"立即下单""点击购买"），结尾以产品展示、使用效果或信任背书自然收束，保持平缓真实的种草氛围。`;
-    }
-
-    // 添加详细的风格指导（空因子时 factorsToPromptEnhancement 仅返回标题行，不影响生成）
+    // 创作因子指导（CTA 是否出现/是否「无」由因子统一承载，含对折扣促销信息的禁止）
     const factorPrompt = this.geneBank.factorsToPromptEnhancement(creativeFactors);
     prompt += `\n\n【重要】请严格遵循以下创作因子：\n${factorPrompt}`;
     this.logger.log('应用创作因子到 prompt');

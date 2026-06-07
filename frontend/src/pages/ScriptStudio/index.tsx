@@ -202,7 +202,8 @@ export default function ScriptStudio() {
       const resp = await fetch(`/api/scripts/${scriptId}/regenerate-shot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ shot_index: index }),
+        // 带上当前因子面板选择，重生的分镜与全片风格保持统一
+        body: JSON.stringify({ shot_index: index, factors: factorState }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       // 后端返回 SSE 格式: data: {...}\n\n
@@ -219,7 +220,7 @@ export default function ScriptStudio() {
     } finally {
       setRegenerating(false);
     }
-  }, [scriptId, message]);
+  }, [scriptId, message, factorState]);
 
   const handleFactorChange = useCallback(async (key: FactorKey, value: string) => {
     const previousValue = factorState[key];

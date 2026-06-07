@@ -71,8 +71,17 @@ export class ScriptController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post(':id/regenerate-shot')
-  async regenerateShot(@Param('id') id: string, @Body() body: { shot_index: number; new_prompt?: string }, @Res() response: Response) {
-    const result = await this.scriptService.regenerateShot(id, body.shot_index, body.new_prompt);
+  async regenerateShot(
+    @Param('id') id: string,
+    @Body()
+    body: {
+      shot_index: number;
+      new_prompt?: string;
+      factors?: { visual_style?: string; opener?: string; narration?: string; pacing?: string; cta?: string };
+    },
+    @Res() response: Response,
+  ) {
+    const result = await this.scriptService.regenerateShot(id, body.shot_index, body.factors, body.new_prompt);
     response.status(200);
     response.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     response.write(`data: ${JSON.stringify(result)}\n\n`);
