@@ -1,11 +1,19 @@
-import { Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import { Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AnalyticsService } from './analytics.service';
 import { ok } from '../../common/api-response';
+import type { AnalyticsTimeRange } from './data/analytics-overview.data';
 
 @Controller('api/analytics')
 export class AnalyticsController {
   constructor(private readonly analyticsService: AnalyticsService) {}
+
+  // ⚠️ 静态路由 'overview' 必须声明在 ':video_id' 之前，否则会被参数路由吞掉
+  @UseGuards(AuthGuard('jwt'))
+  @Get('overview')
+  getOverview(@Query('range') range?: AnalyticsTimeRange) {
+    return ok(this.analyticsService.getOverview(range ?? '30d'));
+  }
 
   @UseGuards(AuthGuard('jwt'))
   @Get(':video_id')
