@@ -229,3 +229,39 @@ export function creativeFactorsToLabels(factors?: Partial<CreativeFactorsSnake>)
     cta: CTAFormLabels[factors?.cta as CTAForm] ?? factors?.cta ?? '',
   };
 }
+
+/**
+ * 把（中文/自由文本/枚举码）snake_case 因子整体转换成 director-agent 需要的
+ * CreativeFactors（camelCase 枚举码）。先归一成枚举码，再换名，保证健壮。
+ */
+export function toCreativeFactors(raw?: Partial<CreativeFactorsSnake>): CreativeFactors {
+  const n = normalizeCreativeFactors(raw);
+  return {
+    visualStyle: n.visual_style as VisualStyle,
+    openingMethod: n.opener as OpeningMethod,
+    narrationStyle: n.narration as NarrationStyle,
+    paceDensity: n.pacing as PaceDensity,
+    ctaForm: n.cta as CTAForm,
+  };
+}
+
+/** GET /api/factors 因子库一项：维度 key + 中文名 + 可选中文标签列表（与前端 FactorGroup 对齐） */
+export interface FactorGroup {
+  key: keyof CreativeFactorsSnake;
+  label: string;
+  options: string[];
+}
+
+/**
+ * 因子库（5 个维度 + 各自可选中文标签）。
+ * options 直接取 *Labels 的中文值，保证用户在面板选的值能被 normalizeCreativeFactors 完美回环成枚举码。
+ */
+export function getFactorGroups(): FactorGroup[] {
+  return [
+    { key: 'visual_style', label: '视觉风格', options: Object.values(VisualStyleLabels) },
+    { key: 'opener', label: '开场手法', options: Object.values(OpeningMethodLabels) },
+    { key: 'narration', label: '旁白风格', options: Object.values(NarrationStyleLabels) },
+    { key: 'pacing', label: '节奏密度', options: Object.values(PaceDensityLabels) },
+    { key: 'cta', label: 'CTA 形式', options: Object.values(CTAFormLabels) },
+  ];
+}

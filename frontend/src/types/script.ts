@@ -100,6 +100,8 @@ export interface GenerateScriptPayload {
   mode?: ScriptMode;
   reference_video_id?: string;
   template_id?: string;
+  /** 因子面板当前选择（5 维中文标签）；后端归一为枚举码后注入分镜 prompt，优先级高于 reference_video_id */
+  factors?: FactorState;
 }
 
 /** SSE 流式生成的事件类型 */

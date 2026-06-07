@@ -69,8 +69,9 @@ export default function ScriptStudio() {
       try {
         const { viral_id, factors } = JSON.parse(appliedData);
 
-        // 捕获参考视频 ID 到 ref，供生成时透传给后端（清除 sessionStorage 后仍可用）
-        referenceVideoIdRef.current = viral_id;
+        // 捕获参考视频 ID 到 ref，供生成时透传给后端（清除 sessionStorage 后仍可用）。
+        // 视频拆解页直接带因子、不带 viral_id，此时仅靠 factors 透传，ref 保持 undefined。
+        if (viral_id) referenceVideoIdRef.current = viral_id;
 
         // 应用创作因子到 factorState（挂载时一次性从外部来源初始化，故禁用该规则）
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -80,7 +81,7 @@ export default function ScriptStudio() {
         }));
 
         // 显示提示
-        message.success(`已应用爆款模板「${viral_id}」的创作因子`);
+        message.success(viral_id ? `已应用爆款模板「${viral_id}」的创作因子` : '已应用拆解视频的创作因子');
 
         // 清除 sessionStorage（避免重复应用）；viral_id 已存入 state
         sessionStorage.removeItem('genebank_applied');
@@ -129,6 +130,8 @@ export default function ScriptStudio() {
         project_id: pid,
         strategy_type: 'pain_point',
         reference_video_id: referenceVideoIdRef.current,
+        // 把因子面板当前选择一并回传，后端据此注入分镜 prompt（优先级高于参考视频）
+        factors: factorState,
       })) {
         if (event.type === 'scene') {
           if (!cleared) { setScenes([]); cleared = true; }
@@ -142,7 +145,7 @@ export default function ScriptStudio() {
       message.error('剧本生成失败');
       setGenerating(false);
     }
-  }, [projectId, message]);
+  }, [projectId, message, factorState]);
 
   const handleSave = useCallback(async () => {
     if (!scriptId) return;
