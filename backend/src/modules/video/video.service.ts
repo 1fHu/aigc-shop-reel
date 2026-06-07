@@ -13,6 +13,7 @@ import { VideoTask } from '../../database/entities/video-task.entity';
 import { Project } from '../../database/entities/project.entity';
 import { Script } from '../../database/entities/script.entity';
 import { Material } from '../../database/entities/material.entity';
+import { promoteProjectStatus } from '../../common/project-status';
 
 const VIDEO_DIR = join(process.cwd(), '..', 'uploads', 'videos');
 const MAX_SHOT_POLLS = 120;
@@ -209,6 +210,11 @@ export class VideoService {
     // 临时存储 taskCount 供 status 查询
     (video as any)._taskCount = taskCount;
     const saved = await this.videoRepo.save(video);
+    
+    await this.projectRepo.increment({ id: projectId }, 'videoCount', 1);
+    await this.projectRepo.update(projectId, {
+      status: promoteProjectStatus(project?.status || 'video_pending', 'video_pending'),
+    });
 
     // 立即为每个分镜创建 task 记录（queued），前端轮询时可看到进度
     for (const shot of normalizedStoryboard) {
@@ -216,7 +222,7 @@ export class VideoService {
       await this.taskRepo.save(task);
     }
 
-    this.buildPromptAndSubmit(saved.id, script, productName, productInfo, imageUrls, materialContext, opts);
+    this.buildPromptAndSubmit(saved.id, projectId, script, productName, productInfo, imageUrls, materialContext, opts);
     return { id: saved.id, video_id: saved.id, trace_id: saved.traceId, task_count: taskCount, total_shots: taskCount, status: saved.status };
   }
 
@@ -391,6 +397,7 @@ export class VideoService {
 
     const finalUrl = await this.composite(id, clips);
     await this.videoRepo.update(id, { status: 'completed', videoUrl: finalUrl });
+    await this.projectRepo.update(video.projectId, { status: 'finished' });
     return { id, status: 'completed', video_url: finalUrl };
   }
 
@@ -561,7 +568,7 @@ export class VideoService {
 
   // ---- private: video generation (Seedance + ffmpeg) ----
 
-  private async buildPromptAndSubmit(videoId: string, script: Script | null, productName: string, productInfo: Record<string, unknown>, imageUrls: string[], materialContext: string, opts?: { voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string }) {
+  private async buildPromptAndSubmit(videoId: string, projectId: string, script: Script | null, productName: string, productInfo: Record<string, unknown>, imageUrls: string[], materialContext: string, opts?: { voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string }) {
     const storyboard = (script?.storyboard as ScriptShot[]) || [];
     const normalizedStoryboard = storyboard.map((shot, idx) => ({
       ...shot,
@@ -635,6 +642,7 @@ export class VideoService {
       // 阶段 3：拼接所有已合成片段
       const finalUrl = await this.composite(videoId, compositedClips);
       await this.videoRepo.update(videoId, { status: 'completed', videoUrl: finalUrl });
+      await this.projectRepo.update(projectId, { status: 'finished' });
       this.logger.log(`Video ${videoId} completed: ${finalUrl}`);
     } catch (err) {
       this.logger.error(`buildPromptAndSubmit FAILED: ${(err as Error).message}`, (err as Error).stack);

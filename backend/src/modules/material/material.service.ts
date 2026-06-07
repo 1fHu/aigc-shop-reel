@@ -7,6 +7,7 @@ import { readFile, unlink } from 'fs/promises';
 import { Material } from '../../database/entities/material.entity';
 import { Project } from '../../database/entities/project.entity';
 import { MinioStorageService } from '../../common/minio-storage.service';
+import { promoteProjectStatus } from '../../common/project-status';
 
 /**
  * 上传约束：
@@ -97,6 +98,9 @@ export class MaterialService {
           thumbnail_url: saved.thumbnailUrl,
         });
       }
+
+      await this.projectRepo.increment({ id: projectId }, 'materialCount', results.length);
+      await this.projectRepo.update(projectId, { status: promoteProjectStatus(project.status, 'script_pending') });
       return results;
     } finally {
       await Promise.all(tempPaths.map((p) => unlink(p).catch(() => undefined)));

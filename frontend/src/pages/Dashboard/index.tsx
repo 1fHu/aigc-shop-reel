@@ -51,6 +51,13 @@ function greeting(): string {
   return '晚上好';
 }
 
+function progressByStatus(status: ProjectListItem['status']): number | undefined {
+  if (status === 'script_pending') return 35;
+  if (status === 'video_pending') return 80;
+  if (status === 'in_progress') return 85;
+  return undefined;
+}
+
 export default function Dashboard() {
   const navigate = useNavigate();
   const user = useAuthStore(selectUser);
@@ -159,7 +166,7 @@ export default function Dashboard() {
                   project={p}
                   views={i === 0 ? '4.2k' : '12.8k'}
                   topTag={i === 0 ? 'TIKTOK READY' : undefined}
-                  renderProgress={p.status === 'in_progress' ? 85 : undefined}
+                  renderProgress={progressByStatus(p.status)}
                 />
               ))
             ) : (

@@ -62,7 +62,7 @@ export default function ProjectEntryModal({ open, project, onClose }: Props) {
     switch (entry.key) {
       // Video：已完成生成 → 播放页；否则提示未生成
       case 'video':
-        if (project.status === 'completed') {
+        if (project.status === 'finished' || project.status === 'completed') {
           onClose();
           navigate(`/projects/${pid}/video`);
         } else {

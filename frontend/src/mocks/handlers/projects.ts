@@ -17,7 +17,7 @@ const initialProjects: ProjectListItem[] = [
     name: 'Summer Skin Glow',
     cover_url: 'https://images.unsplash.com/photo-1556228720-195a672e8a03?w=600&h=375&fit=crop',
     video_count: 1,
-    status: 'completed',
+    status: 'finished',
     updated_at: '2026-05-25T10:00:00Z',
   },
   {
@@ -25,7 +25,7 @@ const initialProjects: ProjectListItem[] = [
     name: 'Tech Gear Pro',
     cover_url: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=600&h=375&fit=crop',
     video_count: 0,
-    status: 'in_progress',
+    status: 'video_pending',
     updated_at: '2026-05-25T11:45:00Z',
   },
   {
@@ -33,7 +33,7 @@ const initialProjects: ProjectListItem[] = [
     name: 'Kitchen Essentials',
     cover_url: 'https://images.unsplash.com/photo-1490645935967-10de6ba17061?w=600&h=375&fit=crop',
     video_count: 2,
-    status: 'completed',
+    status: 'finished',
     updated_at: '2026-05-24T09:00:00Z',
   },
   {
@@ -41,7 +41,7 @@ const initialProjects: ProjectListItem[] = [
     name: 'Urban Style Edit',
     cover_url: 'https://images.unsplash.com/photo-1483985988355-763728e1935b?w=600&h=375&fit=crop',
     video_count: 1,
-    status: 'completed',
+    status: 'finished',
     updated_at: '2026-05-23T16:00:00Z',
   },
 ];
@@ -92,7 +92,7 @@ export const projectHandlers = [
       name: body.name,
       cover_url: defaultCover(id),
       video_count: 0,
-      status: 'draft',
+      status: 'material_pending',
       updated_at: new Date().toISOString(),
     };
     projectsStore.unshift(newProject);   // 加到最前
@@ -115,13 +115,13 @@ export const projectHandlers = [
       );
     }
     // 详情含各阶段进度计数（对齐后端 GET /api/projects/:id）。
-    // 草稿尚未进入剧本阶段 → script_count=0；其余阶段视为已生成剧本。
+    // 素材待上传尚未进入剧本阶段 → script_count=0；其余阶段视为已生成剧本。
     const detail = {
       ...item,
       description: '',
       product_info: null,
-      material_count: item.status === 'draft' ? 0 : 5,
-      script_count: item.status === 'draft' ? 0 : 1,
+      material_count: item.status === 'material_pending' ? 0 : 5,
+      script_count: item.status === 'material_pending' ? 0 : 1,
       video_count: item.video_count,
     };
     return HttpResponse.json({

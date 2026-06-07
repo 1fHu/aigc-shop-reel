@@ -3,7 +3,14 @@
  * 严格按《VidCraft API 接口规范文档 v1.0》第 3 章对齐
  */
 
-export type ProjectStatus = 'draft' | 'in_progress' | 'completed';
+export type ProjectStatus =
+  | 'material_pending'
+  | 'script_pending'
+  | 'video_pending'
+  | 'finished'
+  | 'draft'
+  | 'in_progress'
+  | 'completed';
 
 /**
  * 项目列表项（GET /api/projects 返回结构）
