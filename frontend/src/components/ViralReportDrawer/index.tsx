@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Drawer, Skeleton, Tag, Checkbox, Button, App } from 'antd';
+import { Drawer, Skeleton, Tag, Button } from 'antd';
 import {
   ThunderboltOutlined,
   FireOutlined,
@@ -22,7 +22,7 @@ interface Props {
   open: boolean;
   cardId: string | null;
   onClose: () => void;
-  /** 用户勾选完因子后点"应用并去剧本" */
+  /** @deprecated 抽屉已移除"应用因子并去剧本"入口，此 prop 不再被调用（保留以兼容父组件透传） */
   onApplyFactors?: (cardId: string, factors: Partial<ViralRecommendedFactors>) => void;
 }
 
@@ -45,13 +45,9 @@ const FACTOR_KEYS = Object.keys(FACTOR_LABELS) as Array<keyof ViralRecommendedFa
  * 3. 推荐创作因子勾选表（默认全勾，用户可单独取消）
  * 4. 底部 "应用因子并去剧本" CTA
  */
-export default function ViralReportDrawer({ open, cardId, onClose, onApplyFactors }: Props) {
-  const { message } = App.useApp();
+export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState<ViralCard | null>(null);
-  const [pickedFactors, setPickedFactors] = useState<Set<keyof ViralRecommendedFactors>>(
-    new Set(FACTOR_KEYS),
-  );
 
   useEffect(() => {
     if (!open || !cardId) return;
@@ -64,29 +60,6 @@ export default function ViralReportDrawer({ open, cardId, onClose, onApplyFactor
     return () => { cancelled = true; };
     // ⚠️ 由于 destroyOnClose，每次打开 Drawer 都是新实例：loading 初值 true、card 初值 null
   }, [open, cardId]);
-
-  const handleToggleFactor = (key: keyof ViralRecommendedFactors) => {
-    setPickedFactors((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
-
-  const handleApply = () => {
-    if (!card?.analysis_report.recommended_factors || !cardId) return;
-    if (pickedFactors.size === 0) {
-      message.warning('请至少勾选一个创作因子');
-      return;
-    }
-    const rec = card.analysis_report.recommended_factors;
-    const result: Partial<ViralRecommendedFactors> = {};
-    pickedFactors.forEach((k) => { result[k] = rec[k]; });
-    onApplyFactors?.(cardId, result);
-    message.success('已应用所选创作因子');
-    onClose();
-  };
 
   const report = card?.analysis_report;
   const factors = report?.recommended_factors;
@@ -196,38 +169,25 @@ export default function ViralReportDrawer({ open, cardId, onClose, onApplyFactor
           {factors && (
             <div className={styles.factorBox}>
               <div className={styles.factorTitle}>
-                <CheckCircleFilled style={{ color: '#4648D4' }} /> 推荐创作因子（可勾选）
+                <CheckCircleFilled style={{ color: '#4648D4' }} /> 推荐创作因子
               </div>
-              <p className={styles.factorHint}>勾选要继承的因子，应用后用于剧本生成。</p>
+              <p className={styles.factorHint}>AI 从该视频拆解出的创作因子。</p>
               <div className={styles.factorList}>
                 {FACTOR_KEYS.map((key) => (
-                  <label key={key} className={styles.factorRow}>
-                    <Checkbox
-                      checked={pickedFactors.has(key)}
-                      onChange={() => handleToggleFactor(key)}
-                    >
-                      <span className={styles.factorRowLabel}>{FACTOR_LABELS[key]}</span>
-                      <span className={styles.factorRowArrow}>→</span>
-                      <span className={styles.factorRowValue}>{factors[key]}</span>
-                    </Checkbox>
-                  </label>
+                  <div key={key} className={styles.factorRow}>
+                    <CheckCircleFilled style={{ color: '#4648D4', marginRight: 8 }} />
+                    <span className={styles.factorRowLabel}>{FACTOR_LABELS[key]}</span>
+                    <span className={styles.factorRowArrow}>→</span>
+                    <span className={styles.factorRowValue}>{factors[key]}</span>
+                  </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* 底部 CTA */}
+          {/* 底部 */}
           <div className={styles.footer}>
-            <Button onClick={onClose} disabled={loading}>取消</Button>
-            <Button
-              type="primary"
-              size="large"
-              disabled={!factors}
-              onClick={handleApply}
-              className={styles.applyBtn}
-            >
-              应用因子并去剧本 →
-            </Button>
+            <Button onClick={onClose} disabled={loading}>关闭</Button>
           </div>
         </div>
       )}
