@@ -50,25 +50,38 @@ export class ScriptService {
     // 面板的值由参考视频初始化，故用户在面板上的改动天然覆盖参考视频，符合所见即所得。
     // creativeFactors 恒有值（无来源时空解析），director 据此免去判空。
     let creativeFactors: ResolvedCreativeFactors;
+    let factorSource: 'factor_panel' | 'reference' | 'none';
     if (factorsOverride && Object.values(factorsOverride).some((v) => v)) {
       creativeFactors = resolveCreativeFactors(factorsOverride);
+      factorSource = 'factor_panel';
       this.logger.log('使用前端因子面板传入的创作因子');
     } else if (referenceVideoId) {
       const refVideo = await this.geneBank.getReferenceVideoById(referenceVideoId);
       creativeFactors = resolveFromCreativeFactors(refVideo.factors);
+      factorSource = 'reference';
       this.logger.log(`使用参考视频 ${referenceVideoId} 的创作因子`);
     } else {
       creativeFactors = resolveCreativeFactors({});
+      factorSource = 'none';
       this.logger.log('未指定创作因子，使用空因子（不注入风格约束）');
     }
 
     const storyboard = await this.director.generateStoryboard(productInfo, strategyType, creativeFactors);
 
+    // 溯源：爆款仿写会同时带 referenceVideoId 与（来自该爆款的）面板因子，此时来源记为 factor_panel
+    // 但 referenceVideoId 仍要落库，保证「仿写自哪条爆款 + 实际应用了哪些因子」完整可查。
     const script = this.scriptRepo.create({
       projectId,
       strategyType,
       storyboard: storyboard as unknown as object,
-      factorHistory: referenceVideoId ? [{ referenceVideoId, appliedAt: new Date().toISOString() }] : [],
+      factorHistory: [
+        {
+          source: factorSource,
+          referenceVideoId: referenceVideoId ?? null,
+          factors: creativeFactors,
+          appliedAt: new Date().toISOString(),
+        },
+      ],
       status: 'draft',
     });
     const saved = await this.scriptRepo.save(script);

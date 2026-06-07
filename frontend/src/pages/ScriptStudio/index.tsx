@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { App, Skeleton, Modal, Checkbox } from 'antd';
-import { RocketOutlined, SaveOutlined, ThunderboltFilled, PlaySquareOutlined, ReloadOutlined } from '@ant-design/icons';
+import { RocketOutlined, SaveOutlined, ThunderboltFilled, PlaySquareOutlined, ReloadOutlined, FireOutlined } from '@ant-design/icons';
 import { scriptService } from '@/services/scriptService';
 import { videoService } from '@/services/videoService';
-import type { Scene, FactorGroup, FactorState, FactorKey, ScriptHistoryEntry } from '@/types';
+import { genebankService } from '@/services/genebankService';
+import type { Scene, FactorGroup, FactorState, FactorKey, ScriptHistoryEntry, ViralCard } from '@/types';
 import ShotTimeline from './ShotTimeline';
 import ShotEditor from './ShotEditor';
 import FactorPanel from './FactorPanel';
@@ -257,6 +258,32 @@ export default function ScriptStudio() {
     }
   }, [scriptId, factors, factorState, message]);
 
+  // ---- 爆款仿写：选模板 → 应用因子 ----
+  const [viralModalOpen, setViralModalOpen] = useState(false);
+  const [viralCards, setViralCards] = useState<ViralCard[]>([]);
+  const [viralLoading, setViralLoading] = useState(false);
+
+  const handleOpenViral = useCallback(async () => {
+    setViralModalOpen(true);
+    setViralLoading(true);
+    try {
+      setViralCards(await genebankService.search());
+    } catch {
+      message.error('加载爆款模板失败');
+    } finally {
+      setViralLoading(false);
+    }
+  }, [message]);
+
+  // 选中爆款模板：把推荐因子写入面板 + 记下参考视频 ID（供生成时透传），提示用户去生成
+  const handleApplyViral = useCallback((card: ViralCard) => {
+    const rec = card.analysis_report?.recommended_factors;
+    if (rec) setFactorState((prev) => ({ ...prev, ...rec }));
+    referenceVideoIdRef.current = card.id;
+    setViralModalOpen(false);
+    message.success(`已应用爆款模板「${card.title}」的创作因子，请点击「生成剧本」生成`);
+  }, [message]);
+
   // ---- video / shot generation ----
   const [regeneratingShots, setRegeneratingShots] = useState(false);
   const [shotSelectOpen, setShotSelectOpen] = useState(false);
@@ -336,13 +363,22 @@ export default function ScriptStudio() {
           <div className={styles.emptyState}>
             <h2>分镜编辑</h2>
             <p>基于商品信息，AI 自动生成带货视频分镜剧本，也可手动逐镜编辑</p>
-            <button
-              className={styles.genBtn}
-              onClick={handleGenerate}
-              disabled={generating}
-            >
-              <ThunderboltFilled /> AI 生成剧本
-            </button>
+            <div className={styles.emptyActions}>
+              <button
+                className={styles.genBtn}
+                onClick={handleGenerate}
+                disabled={generating}
+              >
+                <ThunderboltFilled /> 生成剧本
+              </button>
+              <button
+                className={styles.genBtn}
+                onClick={handleOpenViral}
+                style={{ background: '#F3F4F6', color: '#374151' }}
+              >
+                <FireOutlined /> 爆款仿写
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -356,14 +392,17 @@ export default function ScriptStudio() {
     <div className={styles.shell}>
       {/* ====== Toolbar ====== */}
       <div className={styles.toolbar}>
-        <div className={styles.modeSegment}>
-          <button className={styles.modeBtn} disabled title="即将上线">爆款仿写</button>
-          <button className={styles.modeBtn} disabled title="即将上线">灵感模板</button>
-          <button className={`${styles.modeBtn} ${styles.modeBtnActive}`} onClick={handleGenerate}>
-            <ThunderboltFilled style={{ fontSize: 11, marginRight: 2 }} /> AI 生成剧本
+        <div className={styles.toolbarLeft}>
+          <span className={styles.modeTitle}>AI 生成剧本</span>
+          <button className={styles.viralBtn} onClick={handleOpenViral}>
+            <FireOutlined style={{ fontSize: 12, marginRight: 4 }} /> 爆款仿写
+          </button>
+          <button className={styles.generateBtn} onClick={handleGenerate} disabled={generating}>
+            <ThunderboltFilled style={{ fontSize: 12, marginRight: 4 }} /> 生成剧本
           </button>
         </div>
         <div className={styles.toolbarRight}>
+          <span className={styles.saveHint}>删减镜头或编辑分镜字段后点击</span>
           <button className={styles.saveBtn} onClick={handleSave} disabled={!scriptId || generating}>
             <SaveOutlined /> 保存
           </button>
@@ -448,6 +487,46 @@ export default function ScriptStudio() {
           </button>
         </div>
       </div>
+
+      {/* ====== 爆款仿写：选模板 Modal ====== */}
+      <Modal
+        title="爆款仿写 — 选择参考模板"
+        open={viralModalOpen}
+        onCancel={() => setViralModalOpen(false)}
+        footer={null}
+        width={780}
+      >
+        <p style={{ color: '#6B7280', marginBottom: 12, fontSize: 13 }}>
+          选择一个爆款模板，将其创作因子（风格 / 开场 / 口播 / 节奏 / CTA）应用到当前剧本，随后点击「生成剧本」生成同款。
+        </p>
+        {viralLoading ? (
+          <Skeleton active paragraph={{ rows: 6 }} />
+        ) : viralCards.length === 0 ? (
+          <div className={styles.viralEmpty}>暂无爆款模板</div>
+        ) : (
+          <div className={styles.viralGrid}>
+            {viralCards.map((card) => {
+              const rec = card.analysis_report?.recommended_factors;
+              const chips = rec
+                ? [rec.visual_style, rec.opener, rec.narration, rec.pacing, rec.cta].filter((v) => v && v !== '无')
+                : [];
+              return (
+                <div key={card.id} className={styles.viralCard} onClick={() => handleApplyViral(card)}>
+                  <img src={card.thumbnail_url} alt={card.title} className={styles.viralThumb} />
+                  <div className={styles.viralBody}>
+                    <div className={styles.viralTitle}>{card.title}</div>
+                    <div className={styles.viralChips}>
+                      {chips.map((v) => (
+                        <span key={v} className={styles.viralChip}>{v}</span>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Modal>
 
       {/* ====== 分镜选择 Modal ====== */}
       <Modal
