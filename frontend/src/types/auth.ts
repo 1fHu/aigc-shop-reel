@@ -12,13 +12,14 @@ export type UserPlan = 'free' | 'pro' | 'team';
 
 export interface User {
   id: string;
-  email?: string | null;   // 游客用户没有 email
+  email?: string | null;
   nickname: string;
-  avatar_url?: string | null;  // 后端 v1.1 实际字段名（snake_case 与项目约定一致）
+  avatar_url?: string | null;
   is_guest: boolean;
-  plan_type?: UserPlan;    // 仅注册用户有
-  video_quota: number;     // 剩余视频生成配额
+  plan_type?: UserPlan;
+  video_quota: number;
   created_at?: string;
+  preferences?: Record<string, unknown> | null;
 }
 
 export interface LoginPayload {

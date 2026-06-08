@@ -1,0 +1,62 @@
+.page {
+  padding: 32px;
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 24px;
+}
+
+.header h1 {
+  font-size: 28px;
+  font-weight: 600;
+  color: #111827;
+  margin: 0;
+}
+
+.tabs {
+  margin-top: 8px;
+}
+
+.formSection {
+  max-width: 480px;
+  padding-top: 16px;
+}
+
+.avatarSection {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 28px;
+}
+
+.avatarPreview {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: #F3F4F6;
+}
+
+.avatarPlaceholder {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: #EEF2FF;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  color: #4648D4;
+  font-weight: 600;
+}
+
+.guestNotice {
+  padding: 48px 32px;
+  text-align: center;
+  color: #6B7280;
+  font-size: 15px;
+  background: #F9FAFB;
+  border-radius: 12px;
+}

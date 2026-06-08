@@ -43,8 +43,22 @@ export const authService = {
     return api.get('/auth/profile');
   },
 
-  /** 更新昵称 / 头像 */
-  updateProfile(payload: { nickname?: string; avatar?: string }): Promise<User> {
+  /** 更新昵称 / 头像 / 偏好 */
+  updateProfile(payload: { nickname?: string; avatar?: string; preferences?: Record<string, unknown> }): Promise<User> {
     return api.put('/auth/profile', payload);
+  },
+
+  /** 修改密码 */
+  changePassword(payload: { currentPassword: string; newPassword: string; confirmNewPassword: string }): Promise<{ changed: boolean }> {
+    return api.put('/auth/password', payload);
+  },
+
+  /** 上传头像 */
+  uploadAvatar(file: File): Promise<{ avatar_url: string }> {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/auth/avatar', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
   },
 };

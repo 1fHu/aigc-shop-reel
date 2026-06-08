@@ -1,5 +1,6 @@
-import { Body, Controller, Post, Get, Put, Req, UseGuards, HttpCode } from '@nestjs/common';
+import { Body, Controller, Post, Get, Put, Req, UseGuards, UseInterceptors, UploadedFile, HttpCode } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthService } from './auth.service';
 import { ok } from '../../common/api-response';
 
@@ -54,8 +55,23 @@ export class AuthController {
 
   @UseGuards(AuthGuard('jwt'))
   @Put('profile')
-  updateProfile(@Req() request: { user: { id: string } }, @Body() body: { nickname?: string; avatar?: string }) {
-    return ok(this.authService.updateProfile(request.user.id, body.nickname, body.avatar));
+  updateProfile(@Req() request: { user: { id: string } }, @Body() body: { nickname?: string; avatar?: string; preferences?: Record<string, unknown> }) {
+    return ok(this.authService.updateProfile(request.user.id, body.nickname, body.avatar, body.preferences));
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @HttpCode(200)
+  @Put('password')
+  changePassword(@Req() request: { user: { id: string } }, @Body() body: { currentPassword: string; newPassword: string; confirmNewPassword: string }) {
+    return ok(this.authService.changePassword(request.user.id, body.currentPassword, body.newPassword, body.confirmNewPassword));
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @UseInterceptors(FileInterceptor('file'))
+  @HttpCode(200)
+  @Post('avatar')
+  uploadAvatar(@Req() request: { user: { id: string } }, @UploadedFile() file: Express.Multer.File) {
+    return ok(this.authService.uploadAvatar(request.user.id, file));
   }
 
   @HttpCode(200)

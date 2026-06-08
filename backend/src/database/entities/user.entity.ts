@@ -17,6 +17,9 @@ export class User {
   @Column({ type: 'varchar', nullable: true, name: 'avatar_url' })
   avatarUrl: string;
 
+  @Column({ type: 'jsonb', nullable: true, default: {} })
+  preferences: Record<string, unknown>;
+
   @Column({ type: 'varchar', default: 'free', name: 'plan_type' })
   planType: string;
 

@@ -1,9 +1,11 @@
+import path from 'path';
 import { Injectable, Logger, UnauthorizedException, ConflictException, BadRequestException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import bcrypt from 'bcrypt';
 import { MockStoreService } from '../../common/mock-store.service';
+import { MinioStorageService } from '../../common/minio-storage.service';
 import { EmailService } from './email.service';
 import { User } from '../../database/entities/user.entity';
 
@@ -21,6 +23,7 @@ export class AuthService {
     private readonly store: MockStoreService,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly minio: MinioStorageService,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
   ) {}
 
@@ -49,6 +52,7 @@ export class AuthService {
       plan_type: user.planType,
       video_quota: user.videoQuota,
       is_guest: (user as any).isGuest ?? false,
+      preferences: user.preferences ?? {},
     };
   }
 
@@ -127,18 +131,63 @@ export class AuthService {
 
   async profile(userId: string) {
     if (userId === GUEST_USER_ID) {
-      return { id: userId, email: 'demo@vidcraft.icu', nickname: '体验用户', avatar_url: null, plan_type: 'free', video_quota: 2, is_guest: true };
+      return { id: userId, email: 'demo@vidcraft.icu', nickname: '体验用户', avatar_url: null, plan_type: 'free', video_quota: 2, is_guest: true, preferences: {} };
     }
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('用户不存在');
     return this.sanitizeUser(user);
   }
 
-  async updateProfile(userId: string, nickname?: string, avatarUrl?: string) {
-    await this.userRepo.update(userId, { nickname, avatarUrl });
+  async updateProfile(userId: string, nickname?: string, avatarUrl?: string, preferences?: Record<string, unknown>) {
+    const updates: Record<string, unknown> = {};
+    if (nickname !== undefined) updates.nickname = nickname;
+    if (avatarUrl !== undefined) updates.avatarUrl = avatarUrl;
+    if (preferences !== undefined) updates.preferences = preferences;
+    if (Object.keys(updates).length > 0) {
+      await this.userRepo.update(userId, updates as any);
+    }
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new UnauthorizedException('用户不存在');
-    return { nickname: user.nickname, avatar_url: user.avatarUrl };
+    return this.sanitizeUser(user);
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string, confirmNewPassword: string) {
+    if (newPassword !== confirmNewPassword) throw new ConflictException('两次输入的密码不一致');
+    if (!newPassword || newPassword.length < 8 || !/[a-zA-Z]/.test(newPassword) || !/[0-9]/.test(newPassword))
+      throw new ConflictException('密码至少 8 位，须包含字母与数字');
+
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('用户不存在');
+
+    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isMatch) throw new BadRequestException('当前密码错误');
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.userRepo.update(userId, { passwordHash });
+
+    return { changed: true };
+  }
+
+  async uploadAvatar(userId: string, file: Express.Multer.File) {
+    if (!file) throw new BadRequestException('请选择要上传的头像文件');
+
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowedMimes.includes(file.mimetype)) {
+      throw new BadRequestException('仅支持 JPG/PNG/WebP 格式的头像');
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      throw new BadRequestException('头像文件不能超过 5MB');
+    }
+
+    const ext = path.extname(file.originalname) || '.jpg';
+    const key = `avatars/${userId}${ext}`;
+    const avatarUrl = await this.minio.uploadFile(key, file.buffer, file.mimetype);
+    await this.userRepo.update(userId, { avatarUrl });
+
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new UnauthorizedException('用户不存在');
+
+    return { avatar_url: user.avatarUrl };
   }
 
   async forgotPassword(email: string) {
