@@ -14,7 +14,9 @@
 
 function resolveInstaller(pkg: string): string | null {
   try {
-    // 这些包导出 { path }；某些平台可能没有预编译二进制 → require 抛错则兜底
+    // 这些包导出 { path }；某些平台可能没有预编译二进制 → require 抛错则兜底。
+    // 必须用动态 require 才能 try/catch 按平台容错，静态 import 做不到，故禁用规则。
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require(pkg) as { path?: string };
     return mod?.path || null;
   } catch {
