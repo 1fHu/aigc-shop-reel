@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { VideoController } from './video.controller';
 import { VideoService } from './video.service';
+import { VideoGateway } from './video.gateway';
 import { VolcanoModule } from '../volcano/volcano.module';
 import { Video } from '../../database/entities/video.entity';
 import { VideoTask } from '../../database/entities/video-task.entity';
@@ -12,7 +13,7 @@ import { Material } from '../../database/entities/material.entity';
 @Module({
   imports: [VolcanoModule, TypeOrmModule.forFeature([Video, VideoTask, Project, Script, Material])],
   controllers: [VideoController],
-  providers: [VideoService],
+  providers: [VideoService, VideoGateway],
   exports: [VideoService],
 })
 export class VideoModule {}
