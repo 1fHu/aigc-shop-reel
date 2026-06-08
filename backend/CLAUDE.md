@@ -282,7 +282,7 @@ POST /api/products/:project_id/parse-image  （multipart 商品图）
 POST /api/videos/generate
   └─ VideoService.generate(): 取 ready 素材 → 建 Video + 每镜 VideoTask(queued)
         └─（service 内逐镜顺序执行，非 BullMQ）
-              ├─ volcano.generateVideo() 提交 Seedance → 轮询 getVideoTaskStatus()（MAX_SHOT_POLLS=120）
+              ├─ volcano.generateVideo() 提交 Seedance → 轮询 getVideoTaskStatus()（MAX_SHOT_POLLS=240）
               ├─ downloadShot() 下载片段 → 每镜 status=completed + previewUrl
               └─ composite(): ffmpeg concat 拼接所有片段 → 成片 videoUrl，Video.status=completed
 前端轮询 GET /api/videos/:id/status 观察逐镜进度（暂无 WebSocket 推送，video.gateway.ts 仍是 TODO）。
