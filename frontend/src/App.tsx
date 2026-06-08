@@ -16,6 +16,7 @@ import GeneBank from './pages/GeneBank';
 import ViralAnalyzer from './pages/ViralAnalyzer';
 import ViralAnalyzerDetail from './pages/ViralAnalyzer/detail';
 import Help from './pages/Help';
+import Account from './pages/Account';
 
 /**
  * 路由设计：
@@ -54,6 +55,7 @@ function App() {
           <Route path="/viral-analyzer/:id" element={<ViralAnalyzerDetail />} />
 
           {/* 快捷入口（无需项目 ID） */}
+          <Route path="/account" element={<Account />} />
           <Route path="/script-studio" element={<ScriptStudio />} />
 
           {/* 项目内子页：素材库 → 分镜编辑 → 视频创作 */}

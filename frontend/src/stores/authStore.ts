@@ -39,6 +39,7 @@ interface AuthState {
   loadProfile: () => Promise<void>;
   refreshAccess: () => Promise<void>;
   logout: () => Promise<void>;
+  updateUser: (partial: Partial<User>) => void;
   reset: () => void;
 }
 
@@ -149,6 +150,12 @@ export const useAuthStore = create<AuthState>()(
             clearTokens();
             set({ ...initialState }, false, 'auth/logout');
           }
+        },
+
+        updateUser: (partial) => {
+          set((state) => ({
+            user: state.user ? { ...state.user, ...partial } : null,
+          }), false, 'auth/updateUser');
         },
 
         reset: () => {

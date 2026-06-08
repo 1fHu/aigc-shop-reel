@@ -1,3 +1,4 @@
+import path from 'path';
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -21,6 +22,8 @@ import { ViralGene } from './entities/viral-gene.entity';
         url: config.get<string>('DATABASE_URL', 'postgresql://vidcraft:vidcraft@localhost:5432/vidcraft'),
         entities: [User, Project, Material, Script, Video, VideoTask, AnalyzedVideo, ViralLibrary, ViralGene],
         synchronize: false,
+        migrations: [path.join(__dirname, 'migrations/*.js')],
+        migrationsRun: true,
         logging: config.get('NODE_ENV') === 'development' ? ['error', 'warn'] : ['error'],
         // 连接池：默认 pg pool max=10，前端轮询 + 视频生成并发查询时易排队。给点余量；
         // 连接获取超时后报错而非无限挂起，避免前端请求卡死（连不上时快速失败）。
