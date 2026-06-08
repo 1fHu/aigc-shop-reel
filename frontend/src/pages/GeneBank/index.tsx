@@ -139,6 +139,8 @@ export default function GeneBank() {
           <h1 className={styles.title}>爆款模板库</h1>
           <p className={styles.subtitle}>
             探索经过 AI 智能解析的优质带货视频，借鉴 Hook 手法 / 节奏 / 视觉风格，一键生成同款剧本
+            <br />
+            使用模板请前往项目分镜编辑选择模板
           </p>
         </div>
         <div className={styles.searchWrap}>

@@ -142,6 +142,8 @@ type ScriptShot = {
 @Injectable()
 export class VideoService {
   private readonly logger = new Logger(VideoService.name);
+  /** ffmpeg 是否带 libass（subtitles 滤镜）。null=未检测，检测一次后缓存 */
+  private subtitlesSupported: boolean | null = null;
 
   constructor(
     private readonly volcano: VolcanoApiService,
@@ -938,16 +940,42 @@ export class VideoService {
     }
   }
 
+  /**
+   * 检测当前 ffmpeg 是否带 libass（subtitles 滤镜）。检测一次后缓存。
+   * 不带 libass 时 `-vf subtitles=...` 会让整条命令失败，需提前跳过字幕（仅混音频）。
+   */
+  private async ensureSubtitlesSupport(): Promise<boolean> {
+    if (this.subtitlesSupported !== null) return this.subtitlesSupported;
+    this.subtitlesSupported = await new Promise<boolean>((resolve) => {
+      try {
+        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ['-hide_banner', '-filters']);
+        let out = '';
+        ff.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
+        ff.on('error', () => resolve(false));
+        ff.on('close', () => resolve(/\bsubtitles\b/.test(out)));
+      } catch { resolve(false); }
+    });
+    if (!this.subtitlesSupported) {
+      this.logger.warn(
+        'ffmpeg 未编译 libass（无 subtitles 滤镜）→ 字幕将无法烧录，仅合成 TTS 配音。' +
+        '安装带 libass 的 ffmpeg（如 `brew reinstall ffmpeg`）后字幕会自动生效。',
+      );
+    } else {
+      this.logger.log('ffmpeg subtitles 滤镜可用（libass OK），字幕烧录已启用');
+    }
+    return this.subtitlesSupported;
+  }
+
   /** 单个分镜合成：Seedance 画面 + TTS 音频 + SRT 字幕 */
   private async compositeShot(videoId: string, shotIndex: number, videoPath: string, tts: TTSResult | null, subtitleStyle?: { font_size?: number; outline?: number; color?: string; font_family?: string }): Promise<string | null> {
     const outPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-composited.mp4`);
     const tempFiles: string[] = [];
     let hasAudio = false;
-    let hasSubs = false;
+    let srtPath = '';
 
     try {
       const audioPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-audio.mp3`);
-      const srtPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-sub.srt`);
+      srtPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-sub.srt`);
 
       if (tts) {
         const ttsRes = await fetch(tts.audioUrl);
@@ -960,31 +988,44 @@ export class VideoService {
         if (srtContent) {
           writeFileSync(srtPath, srtContent, 'utf-8');
           tempFiles.push(srtPath);
-          hasSubs = true;
+        } else {
+          srtPath = '';
         }
+      } else {
+        srtPath = '';
       }
 
       if (!hasAudio) return videoPath; // 无 TTS → 不烧录字幕，返回原始片段
 
-      const args = ['-y', '-i', videoPath];
-      if (hasAudio) args.push('-i', audioPath);
-      if (hasSubs) {
-        const srtFilterPath = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
-        const fontSize = subtitleStyle?.font_size || 40;
-        const outline = subtitleStyle?.outline ?? 2.5;
-        const color = subtitleStyle?.color || '#FFFFFF';
-        const fontFamily = subtitleStyle?.font_family || 'Microsoft YaHei';
-        // 颜色 hex #RRGGBB → ASS &HBBGGRR 格式 (去掉#，反转RGB)
-        const hex = color.replace('#', '');
-        const assColor = `&H00${hex[4] || 'F'}${hex[5] || 'F'}${hex[2] || 'F'}${hex[3] || 'F'}${hex[0] || 'F'}${hex[1] || 'F'}`;
-        this.logger.log(`compositeShot #${shotIndex} subtitle: Fontsize=${fontSize}, Fontname=${fontFamily}, Outline=${outline}, Color=${color}`);
-        args.push('-vf', `subtitles='${srtFilterPath}':charenc=UTF-8:force_style='Fontsize=${fontSize},Fontname=${fontFamily},PrimaryColour=${assColor},OutlineColour=&H00000000,Outline=${outline},BorderStyle=1,MarginV=80'`);
+      // 只有 ffmpeg 带 libass 且有字幕内容时才烧字幕；否则仅混音频（保住 TTS 配音）。
+      const subsAvailable = await this.ensureSubtitlesSupport();
+      const burnSubs = !!srtPath && subsAvailable;
+      if (srtPath && !subsAvailable) {
+        this.logger.warn(`compositeShot #${shotIndex}: 跳过字幕烧录（ffmpeg 缺 libass），仅合成配音`);
       }
-      args.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p');
-      if (hasAudio) { args.push('-c:a', 'aac', '-b:a', '128k', '-map', '0:v:0', '-map', '1:a:0'); }
-      args.push('-shortest', '-movflags', '+faststart', outPath);
 
-      await new Promise<void>((resolve, reject) => {
+      const buildArgs = (withSubs: boolean): string[] => {
+        const a = ['-y', '-i', videoPath, '-i', audioPath];
+        if (withSubs) {
+          const srtFilterPath = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+          const fontSize = subtitleStyle?.font_size || 40;
+          const outline = subtitleStyle?.outline ?? 2.5;
+          const color = subtitleStyle?.color || '#FFFFFF';
+          // 默认字体须是运行环境真实存在的 CJK 字体，否则中文渲染成空白/方块。
+          // macOS 自带 PingFang SC；生产(Linux)可用 SUBTITLE_FONT_FAMILY 覆盖（如 Noto Sans CJK SC）。
+          const fontFamily = subtitleStyle?.font_family || process.env.SUBTITLE_FONT_FAMILY || 'PingFang SC';
+          // 颜色 hex #RRGGBB → ASS &HBBGGRR 格式 (去掉#，反转RGB)
+          const hex = color.replace('#', '');
+          const assColor = `&H00${hex[4] || 'F'}${hex[5] || 'F'}${hex[2] || 'F'}${hex[3] || 'F'}${hex[0] || 'F'}${hex[1] || 'F'}`;
+          this.logger.log(`compositeShot #${shotIndex} subtitle: Fontsize=${fontSize}, Fontname=${fontFamily}, Outline=${outline}, Color=${color}`);
+          a.push('-vf', `subtitles='${srtFilterPath}':charenc=UTF-8:force_style='Fontsize=${fontSize},Fontname=${fontFamily},PrimaryColour=${assColor},OutlineColour=&H00000000,Outline=${outline},BorderStyle=1,MarginV=80'`);
+        }
+        a.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-map', '0:v:0', '-map', '1:a:0');
+        a.push('-shortest', '-movflags', '+faststart', outPath);
+        return a;
+      };
+
+      const runFfmpeg = (args: string[]) => new Promise<void>((resolve, reject) => {
         const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args);
         let stderr = '';
         ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
@@ -994,6 +1035,18 @@ export class VideoService {
           else reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-200)}`));
         });
       });
+
+      try {
+        await runFfmpeg(buildArgs(burnSubs));
+      } catch (err) {
+        if (burnSubs) {
+          // 字幕烧录失败（字体缺失/滤镜异常）→ 降级只混音频，至少保住 TTS 配音
+          this.logger.warn(`compositeShot #${shotIndex} 烧字幕失败，降级仅混音频: ${(err as Error).message}`);
+          await runFfmpeg(buildArgs(false));
+        } else {
+          throw err;
+        }
+      }
 
       return outPath;
     } catch (err) {

@@ -9,7 +9,7 @@ import {
 } from '@ant-design/icons';
 import type { ReactNode } from 'react';
 
-import { projectService } from '@/services/projectService';
+import { scriptService } from '@/services/scriptService';
 import type { ProjectListItem } from '@/types';
 import styles from './ProjectEntryModal.module.css';
 
@@ -36,7 +36,7 @@ interface Entry {
  *
  * 入口跳转：
  *   - Video：已完成生成 → 视频播放页；否则提示「视频还未生成」。
- *   - 分镜编辑 / 剧本：拉项目详情，script_count>0 → 剧本编辑页；否则提示「尚未完成」。
+ *   - 分镜编辑 / 剧本：查最新剧本，已生成 → 剧本编辑页（自动回显最新剧本）；否则提示「尚未生成」。
  *   - 风格 / 爆款选择：跳到风格模板（Gene Bank，占位）。
  *   - 素材库：进入项目素材库。
  * 右上角 X（Modal 内置 close）关闭弹框即返回项目列表。
@@ -81,16 +81,16 @@ export default function ProjectEntryModal({ open, project, onClose }: Props) {
         navigate('/gene-bank');
         return;
 
-      // 分镜编辑 / 剧本：拉详情看 script_count，已生成 → 剧本编辑页；否则提示未完成
+      // 分镜编辑 / 剧本：查项目是否已有剧本，有 → 跳剧本编辑页（自动回显最新剧本）；否则提示未生成
       case 'script':
         setPending(true);
         try {
-          const detail = await projectService.detail(pid);
-          if ((detail.script_count ?? 0) > 0) {
+          const latest = await scriptService.getLatestByProject(pid);
+          if (latest) {
             onClose();
             navigate(`/projects/${pid}/script`);
           } else {
-            message.warning('分镜 / 剧本尚未完成');
+            message.warning('分镜 / 剧本尚未生成');
           }
         } catch {
           /* 拦截器已 toast */
