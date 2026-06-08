@@ -25,7 +25,10 @@ async function bootstrap() {
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     next();
   });
-  app.enableCors();
+  const corsOrigin = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((s) => s.trim())
+    : 'http://localhost:5173';
+  app.enableCors({ origin: corsOrigin, credentials: true });
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new HttpExceptionFilter());

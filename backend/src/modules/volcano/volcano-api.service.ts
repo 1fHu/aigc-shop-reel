@@ -51,6 +51,7 @@ export class VolcanoApiService {
   private readonly embeddingEp: string;
   /** embedding 输出维度，必须与 DB materials.embedding 列 vector(1024) 一致 */
   private readonly embeddingDim: number;
+  private readonly callbackBaseUrl: string;
   private readonly ttsAppId: string;
   private readonly ttsAccessKey: string;
   private readonly ttsApiKey: string;
@@ -68,6 +69,7 @@ export class VolcanoApiService {
     this.seedanceR2v = (process.env.VOLCANO_SEEDANCE_R2V_ENABLED || this.config.get<string>('VOLCANO_SEEDANCE_R2V_ENABLED', '')) === 'true';
     this.embeddingEp = process.env.VOLCANO_EMBEDDING_EP || this.config.get<string>('VOLCANO_EMBEDDING_EP', '');
     this.embeddingDim = parseInt(process.env.VOLCANO_EMBEDDING_DIM || this.config.get<string>('VOLCANO_EMBEDDING_DIM', '1024'), 10) || 1024;
+    this.callbackBaseUrl = process.env.SEEDANCE_CALLBACK_BASE_URL || this.config.get<string>('seedance.callbackBaseUrl', '');
     this.ttsAppId = process.env.VOLCANO_TTS_APP_ID || this.config.get<string>('VOLCANO_TTS_APP_ID', '');
     this.ttsAccessKey = process.env.VOLCANO_TTS_ACCESS_KEY || this.config.get<string>('VOLCANO_TTS_ACCESS_KEY', '');
     this.ttsApiKey = process.env.VOLCANO_TTS_API_KEY || this.config.get<string>('VOLCANO_TTS_API_KEY', '');
@@ -189,6 +191,9 @@ export class VolcanoApiService {
       content.push({ type: 'text', text: prompt });
 
       const body: Record<string, unknown> = { model: this.seedanceEp, content };
+      if (this.callbackBaseUrl) {
+        body.callback_url = `${this.callbackBaseUrl}/api/volcano/seedance-callback`;
+      }
 
       const hasFrameControl = !!(opts?.startImage || opts?.endImage);
       // [DEBUG] 提交前完整打印请求结构：模型、各 content 的 role、prompt 长度与预览、请求体大小

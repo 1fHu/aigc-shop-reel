@@ -79,6 +79,7 @@ export class ViralAnalyzerService {
 
       // 2. 生成缩略图
       const thumbnailDir = path.join(process.cwd(), '../uploads/analyzed-videos/thumbnails');
+      fs.mkdirSync(thumbnailDir, { recursive: true });
       const thumbnailPath = path.join(thumbnailDir, `${videoId}.jpg`);
 
       try {
