@@ -296,9 +296,10 @@ export default function ScriptStudio() {
 
   const handleGenerateVideo = useCallback(() => {
     if (!scriptId) { message.warning('请先生成或保存剧本'); return; }
+    // regen=1：告诉视频页这是「整片重生」意图，进页面直接触发生成，而非回显旧视频
     const target = projectId
-      ? `/projects/${projectId}/video?scriptId=${scriptId}`
-      : `/video-creation?scriptId=${scriptId}`;
+      ? `/projects/${projectId}/video?scriptId=${scriptId}&regen=1`
+      : `/video-creation?scriptId=${scriptId}&regen=1`;
     modal.confirm({
       title: '重新生成视频',
       content: '将清除该项目的已有视频并重新生成所有分镜，是否继续？',

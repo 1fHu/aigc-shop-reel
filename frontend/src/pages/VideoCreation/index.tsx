@@ -30,8 +30,10 @@ function fmt(sec: number): string {
 export default function VideoCreation() {
   const navigate = useNavigate();
   const { id: pid } = useParams<{ id: string }>();
-  const [sp] = useSearchParams();
+  const [sp, setSp] = useSearchParams();
   const sid = sp.get('scriptId') || '';
+  // regen=1：来自分镜编辑「整片重生」，进页面直接触发生成而非回显旧视频
+  const regen = sp.get('regen') === '1';
   const { message } = App.useApp();
 
   const [task, setTask] = useState<VideoTask | null>(null);
@@ -40,6 +42,8 @@ export default function VideoCreation() {
   // checking: 进页面后一次性查「项目是否已有完成视频」，期间显示加载、避免空闲态闪现
   const [checking, setChecking] = useState(true);
   const poll = useRef<ReturnType<typeof setInterval> | null>(null);
+  // 防止 regen 自动触发被重复执行（StrictMode 双挂载 / 重渲染）
+  const autoGenRef = useRef(false);
 
   const stopPolling = () => {
     if (poll.current) { clearInterval(poll.current); poll.current = null; }
@@ -125,6 +129,19 @@ export default function VideoCreation() {
   //   - 无视频 → 空闲态（"开始生成"）。
   useEffect(() => {
     let cancelled = false;
+
+    // 「整片重生」意图：不回显旧视频，直接触发一次生成。
+    // 立即去掉 URL 上的 regen 标记，避免刷新 / 浏览器返回时重复整片重生。
+    if (regen && !autoGenRef.current) {
+      autoGenRef.current = true;
+      setChecking(false);
+      const next = new URLSearchParams(sp);
+      next.delete('regen');
+      setSp(next, { replace: true });
+      handleGenerate();
+      return () => { cancelled = true; };
+    }
+
     const load = pid ? videoService.getLatestByProject(pid) : Promise.resolve(null);
     load
       .then((existing) => {
