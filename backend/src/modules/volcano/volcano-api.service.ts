@@ -156,10 +156,10 @@ export class VolcanoApiService {
     prompt: string,
     imageUrls: string[] = [],
     opts?: { startImage?: string; endImage?: string },
-  ): Promise<{ taskId: string } | null> {
+  ): Promise<{ taskId?: string; error?: string } | null> {
     if (!this.apiKey || !this.seedanceEp) {
-      this.logger.warn('Seedance not configured, using mock');
-      return null;
+      this.logger.warn(`Seedance not configured (apiKey=${this.apiKey ? 'SET' : 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}), using mock`);
+      return { error: `Seedance 未配置（apiKey=${this.apiKey ? 'SET' : 'MISSING'}, ep=${this.seedanceEp || 'MISSING'}）` };
     }
     try {
       // Seedance 要求 content 内每个 image_url 必须带 role：
@@ -191,43 +191,68 @@ export class VolcanoApiService {
       const body: Record<string, unknown> = { model: this.seedanceEp, content };
 
       const hasFrameControl = !!(opts?.startImage || opts?.endImage);
-      this.logger.log(`Seedance submit: refs=${refsSent}/${imageUrls.length} (r2v=${this.seedanceR2v}) startFrame=${!!opts?.startImage} endFrame=${!!opts?.endImage}`);
+      // [DEBUG] 提交前完整打印请求结构：模型、各 content 的 role、prompt 长度与预览、请求体大小
+      const roleSummary = content.map((c: any) => c?.role || c?.type).join(',');
+      const bodyJson = JSON.stringify(body);
+      this.logger.log(
+        `[Seedance][submit] model=${this.seedanceEp} contentRoles=[${roleSummary}] ` +
+        `refs=${refsSent}/${imageUrls.length} (r2v=${this.seedanceR2v}) ` +
+        `startFrame=${!!opts?.startImage} endFrame=${!!opts?.endImage} ` +
+        `promptLen=${prompt.length} bodyBytes=${bodyJson.length}`,
+      );
+      this.logger.debug(`[Seedance][submit] prompt="${prompt.slice(0, 300)}${prompt.length > 300 ? '…' : ''}"`);
 
       const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: bodyJson,
       });
-      this.logger.log(`Seedance response status: ${res.status}`);
       const data = await res.json();
-      if (hasFrameControl) {
-        this.logger.log(`Seedance response: ${JSON.stringify(data).slice(0, 500)}`);
-      }
+      this.logger.log(`[Seedance][submit] HTTP ${res.status} resp=${JSON.stringify(data).slice(0, 600)}`);
       if (res.status !== 200) {
-        this.logger.error(`Seedance API error (${res.status}): ${JSON.stringify(data).slice(0, 500)}`);
+        // 真实失败原因（含火山返回的 error.code / error.message），交回上层落库到 task.error_msg
+        const apiMsg = data?.error?.message || data?.message || JSON.stringify(data).slice(0, 300);
+        const apiCode = data?.error?.code || data?.code || '';
+        this.logger.error(`[Seedance][submit] API error (${res.status})${apiCode ? ` code=${apiCode}` : ''}: ${apiMsg}`);
+        return { error: `Seedance ${res.status}${apiCode ? `/${apiCode}` : ''}: ${apiMsg}` };
       }
       const taskId = data?.id || data?.task_id;
       if (taskId) {
-        this.logger.log(`Seedance task created: ${taskId}`);
+        this.logger.log(`[Seedance][submit] task created: ${taskId}`);
         return { taskId };
       }
-      this.logger.warn('Seedance returned no task ID');
-      return null;
+      this.logger.warn(`[Seedance][submit] no task ID in response: ${JSON.stringify(data).slice(0, 300)}`);
+      return { error: `Seedance 返回无 taskId: ${JSON.stringify(data).slice(0, 200)}` };
     } catch (err) {
-      this.logger.error(`Seedance error: ${(err as Error).message}`);
-      return null;
+      this.logger.error(`[Seedance][submit] exception: ${(err as Error).message}`, (err as Error).stack);
+      return { error: `Seedance 异常: ${(err as Error).message}` };
     }
   }
 
   /** 查询 Seedance 任务状态 */
-  async getVideoTaskStatus(taskId: string): Promise<{ status: string; videoUrl?: string } | null> {
+  async getVideoTaskStatus(taskId: string): Promise<{ status: string; videoUrl?: string; error?: string } | null> {
     try {
       const res = await fetch(`https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks/${taskId}`, {
         headers: { 'Authorization': `Bearer ${this.apiKey}` },
       });
       const data = await res.json();
-      return { status: data?.status || 'running', videoUrl: data?.output?.video_url || data?.content?.video_url };
-    } catch { return null; }
+      const status = data?.status || 'running';
+      const videoUrl = data?.output?.video_url || data?.content?.video_url;
+      // [DEBUG] 任务进入终态（失败/成功）时打印火山返回的完整原因
+      if (status === 'failed' || res.status !== 200) {
+        const apiMsg = data?.error?.message || data?.message || JSON.stringify(data).slice(0, 300);
+        this.logger.error(`[Seedance][poll] task ${taskId} status=${status} HTTP=${res.status}: ${apiMsg}`);
+        return { status: 'failed', videoUrl, error: `Seedance task ${status}: ${apiMsg}` };
+      }
+      this.logger.debug(`[Seedance][poll] task ${taskId} status=${status}${videoUrl ? ' (videoUrl ready)' : ''}`);
+      return { status, videoUrl };
+    } catch (err) {
+      // Node fetch 的真实原因藏在 err.cause（ECONNRESET / ETIMEDOUT / ENOTFOUND 等），单独打出来
+      const cause = (err as any)?.cause;
+      const causeStr = cause ? ` cause=${cause.code || cause.errno || cause.message || cause}` : '';
+      this.logger.warn(`[Seedance][poll] task ${taskId} fetch error: ${(err as Error).message}${causeStr}`);
+      return null;
+    }
   }
 
   detectMime(buf: Buffer): string {

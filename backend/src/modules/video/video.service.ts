@@ -1,7 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, unlinkSync, readFileSync } from 'fs';
+import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, unlinkSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
@@ -16,7 +16,7 @@ import { Material } from '../../database/entities/material.entity';
 import { promoteProjectStatus } from '../../common/project-status';
 
 const VIDEO_DIR = join(process.cwd(), '..', 'uploads', 'videos');
-const MAX_SHOT_POLLS = 120;
+const MAX_SHOT_POLLS = 240;
 
 /** TTS 字级时间戳 → SRT 字幕（按句子边界 + 自然断点分组） */
 function ttsWordsToSRT(tts: TTSResult): string {
@@ -616,9 +616,17 @@ export class VideoService {
         const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
         const extraImages = prevKeyframe ? [prevKeyframe] : [];
         const baseRefs = prevKeyframe ? [] : refImages;
+        // [DEBUG] 逐镜起点：第 0 镜用素材库参考图(baseRefs)，后续镜用上一镜关键帧(extraImages)。
+        // 注意：当前 r2v=false 时这些图在 generateVideo 内会被开关挡掉，实际为纯文生视频。
+        this.logger.log(
+          `[gen] video=${videoId} shot#${shot.index} (${i + 1}/${orderedStoryboard.length}) ` +
+          `baseRefs=${baseRefs.length} prevKeyframe=${prevKeyframe ? 'yes' : 'no'} ` +
+          `tts=${tts ? `${getTTSDuration(tts).toFixed(1)}s` : 'none'} targetDur=${targetDuration.toFixed(1)}s`,
+        );
         const path = await this.generateShot(videoId, shot, productName, productInfo, baseRefs, materialContext, targetDuration, extraImages, prevShot || undefined, opts?.custom_requirement);
 
         if (!path) {
+          this.logger.warn(`[gen] video=${videoId} shot#${shot.index} produced NO path — skipping, prevKeyframe reset`);
           prevKeyframe = null;
           continue;
         }
@@ -776,10 +784,13 @@ export class VideoService {
     const hasFrame = !!(frameControl?.startImage || frameControl?.endImage);
     this.logger.log(`Video ${videoId} shot#${index}: submitting to Seedance (duration=${(targetDuration || shot.duration).toFixed(1)}s, refs=${refs.length}, startFrame=${!!frameControl?.startImage}, endFrame=${!!frameControl?.endImage})...`);
     const result = await this.volcano.generateVideo(prompt, refs, hasFrame ? frameControl : undefined);
-    if (!result) {
-      await this.taskRepo.update({ videoId, shotIndex: index }, { status: 'failed', errorMsg: 'Seedance 未返回任务' });
+    if (!result?.taskId) {
+      const reason = result?.error || 'Seedance 未返回任务';
+      this.logger.error(`Video ${videoId} shot#${index}: submit FAILED — ${reason}`);
+      await this.taskRepo.update({ videoId, shotIndex: index }, { status: 'failed', errorMsg: reason });
       return '';
     }
+    this.logger.log(`Video ${videoId} shot#${index}: Seedance taskId=${result.taskId}, start polling…`);
     await this.taskRepo.update({ videoId, shotIndex: index }, { seedanceTaskId: result.taskId });
     const localPath = await this.waitForShot(videoId, index, result.taskId);
     return localPath;
@@ -791,7 +802,8 @@ export class VideoService {
       const interval = setInterval(async () => {
         if (++polls > MAX_SHOT_POLLS) {
           clearInterval(interval);
-          await this.taskRepo.update({ videoId, shotIndex }, { status: 'failed', errorMsg: '生成超时' });
+          this.logger.error(`Video ${videoId} shot#${shotIndex}: TIMEOUT after ${polls} polls (~${(polls * 5 / 60).toFixed(1)}min), task=${taskId}`);
+          await this.taskRepo.update({ videoId, shotIndex }, { status: 'failed', errorMsg: `生成超时（${MAX_SHOT_POLLS} 次轮询，task=${taskId}）` });
           resolve('');
           return;
         }
@@ -799,16 +811,20 @@ export class VideoService {
         if (!r) return;
         if (r.status === 'succeeded' || r.status === 'completed' || r.status === 'done') {
           clearInterval(interval);
+          this.logger.log(`Video ${videoId} shot#${shotIndex}: SUCCEEDED after ${polls} polls, downloading ${r.videoUrl?.slice(0, 80)}…`);
           const localPath = await this.downloadShot(videoId, shotIndex, r.videoUrl);
           if (localPath) {
             await this.taskRepo.update({ videoId, shotIndex }, { previewUrl: `/api/videos/${videoId}/shots/${shotIndex}/file` });
           } else {
-            await this.taskRepo.update({ videoId, shotIndex }, { status: 'failed', errorMsg: '片段下载失败' });
+            this.logger.error(`Video ${videoId} shot#${shotIndex}: download FAILED from ${r.videoUrl}`);
+            await this.taskRepo.update({ videoId, shotIndex }, { status: 'failed', errorMsg: `片段下载失败（url=${r.videoUrl || 'EMPTY'}）` });
           }
           resolve(localPath || '');
         } else if (r.status === 'failed') {
           clearInterval(interval);
-          await this.taskRepo.update({ videoId, shotIndex }, { status: 'failed', errorMsg: '分镜生成失败' });
+          const reason = r.error || '分镜生成失败';
+          this.logger.error(`Video ${videoId} shot#${shotIndex}: task FAILED after ${polls} polls — ${reason}`);
+          await this.taskRepo.update({ videoId, shotIndex }, { status: 'failed', errorMsg: reason });
           resolve('');
         }
       }, 5000);
@@ -817,16 +833,36 @@ export class VideoService {
 
   private async downloadShot(videoId: string, shotIndex: number, remoteUrl?: string): Promise<string> {
     if (!remoteUrl) return '';
+    // 下载整体超时（默认 120s，可用 SHOT_DOWNLOAD_TIMEOUT_MS 覆盖）。
+    // 火山 TOS 链接偶发卡连接，fetch+pipeline 本身无超时会无限挂起 → 这里用 AbortController 兜底。
+    const timeoutMs = parseInt(process.env.SHOT_DOWNLOAD_TIMEOUT_MS || '120000', 10) || 120000;
+    const controller = new AbortController();
+    const t0 = Date.now();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       if (!existsSync(VIDEO_DIR)) mkdirSync(VIDEO_DIR, { recursive: true });
       const localPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}.mp4`);
-      const res = await fetch(remoteUrl);
-      if (!res.ok || !res.body) return '';
+      this.logger.log(`[download] shot#${shotIndex} fetching ${remoteUrl.slice(0, 90)}… (timeout=${timeoutMs}ms)`);
+      const res = await fetch(remoteUrl, { signal: controller.signal });
+      if (!res.ok || !res.body) {
+        this.logger.error(`[download] shot#${shotIndex} HTTP ${res.status} or empty body`);
+        return '';
+      }
+      const contentLen = res.headers.get('content-length');
+      this.logger.log(`[download] shot#${shotIndex} HTTP ${res.status}, size=${contentLen ? `${(Number(contentLen) / 1024 / 1024).toFixed(2)}MB` : 'unknown'}, streaming…`);
       const writer = createWriteStream(localPath);
       await pipeline(res.body as unknown as NodeJS.ReadableStream, writer);
+      const bytes = existsSync(localPath) ? statSync(localPath).size : 0;
+      this.logger.log(`[download] shot#${shotIndex} DONE ${(bytes / 1024 / 1024).toFixed(2)}MB in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
       return localPath;
-    } catch {
+    } catch (err) {
+      const aborted = (err as Error).name === 'AbortError';
+      const cause = (err as any)?.cause;
+      const causeStr = cause ? ` cause=${cause.code || cause.errno || cause.message || cause}` : '';
+      this.logger.error(`[download] shot#${shotIndex} ${aborted ? `TIMEOUT after ${timeoutMs}ms` : `FAILED: ${(err as Error).message}${causeStr}`} (elapsed ${((Date.now() - t0) / 1000).toFixed(1)}s)`);
       return '';
+    } finally {
+      clearTimeout(timer);
     }
   }
 
