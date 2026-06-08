@@ -5,7 +5,7 @@ export class AddUserPreferencesColumn1710000000000 implements MigrationInterface
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "users" ADD COLUMN "preferences" jsonb DEFAULT '{}'::jsonb`,
+      `ALTER TABLE "users" ADD COLUMN IF NOT EXISTS "preferences" jsonb DEFAULT '{}'::jsonb`,
     );
   }
 

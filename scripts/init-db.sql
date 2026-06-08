@@ -17,6 +17,7 @@ CREATE TABLE users (
     avatar_url VARCHAR(500),
     plan_type VARCHAR(20) DEFAULT 'free',
     video_quota INTEGER DEFAULT 3,
+    preferences JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
