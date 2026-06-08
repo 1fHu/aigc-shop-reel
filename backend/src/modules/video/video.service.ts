@@ -2,7 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, unlinkSync, readFileSync, statSync } from 'fs';
-import { join } from 'path';
+import { join, basename } from 'path';
 import { spawn } from 'child_process';
 import { pipeline } from 'stream/promises';
 import { VolcanoApiService, TTSResult } from '../volcano/volcano-api.service';
@@ -17,6 +17,7 @@ import { promoteProjectStatus } from '../../common/project-status';
 
 const VIDEO_DIR = join(process.cwd(), '..', 'uploads', 'videos');
 const MAX_SHOT_POLLS = 240;
+const MAX_SHOT_RETRIES = 2;
 
 /** TTS 字级时间戳 → SRT 字幕（按句子边界 + 自然断点分组） */
 function ttsWordsToSRT(tts: TTSResult): string {
@@ -635,6 +636,9 @@ export class VideoService {
 
         const composited = await this.compositeShot(videoId, shot.index, path, subtitleEnabled ? tts : null, opts?.subtitle_style);
         const finalPath = composited || path;
+        if (!composited) {
+          this.logger.warn(`[gen] video=${videoId} shot#${shot.index}: compositeShot 返回原始片段（字幕/音频未合成）`);
+        }
         await this.taskRepo.update({ videoId, shotIndex: shot.index }, {
           status: 'completed',
           previewUrl: `/api/videos/${videoId}/shots/${shot.index}/file`,
@@ -784,18 +788,38 @@ export class VideoService {
     const prompt = this.buildShotPrompt(shot, productName, productInfo, materialContext, targetDuration, prevShot, customRequirement);
     const refs = extraImages?.length ? [...extraImages, ...imageUrls] : imageUrls;
     const hasFrame = !!(frameControl?.startImage || frameControl?.endImage);
-    this.logger.log(`Video ${videoId} shot#${index}: submitting to Seedance (duration=${(targetDuration || shot.duration).toFixed(1)}s, refs=${refs.length}, startFrame=${!!frameControl?.startImage}, endFrame=${!!frameControl?.endImage})...`);
-    const result = await this.volcano.generateVideo(prompt, refs, hasFrame ? frameControl : undefined);
-    if (!result?.taskId) {
-      const reason = result?.error || 'Seedance 未返回任务';
-      this.logger.error(`Video ${videoId} shot#${index}: submit FAILED — ${reason}`);
-      await this.taskRepo.update({ videoId, shotIndex: index }, { status: 'failed', errorMsg: reason });
-      return '';
+
+    let lastError = '';
+    for (let attempt = 0; attempt <= MAX_SHOT_RETRIES; attempt += 1) {
+      if (attempt > 0) {
+        this.logger.warn(`Video ${videoId} shot#${index}: retry ${attempt}/${MAX_SHOT_RETRIES} after "${lastError.slice(0, 120)}"`);
+        await new Promise((r) => setTimeout(r, 2000));
+      }
+      const tag = attempt > 0 ? `[retry${attempt}]` : '';
+      this.logger.log(`Video ${videoId} shot#${index}:${tag} submitting to Seedance (duration=${(targetDuration || shot.duration).toFixed(1)}s, refs=${refs.length}, startFrame=${!!frameControl?.startImage}, endFrame=${!!frameControl?.endImage})...`);
+      const result = await this.volcano.generateVideo(prompt, refs, hasFrame ? frameControl : undefined);
+      if (!result?.taskId) {
+        lastError = result?.error || 'Seedance 未返回任务';
+        if (attempt < MAX_SHOT_RETRIES) continue;
+        this.logger.error(`Video ${videoId} shot#${index}: submit FAILED after ${MAX_SHOT_RETRIES + 1} attempts — ${lastError}`);
+        await this.taskRepo.update({ videoId, shotIndex: index }, { status: 'failed', errorMsg: lastError });
+        return '';
+      }
+      this.logger.log(`Video ${videoId} shot#${index}:${tag} Seedance taskId=${result.taskId}, start polling…`);
+      await this.taskRepo.update({ videoId, shotIndex: index }, { seedanceTaskId: result.taskId });
+      const localPath = await this.waitForShot(videoId, index, result.taskId);
+      if (localPath) return localPath;
+
+      // waitForShot failed — extract error from the task record for the retry log
+      const task = await this.taskRepo.findOne({ where: { videoId, shotIndex: index } });
+      lastError = task?.errorMsg || '分镜生成失败';
+      if (attempt < MAX_SHOT_RETRIES) {
+        // Reset status so it doesn't show as permanently failed while retrying
+        await this.taskRepo.update({ videoId, shotIndex: index }, { status: 'processing', seedanceTaskId: null as unknown as string });
+      }
     }
-    this.logger.log(`Video ${videoId} shot#${index}: Seedance taskId=${result.taskId}, start polling…`);
-    await this.taskRepo.update({ videoId, shotIndex: index }, { seedanceTaskId: result.taskId });
-    const localPath = await this.waitForShot(videoId, index, result.taskId);
-    return localPath;
+
+    return '';
   }
 
   private waitForShot(videoId: string, shotIndex: number, taskId: string): Promise<string> {
@@ -952,7 +976,7 @@ export class VideoService {
         let out = '';
         ff.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
         ff.on('error', () => resolve(false));
-        ff.on('close', () => resolve(/\bsubtitles\b/.test(out)));
+        ff.on('close', () => resolve(/\bsubtitles\b/i.test(out)));
       } catch { resolve(false); }
     });
     if (!this.subtitlesSupported) {
@@ -978,11 +1002,17 @@ export class VideoService {
       srtPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-sub.srt`);
 
       if (tts) {
-        const ttsRes = await fetch(tts.audioUrl);
-        if (ttsRes.ok) {
-          writeFileSync(audioPath, Buffer.from(await ttsRes.arrayBuffer()));
-          tempFiles.push(audioPath);
-          hasAudio = true;
+        try {
+          const ttsRes = await fetch(tts.audioUrl);
+          if (ttsRes.ok) {
+            writeFileSync(audioPath, Buffer.from(await ttsRes.arrayBuffer()));
+            tempFiles.push(audioPath);
+            hasAudio = true;
+          } else {
+            this.logger.warn(`compositeShot #${shotIndex}: TTS 音频下载失败 HTTP ${ttsRes.status}，字幕将继续烧录`);
+          }
+        } catch (err) {
+          this.logger.warn(`compositeShot #${shotIndex}: TTS 音频下载异常: ${(err as Error).message}，字幕将继续烧录`);
         }
         const srtContent = ttsWordsToSRT(tts);
         if (srtContent) {
@@ -991,42 +1021,53 @@ export class VideoService {
         } else {
           srtPath = '';
         }
-      } else {
-        srtPath = '';
       }
 
-      if (!hasAudio) return videoPath; // 无 TTS → 不烧录字幕，返回原始片段
+      // 无音频且无字幕 → 无需合成，返回原始片段
+      if (!hasAudio && !srtPath) return videoPath;
 
-      // 只有 ffmpeg 带 libass 且有字幕内容时才烧字幕；否则仅混音频（保住 TTS 配音）。
-      const subsAvailable = await this.ensureSubtitlesSupport();
+      // 只有 ffmpeg 带 libass 且有字幕内容时才烧字幕
+      const subsAvailable = srtPath ? await this.ensureSubtitlesSupport() : false;
       const burnSubs = !!srtPath && subsAvailable;
       if (srtPath && !subsAvailable) {
-        this.logger.warn(`compositeShot #${shotIndex}: 跳过字幕烧录（ffmpeg 缺 libass），仅合成配音`);
+        this.logger.warn(`compositeShot #${shotIndex}: ffmpeg 缺 libass，跳过字幕烧录`);
       }
 
+      // 无音频且无法烧字幕 → 无需合成
+      if (!hasAudio && !burnSubs) return videoPath;
+
       const buildArgs = (withSubs: boolean): string[] => {
-        const a = ['-y', '-i', videoPath, '-i', audioPath];
+        const a = hasAudio
+          ? ['-y', '-i', videoPath, '-i', audioPath]
+          : ['-y', '-i', videoPath];
         if (withSubs) {
-          const srtFilterPath = srtPath.replace(/\\/g, '/').replace(/:/g, '\\:');
+          const srtFilterPath = basename(srtPath);
+          // 使用文件名而非绝对路径：Windows 绝对路径中的盘符 : 会被 ffmpeg filter parser
+          // 误当作参数分隔符，即使 \: 转义也不生效。设 spawn cwd 为 VIDEO_DIR 后用相对路径即可。
           const fontSize = subtitleStyle?.font_size || 40;
           const outline = subtitleStyle?.outline ?? 2.5;
           const color = subtitleStyle?.color || '#FFFFFF';
-          // 默认字体须是运行环境真实存在的 CJK 字体，否则中文渲染成空白/方块。
-          // macOS 自带 PingFang SC；生产(Linux)可用 SUBTITLE_FONT_FAMILY 覆盖（如 Noto Sans CJK SC）。
-          const fontFamily = subtitleStyle?.font_family || process.env.SUBTITLE_FONT_FAMILY || 'PingFang SC';
+          const fontFamily = subtitleStyle?.font_family
+            || process.env.SUBTITLE_FONT_FAMILY
+            || (process.platform === 'win32' ? 'Microsoft YaHei'
+              : process.platform === 'darwin' ? 'PingFang SC'
+              : 'Noto Sans CJK SC');
           // 颜色 hex #RRGGBB → ASS &HBBGGRR 格式 (去掉#，反转RGB)
           const hex = color.replace('#', '');
           const assColor = `&H00${hex[4] || 'F'}${hex[5] || 'F'}${hex[2] || 'F'}${hex[3] || 'F'}${hex[0] || 'F'}${hex[1] || 'F'}`;
           this.logger.log(`compositeShot #${shotIndex} subtitle: Fontsize=${fontSize}, Fontname=${fontFamily}, Outline=${outline}, Color=${color}`);
-          a.push('-vf', `subtitles='${srtFilterPath}':charenc=UTF-8:force_style='Fontsize=${fontSize},Fontname=${fontFamily},PrimaryColour=${assColor},OutlineColour=&H00000000,Outline=${outline},BorderStyle=1,MarginV=80'`);
+          a.push('-vf', `subtitles=${srtFilterPath}:charenc=UTF-8:force_style='Fontsize=${fontSize},Fontname=${fontFamily},PrimaryColour=${assColor},OutlineColour=&H00000000,Outline=${outline},BorderStyle=1,MarginV=80'`);
         }
-        a.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-map', '0:v:0', '-map', '1:a:0');
+        a.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p');
+        if (hasAudio) {
+          a.push('-c:a', 'aac', '-b:a', '128k', '-map', '0:v:0', '-map', '1:a:0');
+        }
         a.push('-shortest', '-movflags', '+faststart', outPath);
         return a;
       };
 
       const runFfmpeg = (args: string[]) => new Promise<void>((resolve, reject) => {
-        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args);
+        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args, { cwd: VIDEO_DIR });
         let stderr = '';
         ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
         ff.on('error', reject);
@@ -1062,21 +1103,44 @@ export class VideoService {
   private async composite(videoId: string, clipPaths: string[]): Promise<string> {
     const finalPath = join(VIDEO_DIR, `${videoId}.mp4`);
     const fileUrl = `/api/videos/${videoId}/file`;
+    if (clipPaths.length === 0) {
+      this.logger.error(`composite ${videoId}: 无可用分镜片段`);
+      throw new Error('无可用分镜片段');
+    }
     if (clipPaths.length === 1) {
-      try { copyFileSync(clipPaths[0], finalPath); return fileUrl; } catch { return `/api/videos/${videoId}/shots/0/file`; }
+      copyFileSync(clipPaths[0], finalPath);
+      return fileUrl;
     }
     const listPath = join(VIDEO_DIR, `${videoId}-concat.txt`);
-    // ffmpeg concat demuxer 需要正斜杠路径（Windows 反斜杠会导致解析失败）
     writeFileSync(listPath, clipPaths.map((p) => `file '${p.replace(/\\/g, '/')}'`).join('\n'));
     try {
       await new Promise<void>((resolve, reject) => {
-        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ['-y','-f','concat','-safe','0','-i',listPath,'-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',finalPath]);
+        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ['-y','-f','concat','-safe','0','-i',listPath,'-c','copy','-movflags','+faststart',finalPath]);
         let stderr = '';
         ff.stderr?.on('data', (d) => { stderr += d.toString(); });
         ff.on('error', reject);
-        ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg exit ${code}: ${stderr.slice(-300)}`))));
+        ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg concat exit ${code}: ${stderr.slice(-300)}`))));
       });
+      this.logger.log(`composite ${videoId}: ${clipPaths.length} clips → ${finalPath}`);
       return fileUrl;
-    } catch { return `/api/videos/${videoId}/shots/0/file`; }
+    } catch (err) {
+      this.logger.error(`composite ${videoId} FAILED: ${(err as Error).message}`);
+      // 降级：尝试重编码拼接
+      try {
+        this.logger.log(`composite ${videoId}: 降级重编码拼接...`);
+        await new Promise<void>((resolve, reject) => {
+          const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ['-y','-f','concat','-safe','0','-i',listPath,'-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',finalPath]);
+          let stderr = '';
+          ff.stderr?.on('data', (d) => { stderr += d.toString(); });
+          ff.on('error', reject);
+          ff.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`ffmpeg re-encode exit ${code}: ${stderr.slice(-300)}`))));
+        });
+        this.logger.log(`composite ${videoId}: 重编码拼接成功`);
+        return fileUrl;
+      } catch (err2) {
+        this.logger.error(`composite ${videoId}: 重编码也失败: ${(err2 as Error).message}`);
+        throw err2;
+      }
+    }
   }
 }
