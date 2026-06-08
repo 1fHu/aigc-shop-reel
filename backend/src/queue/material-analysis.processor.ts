@@ -11,6 +11,7 @@ import { writeFile, readFile, unlink } from 'fs/promises';
 import { Material } from '../database/entities/material.entity';
 import { MinioStorageService } from '../common/minio-storage.service';
 import { VolcanoApiService } from '../modules/volcano/volcano-api.service';
+import { FFMPEG_PATH, FFPROBE_PATH } from '../common/ffmpeg-path';
 
 type MaterialAnalysisJob = { materialId: string };
 
@@ -139,7 +140,7 @@ export class MaterialAnalysisProcessor {
   /** ffprobe 读时长（秒）；失败返回 null */
   private probeDuration(videoPath: string): Promise<number | null> {
     return new Promise((resolve) => {
-      const p = spawn('ffprobe', [
+      const p = spawn(FFPROBE_PATH, [
         '-v', 'error',
         '-show_entries', 'format=duration',
         '-of', 'default=noprint_wrappers=1:nokey=1',
@@ -159,7 +160,7 @@ export class MaterialAnalysisProcessor {
   private async extractFrame(videoPath: string, atSec: number): Promise<Buffer> {
     const framePath = join(tmpdir(), `frame-${randomUUID()}.jpg`);
     await new Promise<void>((resolve, reject) => {
-      const p = spawn('ffmpeg', [
+      const p = spawn(FFMPEG_PATH, [
         '-y',
         '-ss', String(atSec),
         '-i', videoPath,

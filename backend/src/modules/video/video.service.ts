@@ -14,6 +14,7 @@ import { Project } from '../../database/entities/project.entity';
 import { Script } from '../../database/entities/script.entity';
 import { Material } from '../../database/entities/material.entity';
 import { promoteProjectStatus } from '../../common/project-status';
+import { FFMPEG_PATH } from '../../common/ffmpeg-path';
 
 const VIDEO_DIR = join(process.cwd(), '..', 'uploads', 'videos');
 const MAX_SHOT_POLLS = 240;
@@ -915,7 +916,7 @@ export class VideoService {
     try {
       await new Promise<void>((resolve, reject) => {
         const args = ['-y', '-sseof', '-0.1', '-i', videoPath, '-frames:v', '1', '-q:v', '2', keyPath];
-        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args);
+        const ff = spawn(FFMPEG_PATH, args);
         let stderr = '';
         ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
         ff.on('error', reject);
@@ -943,7 +944,7 @@ export class VideoService {
     try {
       await new Promise<void>((resolve, reject) => {
         const args = ['-y', '-i', videoPath, '-frames:v', '1', '-q:v', '2', keyPath];
-        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args);
+        const ff = spawn(FFMPEG_PATH, args);
         let stderr = '';
         ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
         ff.on('error', reject);
@@ -972,7 +973,7 @@ export class VideoService {
     if (this.subtitlesSupported !== null) return this.subtitlesSupported;
     this.subtitlesSupported = await new Promise<boolean>((resolve) => {
       try {
-        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ['-hide_banner', '-filters']);
+        const ff = spawn(FFMPEG_PATH, ['-hide_banner', '-filters']);
         let out = '';
         ff.stdout?.on('data', (d: Buffer) => { out += d.toString(); });
         ff.on('error', () => resolve(false));
@@ -1067,7 +1068,7 @@ export class VideoService {
       };
 
       const runFfmpeg = (args: string[]) => new Promise<void>((resolve, reject) => {
-        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', args, { cwd: VIDEO_DIR });
+        const ff = spawn(FFMPEG_PATH, args, { cwd: VIDEO_DIR });
         let stderr = '';
         ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
         ff.on('error', reject);
@@ -1115,7 +1116,7 @@ export class VideoService {
     writeFileSync(listPath, clipPaths.map((p) => `file '${p.replace(/\\/g, '/')}'`).join('\n'));
     try {
       await new Promise<void>((resolve, reject) => {
-        const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ['-y','-f','concat','-safe','0','-i',listPath,'-c','copy','-movflags','+faststart',finalPath]);
+        const ff = spawn(FFMPEG_PATH, ['-y','-f','concat','-safe','0','-i',listPath,'-c','copy','-movflags','+faststart',finalPath]);
         let stderr = '';
         ff.stderr?.on('data', (d) => { stderr += d.toString(); });
         ff.on('error', reject);
@@ -1129,7 +1130,7 @@ export class VideoService {
       try {
         this.logger.log(`composite ${videoId}: 降级重编码拼接...`);
         await new Promise<void>((resolve, reject) => {
-          const ff = spawn(process.env.FFMPEG_PATH || 'ffmpeg', ['-y','-f','concat','-safe','0','-i',listPath,'-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',finalPath]);
+          const ff = spawn(FFMPEG_PATH, ['-y','-f','concat','-safe','0','-i',listPath,'-c:v','libx264','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',finalPath]);
           let stderr = '';
           ff.stderr?.on('data', (d) => { stderr += d.toString(); });
           ff.on('error', reject);
