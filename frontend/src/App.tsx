@@ -15,6 +15,7 @@ import Analytics from './pages/Analytics';
 import GeneBank from './pages/GeneBank';
 import ViralAnalyzer from './pages/ViralAnalyzer';
 import ViralAnalyzerDetail from './pages/ViralAnalyzer/detail';
+import Help from './pages/Help';
 
 /**
  * 路由设计：
@@ -46,6 +47,7 @@ function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/projects" element={<Projects />} />
           <Route path="/analytics" element={<Analytics />} />
+          <Route path="/help" element={<Help />} />
           <Route path="/gene-bank" element={<GeneBank />} />
           <Route path="/viral-library" element={<Navigate to="/gene-bank" replace />} />
           <Route path="/viral-analyzer" element={<ViralAnalyzer />} />

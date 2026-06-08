@@ -1,0 +1,437 @@
+/* ============================================================
+   Help Center page styles
+   Two-column layout: sticky sidebar nav + scrollable content
+   ============================================================ */
+
+.page {
+  padding: 32px;
+  max-width: 1400px;
+}
+
+/* ============ Header ============ */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 32px;
+  gap: 16px;
+}
+
+.headerTitle {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+  color: #111827;
+  margin: 0;
+}
+
+.headerSubtitle {
+  font-size: 14px;
+  color: #6B7280;
+  margin-top: 8px;
+}
+
+.searchWrap {
+  width: 320px;
+  flex-shrink: 0;
+}
+
+/* ============ Layout ============ */
+.layout {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.sidebarNav {
+  width: 220px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 96px;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+.contentArea {
+  flex: 1;
+  min-width: 0;
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+/* ============ Sidebar nav ============ */
+.navSectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  color: #9CA3AF;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+  padding: 0 12px;
+}
+
+.navItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #6B7280;
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: left;
+  margin-bottom: 2px;
+}
+
+.navItem:hover {
+  background: #F8FAFC;
+  color: #111827;
+}
+
+.navItemActive {
+  background: #EEF2FF;
+  color: #4648D4;
+  font-weight: 600;
+}
+
+.navItemActive:hover {
+  background: #EEF2FF;
+  color: #4648D4;
+}
+
+.navItemIcon {
+  font-size: 16px;
+  display: inline-flex;
+  width: 20px;
+  justify-content: center;
+}
+
+.navDivider {
+  height: 1px;
+  background: #F1F5F9;
+  margin: 12px 8px;
+}
+
+/* ============ Content sections ============ */
+.section {
+  margin-bottom: 48px;
+}
+
+.sectionTitle {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 24px;
+  color: #111827;
+  margin: 0 0 8px 0;
+}
+
+.sectionDesc {
+  font-size: 14px;
+  color: #6B7280;
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+
+.subSection {
+  margin-bottom: 28px;
+}
+
+.subSectionTitle {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 17px;
+  color: #111827;
+  margin: 0 0 12px 0;
+}
+
+/* ============ Cards ============ */
+.card {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  margin-bottom: 12px;
+}
+
+.cardTitle {
+  font-weight: 600;
+  font-size: 15px;
+  color: #111827;
+  margin-bottom: 8px;
+}
+
+.cardBody {
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.7;
+}
+
+/* ============ Step list ============ */
+.stepItem {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.stepNumber {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #EEF2FF;
+  color: #4648D4;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.stepContent {
+  flex: 1;
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.6;
+}
+
+/* ============ Callout boxes ============ */
+.tipBox {
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  font-size: 13px;
+  color: #92400E;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.6;
+}
+
+.warningBox {
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  font-size: 13px;
+  color: #991B1B;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.6;
+}
+
+.infoBox {
+  background: #EEF2FF;
+  border: 1px solid #C7D2FE;
+  border-radius: 10px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  font-size: 13px;
+  color: #3730A3;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.6;
+}
+
+.calloutIcon {
+  font-size: 14px;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+/* ============ Feature grid ============ */
+.featureGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin: 16px 0;
+}
+
+.featureCard {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+  border: 1px solid #F1F5F9;
+}
+
+.featureIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  margin-bottom: 12px;
+}
+
+.featureLabel {
+  font-weight: 600;
+  font-size: 14px;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.featureDesc {
+  font-size: 13px;
+  color: #6B7280;
+  line-height: 1.5;
+}
+
+/* ============ FAQ ============ */
+.faqSection {
+  margin-top: 8px;
+}
+
+.faqCard {
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 24px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 3px rgba(15, 23, 42, 0.06);
+}
+
+.faqTitle {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 20px;
+  color: #111827;
+  margin-bottom: 16px;
+}
+
+/* ============ Tables ============ */
+.tableWrap {
+  overflow-x: auto;
+  margin: 12px 0;
+}
+
+.helpTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.helpTable th {
+  text-align: left;
+  padding: 10px 12px;
+  background: #F8FAFC;
+  color: #6B7280;
+  font-weight: 500;
+  border-bottom: 1px solid #E5E7EB;
+}
+
+.helpTable td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #F1F5F9;
+  color: #374151;
+}
+
+/* Ant Design Collapse overrides */
+.faqCard :global(.ant-collapse) {
+  background: transparent;
+}
+
+.faqCard :global(.ant-collapse-item) {
+  border-bottom: 1px solid #F1F5F9;
+}
+
+.faqCard :global(.ant-collapse-item:last-child) {
+  border-bottom: none;
+}
+
+.faqCard :global(.ant-collapse-header) {
+  font-weight: 500;
+  font-size: 14px;
+  color: #111827;
+  padding: 16px 0 !important;
+}
+
+.faqCard :global(.ant-collapse-content-box) {
+  padding: 0 0 16px 0 !important;
+  font-size: 14px;
+  color: #374151;
+  line-height: 1.7;
+}
+
+/* ============ Empty search ============ */
+.emptyWrap {
+  padding: 80px 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* ============ Footer ============ */
+.footer {
+  margin-top: 48px;
+  font-size: 12px;
+  color: #9CA3AF;
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid #F1F5F9;
+  padding-top: 20px;
+}
+
+.footer a {
+  color: #9CA3AF;
+  margin-left: 20px;
+  text-decoration: none;
+}
+
+.footer a:hover {
+  color: #6B7280;
+}
+
+/* ============ Responsive ============ */
+@media (max-width: 900px) {
+  .layout {
+    flex-direction: column;
+  }
+
+  .sidebarNav {
+    width: 100%;
+    position: static;
+    max-height: none;
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    padding-bottom: 8px;
+    flex-wrap: wrap;
+  }
+
+  .navItem {
+    width: auto;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .navSectionTitle {
+    width: 100%;
+  }
+
+  .navDivider {
+    display: none;
+  }
+
+  .contentArea {
+    max-height: none;
+  }
+
+  .header {
+    flex-direction: column;
+  }
+
+  .searchWrap {
+    width: 100%;
+  }
+}

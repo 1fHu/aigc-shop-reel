@@ -91,7 +91,7 @@ export default function AppLayout() {
     { type: 'divider' },
     { key: 'account',  icon: <UserOutlined />,     label: '个人资料' },
     { key: 'settings', icon: <SettingOutlined />,  label: '账户设置' },
-    { key: 'help',     icon: <QuestionCircleOutlined />, label: '帮助中心' },
+    { key: 'help',     icon: <QuestionCircleOutlined />, label: '帮助中心', onClick: () => navigate('/help') },
     { type: 'divider' },
     { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true, onClick: handleLogout },
   ];
@@ -123,7 +123,11 @@ export default function AppLayout() {
 
           <div className={styles.navDivider} />
 
-          <button type="button" className={styles.navItem}>
+          <button
+            type="button"
+            className={`${styles.navItem} ${location.pathname === '/help' ? styles.navItemActive : ''}`}
+            onClick={() => navigate('/help')}
+          >
             <span className={styles.navIcon}><QuestionCircleOutlined /></span>
             帮助中心
           </button>
