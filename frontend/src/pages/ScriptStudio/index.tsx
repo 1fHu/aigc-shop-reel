@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { App, Skeleton, Modal, Checkbox, Spin } from 'antd';
-import { RocketOutlined, SaveOutlined, ThunderboltFilled, PlaySquareOutlined, ReloadOutlined, FireOutlined } from '@ant-design/icons';
+import { App, Skeleton, Modal, Checkbox, Spin, Typography } from 'antd';
+import { RocketOutlined, SaveOutlined, ThunderboltFilled, PlaySquareOutlined, ReloadOutlined, FireOutlined, LoadingOutlined, CheckCircleOutlined } from '@ant-design/icons';
 import { scriptService } from '@/services/scriptService';
 import { videoService } from '@/services/videoService';
 import { genebankService } from '@/services/genebankService';
@@ -42,6 +42,7 @@ export default function ScriptStudio() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [loading, setLoading] = useState(!!projectId);
   const [generating, setGenerating] = useState(false);
+  const [generationDone, setGenerationDone] = useState(false);
   const [regenerating, setRegenerating] = useState(false);
   // 从爆款模板库带入的参考视频 ID。挂载时从 sessionStorage 捕获到 ref，
   // 因为 sessionStorage 读完即清，生成时不能再依赖它（否则永远是 undefined）。
@@ -128,6 +129,7 @@ export default function ScriptStudio() {
   // ---- handlers ----
   const handleGenerate = useCallback(async (overrideFactors?: FactorState) => {
     setGenerating(true);
+    setGenerationDone(false);
     let cleared = false;
     try {
       const pid = projectId || '';
@@ -148,6 +150,8 @@ export default function ScriptStudio() {
         } else if (event.type === 'done') {
           setScriptId(event.script_id);
           setGenerating(false);
+          setGenerationDone(true);
+          setTimeout(() => setGenerationDone(false), 3000);
         }
       }
     } catch {
@@ -431,8 +435,13 @@ export default function ScriptStudio() {
                 onClick={() => handleGenerate()}
                 disabled={generating}
               >
-                <ThunderboltFilled /> 生成剧本
+                {generating ? <><LoadingOutlined spin /> 正在生成剧本…</> : <><ThunderboltFilled /> 生成剧本</>}
               </button>
+              {generationDone && (
+                <Typography.Text type="success" style={{ fontSize: 13 }}>
+                  <CheckCircleOutlined style={{ marginRight: 4 }} />生成完成
+                </Typography.Text>
+              )}
               <button
                 className={styles.genBtn}
                 onClick={handleOpenViral}
@@ -461,8 +470,13 @@ export default function ScriptStudio() {
             <FireOutlined style={{ fontSize: 12, marginRight: 4 }} /> 爆款仿写
           </button>
           <button className={styles.generateBtn} onClick={() => handleGenerate()} disabled={generating}>
-            <ThunderboltFilled style={{ fontSize: 12, marginRight: 4 }} /> 生成剧本
+            {generating ? <><LoadingOutlined spin style={{ fontSize: 12, marginRight: 4 }} /> 正在生成剧本…</> : <><ThunderboltFilled style={{ fontSize: 12, marginRight: 4 }} /> 生成剧本</>}
           </button>
+          {generationDone && (
+            <Typography.Text type="success" style={{ fontSize: 13, marginLeft: 8 }}>
+              <CheckCircleOutlined style={{ marginRight: 4 }} />剧本已生成
+            </Typography.Text>
+          )}
         </div>
         <div className={styles.toolbarRight}>
           <span className={styles.saveHint}>删减镜头或编辑分镜字段后点击</span>

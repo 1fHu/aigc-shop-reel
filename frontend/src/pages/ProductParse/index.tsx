@@ -9,6 +9,7 @@ import {
   TeamOutlined,
   EnvironmentOutlined,
   ArrowRightOutlined,
+  LoadingOutlined,
 } from '@ant-design/icons';
 import type { RcFile } from 'antd/es/upload';
 
@@ -39,6 +40,7 @@ export default function ProductParse() {
   const [product, setProduct] = useState<ParsedProduct | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [manualOpen, setManualOpen] = useState(false);
+  const [directGenerating, setDirectGenerating] = useState(false);
   const hasProject = Boolean(effectiveProjectId);
 
   useEffect(() => {
@@ -355,23 +357,29 @@ export default function ProductParse() {
                 编辑剧本 <ArrowRightOutlined />
               </button>
               <button type="button" className={styles.nextBtn}
+                disabled={directGenerating}
                 onClick={async () => {
                   if (!effectiveProjectId) {
                     message.warning('项目初始化中，请稍候');
                     return;
                   }
-                  await productService.confirm(effectiveProjectId);
-                  // 快速生成剧本后直接跳视频创作
-                  for await (const e of scriptService.generate({ project_id: effectiveProjectId, strategy_type: 'pain_point' })) {
-                    if (e.type === 'done') {
-                      const target = projectId ? `/projects/${projectId}/video?scriptId=${e.script_id}` : `/video-creation?scriptId=${e.script_id}`;
-                      navigate(target);
-                      return;
+                  setDirectGenerating(true);
+                  try {
+                    await productService.confirm(effectiveProjectId);
+                    // 快速生成剧本后直接跳视频创作
+                    for await (const e of scriptService.generate({ project_id: effectiveProjectId, strategy_type: 'pain_point' })) {
+                      if (e.type === 'done') {
+                        const target = projectId ? `/projects/${projectId}/video?scriptId=${e.script_id}` : `/video-creation?scriptId=${e.script_id}`;
+                        navigate(target);
+                        return;
+                      }
                     }
+                  } catch {
+                    setDirectGenerating(false);
                   }
                 }}
                 style={{ background: 'linear-gradient(135deg, #0EA5E9, #4648D4)' }}>
-                🎬 直接生成视频
+                {directGenerating ? <><LoadingOutlined spin /> 正在生成剧本…</> : '🎬 直接生成视频'}
               </button>
             </div>
           </div>

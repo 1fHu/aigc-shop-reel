@@ -45,8 +45,8 @@ interface Entry {
 const ENTRIES: Entry[] = [
   { key: 'materials', title: '素材库',       desc: '上传商品图，AI 解析卖点',   icon: <PictureOutlined /> },
   { key: 'style',     title: '风格模板',      desc: '挑选视频风格与爆款模板',     icon: <FireOutlined /> },
-  { key: 'video',     title: '视频创作',      desc: '一键生成带货短视频',         icon: <PlayCircleOutlined /> },
   { key: 'script',    title: '分镜编辑',      desc: '编辑分镜脚本与配音文案',     icon: <FileTextOutlined /> },
+  { key: 'video',     title: '视频创作',      desc: '一键生成带货短视频',         icon: <PlayCircleOutlined /> },
 ];
 
 export default function ProjectEntryModal({ open, project, onClose }: Props) {
