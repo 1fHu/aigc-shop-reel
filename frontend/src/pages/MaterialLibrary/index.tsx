@@ -124,6 +124,9 @@ export default function MaterialLibrary() {
 
   const filtered = useMemo(() => mtype === 'all' ? materials : materials.filter((m) => m.type === mtype), [materials, mtype]);
 
+  // 有素材正在解析时禁用「生成剧本」：后端有闸门（解析中会 409），前端提前置灰，避免无效跳转/报错。
+  const hasParsing = useMemo(() => materials.some((m) => m.status === 'parsing'), [materials]);
+
   // 上传商品主图：走同步的 parseImage，解析完刷新主图状态 + 素材列表
   const handleCoverUpload = async (file: RcFile) => {
     if (!pid) { message.warning('请先创建项目'); return false; }
@@ -162,6 +165,7 @@ export default function MaterialLibrary() {
   // 实际行为是跳转到「生成剧本」页（ScriptStudio），并非直接生成视频。
   const handleGenerateVideo = () => {
     if (!pid) { message.warning('请先创建项目'); return; }
+    if (hasParsing) { message.warning('素材正在解析中，请等待解析完成后再生成剧本'); return; }
     const ready = materials.filter((m) => m.status === 'ready');
     if (ready.length === 0) { message.warning('请先上传并完成商品解析'); return; }
     navigate(`/projects/${pid}/script`);
@@ -332,9 +336,15 @@ export default function MaterialLibrary() {
         />
       )}
 
-      <button type="button" className={styles.fab} onClick={handleGenerateVideo} title="生成剧本">
+      <button
+        type="button"
+        className={`${styles.fab} ${hasParsing ? styles.fabDisabled : ''}`}
+        onClick={handleGenerateVideo}
+        disabled={hasParsing}
+        title={hasParsing ? '素材解析中，请稍候' : '生成剧本'}
+      >
         <ThunderboltOutlined style={{fontSize:22}}/>
-        <span>生成剧本</span>
+        <span>{hasParsing ? '素材解析中…' : '生成剧本'}</span>
       </button>
     </div>
   );
