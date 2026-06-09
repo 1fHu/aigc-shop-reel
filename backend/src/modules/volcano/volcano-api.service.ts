@@ -197,7 +197,10 @@ export class VolcanoApiService {
       }
       content.push({ type: 'text', text: prompt });
 
-      const body: Record<string, unknown> = { model: this.seedanceEp, content, ratio: this.seedanceRatio, duration: Math.round(duration) };
+      // Seedance 1.5 Pro 视频时长生成范围为 [4,12]（或 -1 由模型自定）。
+      // 调用方传入的是脚本/配音意图时长（可能 <4），这里钳到 [4,12]；不足 4s 的由视频侧裁剪回目标时长。
+      const seedanceDuration = Math.min(12, Math.max(4, Math.round(duration)));
+      const body: Record<string, unknown> = { model: this.seedanceEp, content, ratio: this.seedanceRatio, duration: seedanceDuration };
       if (this.callbackBaseUrl) {
         body.callback_url = `${this.callbackBaseUrl}/api/volcano/seedance-callback`;
       }
@@ -368,14 +371,17 @@ export class VolcanoApiService {
     try {
       const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${this.embedding_apiKey}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
           model: this.seedreamEp,
           prompt: input.prompt,
-          image: imageRef,                 // 图生图/编辑：传原图
-          size: input.size || '720x1280',  // 竖屏 9:16，具体枚举以控制台接入点为准
+          image: imageRef,                  // 图生图/编辑：传原图
+          size: input.size || '1080x1920',  // 竖屏 9:16（与 Seedance 输出对齐）
           response_format: 'b64_json',
           watermark: false,
+          optimize_prompt_options: {
+            "mode": "fast"
+          },
         }),
       });
       const data = await res.json();

@@ -312,6 +312,27 @@ export class ScriptService {
     return { id, updated_at: new Date().toISOString(), total_duration: merged.reduce((sum, s) => sum + (s.duration || 3), 0) };
   }
 
+  /**
+   * 清除某一幕的素材绑定（前端剧本编辑页"删除该幕图片素材"）。
+   * 清空 material 绑定与 adapted_image_url、reference_image_url → toScene 回退默认紫色占位图。
+   * 这是 C=不允许"改"绑定 的唯一例外：允许"删"（删后用默认 Scene # 占位）。
+   */
+  async clearShotMaterial(id: string, shotIndex: number) {
+    const script = await this.scriptRepo.findOne({ where: { id } });
+    if (!script) throw new NotFoundException('剧本不存在');
+    const storyboard = (script.storyboard as ScriptShot[]) || [];
+    const shot = storyboard.find((s) => s.index === shotIndex);
+    if (!shot) throw new NotFoundException('分镜不存在');
+
+    shot.material_id = null;
+    shot.material_use_mode = 'none';
+    shot.material_score = null;
+    shot.adapted_image_url = null;
+    shot.reference_image_url = null;
+    await this.scriptRepo.update(id, { storyboard: storyboard as unknown as object });
+    return this.toScene(shot);
+  }
+
   async regenerateShot(
     id: string,
     shotIndex: number,

@@ -931,7 +931,20 @@ AIGC 带货视频生成系统
 |  |
 | --- |
 | v1.3 变更（素材召回）：①**生成闸门**——项目仍有 `status=parsing` 的素材时返回 **409**（msg「还有 N 个素材正在解析…」），前端应先用 `GET /api/scripts/readiness` 置灰生成按钮；②**素材向量召回**——生成时按每幕描述从项目素材库做 pgvector 余弦召回，命中素材后向 `scene` 增补字段：`material_id`（命中素材 UUID，无则 null）、`material_use_mode`（`none`/`direct`/`adapted`，由相似度阈值决定）、`material_score`（余弦相似度）。`thumb_url` 命中素材时回填素材缩略图/适配图作首帧预览。素材绑定为后端权威，前端只读，`PUT /storyboard` 不接受其改动。 |
-| v1.3 模式B（适配图，已接入）：`material_use_mode=adapted` 的幕在**生成剧本时即预生成**适配首帧——把原素材图 + 本幕剧本喂给 Doubao **Seedream** 图生图（env `VOLCANO_SEEDREAM_EP`），产图落 MinIO 后写入该幕 `thumb_url`，前端可直接预览。视频阶段把它当 **first_frame**（i2v，不受 Seedance r2v 开关影响）。未配置 Seedream 或出图失败时该幕自动降级为 `direct`（用原素材图当首帧），不阻断生成。 |
+| v1.3 模式B（适配图，已接入）：`material_use_mode=adapted` 的幕在**生成剧本时即预生成**适配首帧——把原素材图 + 本幕剧本喂给 Doubao **Seedream** 图生图（env `VOLCANO_SEEDREAM_EP`，输出 1080×1920 竖屏），产图落 MinIO 后写入该幕 `thumb_url`，前端可直接预览。视频阶段把它当 **first_frame**（i2v，不受 Seedance r2v 开关影响）。未配置 Seedream 或出图失败时该幕自动降级为 `direct`（用原素材图当首帧），不阻断生成。 |
+| v1.3 视频时长：Seedance 1.5 Pro 生成时长范围 [4,12]s，提交时按此钳制；脚本/配音意图时长 <4s 的幕，成片侧把片段裁回意图时长，保证节奏与配音对齐。 |
+
+## DELETE /api/scripts/:id/shots/:shotIndex/material 删除某幕图片素材
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+> 删除某一幕召回到的图片素材（direct/adapted），清空该幕素材绑定，`thumb_url` 回退默认占位图。素材绑定本为后端权威只读，此端点是「删除」例外（不支持改绑定）。
+
+**路径参数**：`id`（剧本 UUID）、`shotIndex`（分镜 index，0-based）
+
+**返回参数**：清空绑定后的 Scene 对象（`material_id=null`、`material_use_mode='none'`、`thumb_url` 为占位图）。
 
 ## GET /api/scripts/readiness 剧本生成就绪检查
 

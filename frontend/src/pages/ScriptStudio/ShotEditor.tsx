@@ -1,5 +1,5 @@
-import { Input, Select, Tag, Spin } from 'antd';
-import { ReloadOutlined } from '@ant-design/icons';
+import { Input, Select, Tag, Spin, Popconfirm } from 'antd';
+import { ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { Scene } from '@/types';
 import styles from './ScriptStudio.module.css';
 
@@ -29,6 +29,8 @@ interface ShotEditorProps {
   regenLabel?: string;
   onChange: (index: number, field: string, value: string | number) => void;
   onRegenerate: (index: number) => void;
+  /** 删除该幕召回到的图片素材（删后回退默认占位图） */
+  onDeleteMaterial?: (index: number) => void;
 }
 
 export default function ShotEditor({
@@ -38,6 +40,7 @@ export default function ShotEditor({
   regenLabel,
   onChange,
   onRegenerate,
+  onDeleteMaterial,
 }: ShotEditorProps) {
   if (!scene) {
     return (
@@ -76,6 +79,21 @@ export default function ShotEditor({
             />
           ) : (
             <img src={scene.thumb_url} alt={`Scene ${scene.index + 1}`} />
+          )}
+          {/* 召回到素材图（direct/adapted）时，允许删除 → 回退默认占位图 */}
+          {!clipUrl && onDeleteMaterial && scene.material_use_mode && scene.material_use_mode !== 'none' && (
+            <Popconfirm
+              title="删除该幕图片素材？"
+              description="删除后将用默认占位图代替"
+              okText="删除"
+              cancelText="取消"
+              okButtonProps={{ danger: true }}
+              onConfirm={() => onDeleteMaterial(scene.index)}
+            >
+              <button type="button" className={styles.materialDeleteBtn} title="删除图片素材">
+                <DeleteOutlined />
+              </button>
+            </Popconfirm>
           )}
           {regenerating && (
             <div className={styles.regenOverlay}>

@@ -19,6 +19,8 @@ import { FFMPEG_PATH } from '../../common/ffmpeg-path';
 const VIDEO_DIR = join(process.cwd(), '..', 'uploads', 'videos');
 const MAX_SHOT_POLLS = 240;
 const MAX_SHOT_RETRIES = 2;
+// Seedance 1.5 Pro 视频时长生成范围 [4,12]s；意图时长 <4s 时由 trimClipInPlace 裁回。
+const SEEDANCE_MIN_DURATION = 4;
 
 /** TTS 字级时间戳 → SRT 字幕（按句子边界 + 自然断点分组） */
 function ttsWordsToSRT(tts: TTSResult): string {
@@ -379,7 +381,7 @@ export class VideoService {
         : null;
       const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
       const savedStyle = ((video.settings as any)?.subtitle_style || {}) as { font_size?: number; outline?: number; color?: string; font_family?: string };
-      const composited = await this.compositeShot(id, index, path, tts, savedStyle);
+      const composited = await this.compositeShot(id, index, path, tts, savedStyle, targetDuration);
       const finalPath = composited || path;
       await this.taskRepo.update({ videoId: id, shotIndex: index }, {
         status: 'completed',
@@ -523,7 +525,7 @@ export class VideoService {
           const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
           const path = await this.generateShot(id, shot, productName, productInfo, refImages, materialContext, targetDuration, undefined, prevShot || undefined, customReq, frameControl);
           if (path) {
-            const composited = await this.compositeShot(id, shot.index, path, tts, savedStyle);
+            const composited = await this.compositeShot(id, shot.index, path, tts, savedStyle, targetDuration);
             const finalPath = composited || path;
             await this.taskRepo.update({ videoId: id, shotIndex: shot.index }, { status: 'completed', previewUrl: `/api/videos/${id}/shots/${shot.index}/file` });
             compositedClips.push(finalPath);
@@ -676,7 +678,7 @@ export class VideoService {
           continue;
         }
 
-        const composited = await this.compositeShot(videoId, shot.index, path, subtitleEnabled ? tts : null, opts?.subtitle_style);
+        const composited = await this.compositeShot(videoId, shot.index, path, subtitleEnabled ? tts : null, opts?.subtitle_style, targetDuration);
         const finalPath = composited || path;
         if (!composited) {
           this.logger.warn(`[gen] video=${videoId} shot#${shot.index}: compositeShot 返回原始片段（字幕/音频未合成）`);
@@ -821,7 +823,7 @@ export class VideoService {
 
     // 7. 用户自定义需求
     if (customRequirement?.trim()) {
-      parts.push(`额外要求：${customRequirement.trim()}`);
+      parts.push(`额外要求： 尽量避免大段文字生成。 ${customRequirement.trim()}`);
     }
 
     return parts.join('\n');
@@ -1048,11 +1050,41 @@ export class VideoService {
   }
 
   /** 单个分镜合成：Seedance 画面 + TTS 音频 + SRT 字幕 */
-  private async compositeShot(videoId: string, shotIndex: number, videoPath: string, tts: TTSResult | null, subtitleStyle?: { font_size?: number; outline?: number; color?: string; font_family?: string }): Promise<string | null> {
+  /**
+   * 把片段就地裁到 seconds 秒（覆盖原文件）：用于 Seedance 强制 ≥4s 而脚本意图更短的情况。
+   * 丢弃源音轨（-an，Seedance 片段无有效音频；配音在 compositeShot 另行混入）。失败则保留原片不阻断。
+   */
+  private async trimClipInPlace(videoId: string, shotIndex: number, videoPath: string, seconds: number): Promise<void> {
+    const tmp = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-trim.mp4`);
+    const args = ['-y', '-i', videoPath, '-t', seconds.toFixed(2), '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-an', '-movflags', '+faststart', tmp];
+    try {
+      await new Promise<void>((resolve, reject) => {
+        const ff = spawn(FFMPEG_PATH, args, { cwd: VIDEO_DIR });
+        let stderr = '';
+        ff.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); });
+        ff.on('error', reject);
+        ff.on('close', (code: number) => (code === 0 ? resolve() : reject(new Error(`ffmpeg trim exit ${code}: ${stderr.slice(-200)}`))));
+      });
+      copyFileSync(tmp, videoPath); // 覆盖原片，预览与最终拼接都用裁剪后的
+      this.logger.log(`compositeShot #${shotIndex}: 片段裁到 ${seconds.toFixed(2)}s（Seedance 最短 4s）`);
+    } catch (err) {
+      this.logger.warn(`compositeShot #${shotIndex}: 裁剪到 ${seconds.toFixed(2)}s 失败: ${(err as Error).message}，用原片`);
+    } finally {
+      try { unlinkSync(tmp); } catch { /* ignore */ }
+    }
+  }
+
+  private async compositeShot(videoId: string, shotIndex: number, videoPath: string, tts: TTSResult | null, subtitleStyle?: { font_size?: number; outline?: number; color?: string; font_family?: string }, targetDuration?: number): Promise<string | null> {
     const outPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-composited.mp4`);
     const tempFiles: string[] = [];
     let hasAudio = false;
     let srtPath = '';
+
+    // Seedance 最短出片 4s，但脚本/配音的意图时长可能更短。此处把片段就地裁到目标时长，
+    // 保证成片节奏与脚本/配音一致（有配音时 compositeShot 的 -shortest 也会再次对齐音频长度）。
+    if (targetDuration && targetDuration > 0 && targetDuration < SEEDANCE_MIN_DURATION) {
+      await this.trimClipInPlace(videoId, shotIndex, videoPath, targetDuration);
+    }
 
     try {
       const audioPath = join(VIDEO_DIR, `${videoId}-shot-${shotIndex}-audio.mp3`);

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Response } from 'express';
 import { ScriptService } from './script.service';
@@ -82,6 +82,13 @@ export class ScriptController {
   @Put(':id/storyboard')
   async saveStoryboard(@Param('id') id: string, @Body() body: { storyboard: Array<{ index: number; description: string; camera_motion: string; duration: number; voiceover: string; subtitle: string; bgm: string; reference_image_url: string | null }> }) {
     return ok(await this.scriptService.saveStoryboard(id, body.storyboard));
+  }
+
+  // 删除某一幕召回到的图片素材 → 回退默认紫色占位图（前端剧本编辑页）
+  @UseGuards(AuthGuard('jwt'))
+  @Delete(':id/shots/:shotIndex/material')
+  async clearShotMaterial(@Param('id') id: string, @Param('shotIndex') shotIndex: string) {
+    return ok(await this.scriptService.clearShotMaterial(id, Number(shotIndex)));
   }
 
   @UseGuards(AuthGuard('jwt'))
