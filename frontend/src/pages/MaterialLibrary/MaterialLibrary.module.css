@@ -424,6 +424,15 @@
 }
 .fab:hover { transform: translateY(-2px); box-shadow: 0 12px 40px rgba(70,72,212,0.55); }
 
+/* 素材解析中：置灰、模糊、禁用点击 */
+.fabDisabled {
+  opacity: 0.45;
+  filter: grayscale(0.6) blur(0.4px);
+  cursor: not-allowed;
+  box-shadow: none;
+}
+.fabDisabled:hover { transform: none; box-shadow: none; }
+
 /* 状态角标 */
 .parsingBadge {
   position: absolute; top: 8px; left: 8px;

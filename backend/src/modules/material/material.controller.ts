@@ -46,6 +46,14 @@ export class MaterialController {
     return ok(items, items.length);
   }
 
+  // 切换 embedding 模型后刷新存量素材向量；project_id 可选（不传=当前用户全部素材）
+  @UseGuards(AuthGuard('jwt'))
+  @Post('reembed')
+  async reembed(@CurrentUser() user: AuthenticatedUser, @Body() body: { project_id?: string }) {
+    const result = await this.materialService.reembed(user.id, body?.project_id);
+    return ok(result, result.reembedded);
+  }
+
   @UseGuards(AuthGuard('jwt'))
   @Get()
   async list(@CurrentUser() user: AuthenticatedUser, @Query() query: ListMaterialsDto) {

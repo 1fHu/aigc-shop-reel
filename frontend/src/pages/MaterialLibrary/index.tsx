@@ -102,27 +102,37 @@ export default function MaterialLibrary() {
     }
   };
 
-  // 上传素材后异步解析，轮询列表直到没有 parsing（最多 ~60s）
-  const pollUntilReady = async () => {
-    if (!pid || pollingRef.current) return;
-    pollingRef.current = true;
-    try {
-      for (let i = 0; i < 20; i++) {
-        await new Promise((r) => setTimeout(r, 3000));
-        const items = await materialService.list(pid);
-        setMaterials(items.map(toMaterialItem));
-        if (!items.some((m) => m.status === 'parsing')) break;
-      }
-    } catch {
-      // 拦截器已统一 toast
-    } finally {
-      pollingRef.current = false;
-    }
-  };
-
   useEffect(() => { loadMaterials(); loadProduct(); }, [pid]); // eslint-disable-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps
 
   const filtered = useMemo(() => mtype === 'all' ? materials : materials.filter((m) => m.type === mtype), [materials, mtype]);
+
+  // 有素材正在解析时禁用「生成剧本」：后端有闸门（解析中会 409），前端提前置灰，避免无效跳转/报错。
+  const hasParsing = useMemo(() => materials.some((m) => m.status === 'parsing'), [materials]);
+
+  // 状态驱动自动轮询：只要还有素材在解析，就每 3s 刷新列表，直到全部 ready/failed。
+  // 覆盖「上传后」「刷新/切回页面时仍有在解析」等所有场景，无需手动刷新；最后一个解析完 →
+  // hasParsing 变 false → 本 effect 重跑并清掉定时器，FAB「生成剧本」自动恢复可点。
+  useEffect(() => {
+    if (!pid || !hasParsing) return;
+    let cancelled = false;
+    let polls = 0;
+    const MAX_POLLS = 100; // ~5min 兜底：解析失败后端会置 failed，正常不会无限 parsing
+    const timer = setInterval(async () => {
+      if (cancelled) return;
+      if (++polls > MAX_POLLS) { clearInterval(timer); return; }
+      if (pollingRef.current) return; // 上一拍未返回，跳过本拍，避免请求堆叠
+      pollingRef.current = true;
+      try {
+        const items = await materialService.list(pid);
+        if (!cancelled) setMaterials(items.map(toMaterialItem));
+      } catch {
+        // 拦截器已统一 toast
+      } finally {
+        pollingRef.current = false;
+      }
+    }, 3000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [pid, hasParsing]);
 
   // 上传商品主图：走同步的 parseImage，解析完刷新主图状态 + 素材列表
   const handleCoverUpload = async (file: RcFile) => {
@@ -150,8 +160,8 @@ export default function MaterialLibrary() {
     try {
       await materialService.upload(pid, fileList);
       message.success({ content: '上传成功，AI 正在后台解析', key: 'upload' });
+      // 拉一次列表带出 parsing 项 → hasParsing 变 true → 自动轮询 effect 接管，直至全部解析完
       await loadMaterials();
-      pollUntilReady();
     } catch {
       message.error({ content: '上传失败，请重试', key: 'upload' });
     }
@@ -162,6 +172,7 @@ export default function MaterialLibrary() {
   // 实际行为是跳转到「生成剧本」页（ScriptStudio），并非直接生成视频。
   const handleGenerateVideo = () => {
     if (!pid) { message.warning('请先创建项目'); return; }
+    if (hasParsing) { message.warning('素材正在解析中，请等待解析完成后再生成剧本'); return; }
     const ready = materials.filter((m) => m.status === 'ready');
     if (ready.length === 0) { message.warning('请先上传并完成商品解析'); return; }
     navigate(`/projects/${pid}/script`);
@@ -332,9 +343,15 @@ export default function MaterialLibrary() {
         />
       )}
 
-      <button type="button" className={styles.fab} onClick={handleGenerateVideo} title="生成剧本">
+      <button
+        type="button"
+        className={`${styles.fab} ${hasParsing ? styles.fabDisabled : ''}`}
+        onClick={handleGenerateVideo}
+        disabled={hasParsing}
+        title={hasParsing ? '素材解析中，请稍候' : '生成剧本'}
+      >
         <ThunderboltOutlined style={{fontSize:22}}/>
-        <span>生成剧本</span>
+        <span>{hasParsing ? '素材解析中…' : '生成剧本'}</span>
       </button>
     </div>
   );

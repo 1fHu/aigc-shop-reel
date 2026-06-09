@@ -27,7 +27,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
     const traceId: string = request?.headers?.['x-trace-id'] || request?.traceId || randomUUID();
 
-    this.logger.error(`HTTP ${status}: ${msg} [traceId=${traceId}]`, exception instanceof Error ? exception.stack : '');
+    // 4xx 是预期内的客户端错误（如 409 素材解析中、404 未找到），不是服务异常：
+    // 用 warn 且不打印堆栈，避免正常的业务校验在日志里看起来像崩溃。5xx 才是真异常，保留 error + 堆栈。
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error(`HTTP ${status}: ${msg} [traceId=${traceId}]`, exception instanceof Error ? exception.stack : '');
+    } else {
+      this.logger.warn(`HTTP ${status}: ${msg} [traceId=${traceId}]`);
+    }
 
     response.status(status).json({
       code: status,

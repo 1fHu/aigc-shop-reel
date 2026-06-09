@@ -285,6 +285,18 @@ export default function ScriptStudio() {
     });
   }, []);
 
+  // 删除某一幕召回到的图片素材 → 后端清空绑定并回退默认占位图，用返回的 scene 覆盖本地
+  const handleDeleteMaterial = useCallback(async (index: number) => {
+    if (!scriptId) return;
+    try {
+      const updated = await scriptService.clearShotMaterial(scriptId, index);
+      setScenes((prev) => prev.map((s) => (s.index === index ? { ...s, ...updated, index } : s)));
+      message.success('已删除该幕图片素材');
+    } catch {
+      message.error('删除失败，请重试');
+    }
+  }, [scriptId, message]);
+
   const handleRegenerateShot = useCallback(async (index: number) => {
     if (!scriptId) return;
     setRegenerating(true);
@@ -600,6 +612,7 @@ export default function ScriptStudio() {
           regenLabel={!!selectedScene && regenPending.includes(selectedScene.index) ? '正在重新生成该分镜视频…' : undefined}
           onChange={handleFieldChange}
           onRegenerate={handleRegenerateShot}
+          onDeleteMaterial={handleDeleteMaterial}
         />
         <FactorPanel
           factors={factors}

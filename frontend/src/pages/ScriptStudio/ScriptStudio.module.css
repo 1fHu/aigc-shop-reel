@@ -332,6 +332,29 @@
   margin-bottom: 20px;
 }
 
+.materialDeleteBtn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 8px;
+  background: rgba(17, 24, 39, 0.55);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.materialDeleteBtn:hover {
+  background: rgba(220, 38, 38, 0.9);
+}
+
 .previewWrap img {
   width: 100%;
   height: 100%;

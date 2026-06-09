@@ -868,6 +868,20 @@ AIGC 带货视频生成系统
 | --- |
 | { "code": 200, "msg": null, "total": 2, "data": [ { "id": "mat-001", "project\_id": "proj-001", "project\_name": "夏季防晒霜", "file\_type": "video", "file\_name": "unboxing.mp4", "thumbnail\_url": "https://...", "status": "ready", "created\_at": "2026-06-09T03:00:00.000Z" } ], "traceId": "..." } |
 
+## POST /api/materials/reembed 素材重嵌入（运维/迁移用）
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+> 把（指定项目或当前用户全部）`ready` 素材重新入队解析，刷新向量与标签。**用途**：切换 embedding 模型（如 `doubao-embedding-large` → `doubao-embedding-vision`）后，存量素材的旧向量与新查询不在同一空间会导致召回失准，需重嵌入对齐。重新入队期间素材回到 `status=parsing`。
+
+**请求参数（Body）**：`project_id`（String，可选；不传=当前用户全部项目素材）
+
+**返回参数**：`data.reembedded`（Integer，本次重新入队的素材数）
+
+> ⚠️ 召回依赖 **doubao-embedding-vision**（图文同空间多模态），不可用纯文本的 `doubao-embedding-large`（无法嵌入图片像素，跨模态召回失效）。配置项 `VOLCANO_EMBEDDING_EP`，向量维度经 `dimensions` 降到 1024 对齐 `materials.embedding` 列。
+
 
 # 6. M5 剧本生成
 
@@ -913,6 +927,43 @@ AIGC 带货视频生成系统
 |  |
 | --- |
 | v1.2 变更：①事件类型字段从 `event` 改为 `type`（与前端 TypeScript 类型定义对齐）；②新增 `meta` 事件，在流开始时推送 script\_id 和预计分镜数，前端可提前初始化 UI 骨架；③分镜事件从 `shot` 改为 `scene`，payload 统一为完整 Scene 对象。 |
+
+|  |
+| --- |
+| v1.3 变更（素材召回）：①**生成闸门**——项目仍有 `status=parsing` 的素材时返回 **409**（msg「还有 N 个素材正在解析…」），前端应先用 `GET /api/scripts/readiness` 置灰生成按钮；②**素材向量召回**——生成时按每幕描述从项目素材库做 pgvector 余弦召回，命中素材后向 `scene` 增补字段：`material_id`（命中素材 UUID，无则 null）、`material_use_mode`（`none`/`direct`/`adapted`，由相似度阈值决定）、`material_score`（余弦相似度）。`thumb_url` 命中素材时回填素材缩略图/适配图作首帧预览。素材绑定为后端权威，前端只读，`PUT /storyboard` 不接受其改动。 |
+| v1.3 模式B（适配图，已接入）：`material_use_mode=adapted` 的幕在**生成剧本时即预生成**适配首帧——把原素材图 + 本幕剧本喂给 Doubao **Seedream** 图生图（env `VOLCANO_SEEDREAM_EP`，输出 1080×1920 竖屏），产图落 MinIO 后写入该幕 `thumb_url`，前端可直接预览。视频阶段把它当 **first_frame**（i2v，不受 Seedance r2v 开关影响）。未配置 Seedream 或出图失败时该幕自动降级为 `direct`（用原素材图当首帧），不阻断生成。 |
+| v1.3 视频时长：Seedance 1.5 Pro 生成时长范围 [4,12]s，提交时按此钳制；脚本/配音意图时长 <4s 的幕，成片侧把片段裁回意图时长，保证节奏与配音对齐。 |
+
+## DELETE /api/scripts/:id/shots/:shotIndex/material 删除某幕图片素材
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+> 删除某一幕召回到的图片素材（direct/adapted），清空该幕素材绑定，`thumb_url` 回退默认占位图。素材绑定本为后端权威只读，此端点是「删除」例外（不支持改绑定）。
+
+**路径参数**：`id`（剧本 UUID）、`shotIndex`（分镜 index，0-based）
+
+**返回参数**：清空绑定后的 Scene 对象（`material_id=null`、`material_use_mode='none'`、`thumb_url` 为占位图）。
+
+## GET /api/scripts/readiness 剧本生成就绪检查
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+> 素材必须全部解析完成（无 `parsing`）才允许生成剧本（保证召回拿到全量素材）。前端轮询此端点，`ready=false` 时置灰「生成剧本」按钮并提示进度。
+
+**请求参数（Query）**：`project_id`（String，必填，项目 UUID）
+
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data.ready** | Boolean | 是否可生成（=无 parsing 中素材） |
+| **data.total** | Integer | 素材总数 |
+| **data.parsing** | Integer | 解析中数量 |
+| **data.failed** | Integer | 解析失败数量（不阻塞生成） |
 
 ## GET /api/scripts/:id 获取剧本详情
 

@@ -178,6 +178,27 @@ export const scriptHandlers = [
     });
   }),
 
+  // DELETE /api/scripts/:id/shots/:shotIndex/material —— 删除该幕图片素材，回退默认占位图
+  http.delete('/api/scripts/:id/shots/:shotIndex/material', ({ params }) => {
+    const script = getOrInitScript(String(params.id));
+    const idx = Number(params.shotIndex);
+    const target = script.scenes.find((s) => s.index === idx);
+    if (!target) {
+      return HttpResponse.json(
+        { code: 404, msg: '分镜不存在', total: 0, data: null, traceId: `mock-${Date.now()}` },
+        { status: 404 },
+      );
+    }
+    target.material_id = null;
+    target.material_use_mode = 'none';
+    target.material_score = null;
+    target.thumb_url = `https://placehold.co/400x240/8B5CF6/fff?text=Scene+${idx + 1}`;
+    script.updated_at = new Date().toISOString();
+    return HttpResponse.json({
+      code: 200, msg: null, total: 0, data: target, traceId: `mock-${Date.now()}`,
+    });
+  }),
+
   // POST /api/scripts/:id/regenerate-shot
   http.post('/api/scripts/:id/regenerate-shot', async ({ params, request }) => {
     await delay(1200);

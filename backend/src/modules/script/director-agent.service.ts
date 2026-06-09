@@ -206,6 +206,11 @@ ${factorPrompt}
           subtitle: typeof s.subtitle === 'string' ? s.subtitle : '',
           bgm: typeof s.bgm === 'string' ? s.bgm : 'Modern Beat',
           reference_image_url: null,
+          // 素材绑定默认空，由 ScriptService.recallMaterialsForShots 向量召回后回填
+          material_id: null,
+          material_use_mode: 'none',
+          material_score: null,
+          adapted_image_url: null,
         };
       });
   }
@@ -227,7 +232,8 @@ ${factorPrompt}
     };
     const hook = hookByStrategy[strategyType] || `${name} 凭什么这么多人买？`;
 
-    const shots: Array<Omit<ScriptShot, 'index'>> = [
+    // 素材绑定字段由下方 map 统一补默认（向量召回后回填），此处模板对象不含它们
+    const shots: Array<Omit<ScriptShot, 'index' | 'material_id' | 'material_use_mode' | 'material_score' | 'adapted_image_url'>> = [
       {
         description: `开场 Hook：${hook}`,
         camera_motion: 'push-in',
@@ -266,6 +272,14 @@ ${factorPrompt}
       },
     ];
 
-    return shots.map((shot, index) => ({ ...shot, index }));
+    return shots.map((shot, index) => ({
+      ...shot,
+      index,
+      // 素材绑定默认空，由 ScriptService.recallMaterialsForShots 向量召回后回填
+      material_id: null,
+      material_use_mode: 'none' as const,
+      material_score: null,
+      adapted_image_url: null,
+    }));
   }
 }

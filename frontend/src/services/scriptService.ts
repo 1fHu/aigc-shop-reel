@@ -44,6 +44,11 @@ export const scriptService = {
     return api.post(`/scripts/${scriptId}/regenerate-shot`, payload);
   },
 
+  /** 删除某一幕召回到的图片素材 → 返回回退默认占位图后的 scene */
+  clearShotMaterial(scriptId: string, shotIndex: number): Promise<Scene> {
+    return api.delete(`/scripts/${scriptId}/shots/${shotIndex}/material`);
+  },
+
   /** 因子局部替换 —— 受影响分镜会被重生 */
   replaceFactor(scriptId: string, payload: ReplaceFactorPayload): Promise<ReplaceFactorResult> {
     return api.post(`/scripts/${scriptId}/replace-factor`, payload);

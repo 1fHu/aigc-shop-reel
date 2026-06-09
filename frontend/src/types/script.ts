@@ -45,6 +45,10 @@ export interface Scene {
   bgm: string;
   voiceover: string;      // 配音文案
   subtitle: string;       // 字幕
+  // 素材召回绑定（后端权威，前端只读；可删除→回退默认占位图）
+  material_id?: string | null;
+  material_use_mode?: 'none' | 'direct' | 'adapted';
+  material_score?: number | null;
 }
 
 /** 操作历史条目 */
