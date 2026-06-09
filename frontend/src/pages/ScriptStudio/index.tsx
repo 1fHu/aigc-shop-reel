@@ -62,7 +62,7 @@ export default function ScriptStudio() {
   const [applyingFactor, setApplyingFactor] = useState(false);
   const [voiceId, setVoiceId] = useState(() => localStorage.getItem('vidcraft_voice_id') || 'zh_female_vv_uranus_bigtts');
   const [subtitleEnabled, setSubtitleEnabled] = useState(() => localStorage.getItem('vidcraft_subtitle') !== 'false');
-  const [subtitleFontSize, setSubtitleFontSize] = useState(() => Number(localStorage.getItem('vidcraft_sub_fontsize')) || 40);
+  const [subtitleFontSize, setSubtitleFontSize] = useState(() => Number(localStorage.getItem('vidcraft_sub_fontsize')) || 15);
   const [subtitleOutline, setSubtitleOutline] = useState(() => Number(localStorage.getItem('vidcraft_sub_outline')) || 2.5);
   const [customRequirement, setCustomRequirement] = useState(() => localStorage.getItem('vidcraft_custom_req') || '');
   const [subtitleColor, setSubtitleColor] = useState(() => localStorage.getItem('vidcraft_sub_color') || '#FFFFFF');
@@ -131,15 +131,32 @@ export default function ScriptStudio() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [projectId]);
 
-  // ---- 回显已生成视频的分镜片段 ----
-  // 若该项目已有「完成」的视频，拉取每镜片段地址，建 index → video_url 映射，
-  // 供编辑器把片段播放器放到分镜中央预览位（替代紫色占位图）。
+  // ---- 回显已生成视频的分镜片段 + 回填上次生成所用设置 ----
+  // 若该项目已有视频：① 把上次生成所用的字幕/配音设置按项目回填到面板（优先于全局 localStorage 默认，
+  //   并同步写回 localStorage 供「生成视频」复用）；② 视频「完成」时拉取每镜片段地址，
+  //   建 index → video_url 映射，供编辑器把片段播放器放到分镜中央预览位（替代紫色占位图）。
   useEffect(() => {
     if (!projectId) return;
     let cancelled = false;
     videoService.getLatestByProject(projectId)
       .then((latest) => {
-        if (cancelled || !latest || latest.status !== 'completed') return undefined;
+        if (cancelled || !latest) return undefined;
+
+        // ① 按项目回填上次生成所用的字幕/配音设置
+        const st = latest.settings;
+        if (st) {
+          if (st.voice_id) { setVoiceId(st.voice_id); localStorage.setItem('vidcraft_voice_id', st.voice_id); }
+          if (typeof st.subtitle_enabled === 'boolean') { setSubtitleEnabled(st.subtitle_enabled); localStorage.setItem('vidcraft_subtitle', String(st.subtitle_enabled)); }
+          const ss = st.subtitle_style || {};
+          if (typeof ss.font_size === 'number') { setSubtitleFontSize(ss.font_size); localStorage.setItem('vidcraft_sub_fontsize', String(ss.font_size)); }
+          if (typeof ss.outline === 'number') { setSubtitleOutline(ss.outline); localStorage.setItem('vidcraft_sub_outline', String(ss.outline)); }
+          if (ss.color) { setSubtitleColor(ss.color); localStorage.setItem('vidcraft_sub_color', ss.color); }
+          if (ss.font_family) { setSubtitleFontFamily(ss.font_family); localStorage.setItem('vidcraft_sub_font', ss.font_family); }
+          if (typeof st.custom_requirement === 'string') { setCustomRequirement(st.custom_requirement); localStorage.setItem('vidcraft_custom_req', st.custom_requirement); }
+        }
+
+        // ② 仅「完成」的视频才有可播放片段
+        if (latest.status !== 'completed') return undefined;
         return videoService.getShots(latest.id).then((shots) => {
           if (cancelled) return;
           const map: Record<number, string> = {};
@@ -402,15 +419,26 @@ export default function ScriptStudio() {
       const latest = await videoService.getLatestByProject(projectId);
       if (!latest?.id) { message.error('未找到视频任务'); setRegeneratingShots(false); return; }
       const sorted = [...selectedShotIndices].sort((a, b) => a - b);
-      // 批量再生：后端只重生选中的分镜，保留未选中，最终合成
-      await videoService.regenerateShots(latest.id, sorted, keepFrames);
+      // 批量再生：后端只重生选中的分镜，保留未选中，最终合成。
+      // 带上当前面板的字幕/配音设置，让重生分镜按最新字号等烧字幕（否则后端沿用上次生成时的旧设置）。
+      await videoService.regenerateShots(latest.id, sorted, keepFrames, {
+        voice_id: voiceId,
+        subtitle_enabled: subtitleEnabled,
+        subtitle_style: {
+          font_size: subtitleFontSize,
+          outline: subtitleOutline,
+          color: subtitleColor,
+          font_family: subtitleFontFamily,
+        },
+        custom_requirement: customRequirement,
+      });
       message.success(`${sorted.length} 个分镜已提交重新生成，完成后将在编辑器中预览`);
       // 留在分镜编辑页：启动轮询，片段完成即就地刷新播放器；不跳到视频页（整片合成在后台继续）
       regenVideoIdRef.current = latest.id;
       setRegenPending(sorted);
     } catch { message.error('分镜重新生成失败'); }
     setRegeneratingShots(false);
-  }, [projectId, selectedShotIndices, keepFrames, message]);
+  }, [projectId, selectedShotIndices, keepFrames, message, voiceId, subtitleEnabled, subtitleFontSize, subtitleOutline, subtitleColor, subtitleFontFamily, customRequirement]);
 
   const handleViewVideo = useCallback(async () => {
     if (!projectId) return;

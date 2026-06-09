@@ -37,8 +37,23 @@ export interface VideoTask {
   cover_url?: string;        // 完成态视频封面
   download_url?: string;     // 完成态下载链接
   error_message?: string;    // 失败时的错误描述
+  /** 本次视频生成所用的字幕/配音设置（GET /api/videos 回填分镜编辑面板用） */
+  settings?: VideoGenerationSettings | null;
   created_at: string;
   completed_at?: string;
+}
+
+/** 视频持久化的字幕/配音设置（video.settings 子集，用于按项目回填面板） */
+export interface VideoGenerationSettings {
+  voice_id?: string | null;
+  subtitle_enabled?: boolean;
+  subtitle_style?: {
+    font_size?: number;
+    outline?: number;
+    color?: string;
+    font_family?: string;
+  };
+  custom_requirement?: string;
 }
 
 /**
@@ -67,7 +82,7 @@ export interface GenerateVideoPayload {
   voice_id?: string;           // TTS 音色
   subtitle_enabled?: boolean;  // 是否烧录字幕，默认 true
   subtitle_style?: {            // 字幕样式
-    font_size?: number;        // 字体大小 px，默认 40
+    font_size?: number;        // 字体大小 px，默认 15
     outline?: number;          // 描边粗细，默认 2.5
     color?: string;            // 字体颜色 hex，默认 #FFFFFF
     font_family?: string;      // 字体名称，默认 Microsoft YaHei

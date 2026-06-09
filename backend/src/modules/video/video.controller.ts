@@ -39,7 +39,11 @@ export class VideoController {
 
   @Get(':id/shots/:index/file')
   getShotFile(@Param('id') id: string, @Param('index') index: string, @Res() res: Response) {
-    const filePath = join(process.cwd(), '..', 'uploads', 'videos', `${id}-shot-${index}.mp4`);
+    const dir = join(process.cwd(), '..', 'uploads', 'videos');
+    // 优先返回带 TTS 配音 + 烧录字幕的合成片段（与成片一致）；缺失再回退到无字幕/无配音的原始片段
+    const composited = join(dir, `${id}-shot-${index}-composited.mp4`);
+    const raw = join(dir, `${id}-shot-${index}.mp4`);
+    const filePath = existsSync(composited) ? composited : raw;
     if (!existsSync(filePath)) return res.status(404).json({ code: 404, msg: '分镜视频不存在' });
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Accept-Ranges', 'bytes');
@@ -54,8 +58,13 @@ export class VideoController {
 
   @UseGuards(AuthGuard('jwt'))
   @Post(':id/regenerate-shots')
-  async regenerateShots(@Param('id') id: string, @Body() body: { shot_indices: number[]; keep_frames?: boolean }) {
-    return ok(await this.videoService.regenerateShots(id, body.shot_indices, body.keep_frames ?? false));
+  async regenerateShots(@Param('id') id: string, @Body() body: { shot_indices: number[]; keep_frames?: boolean; voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string }) {
+    return ok(await this.videoService.regenerateShots(id, body.shot_indices, body.keep_frames ?? false, {
+      voice_id: body.voice_id,
+      subtitle_enabled: body.subtitle_enabled,
+      subtitle_style: body.subtitle_style,
+      custom_requirement: body.custom_requirement,
+    }));
   }
 
   @UseGuards(AuthGuard('jwt'))
