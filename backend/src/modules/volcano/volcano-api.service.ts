@@ -53,6 +53,8 @@ export class VolcanoApiService {
   private readonly embeddingEp: string;
   /** embedding 输出维度，必须与 DB materials.embedding 列 vector(1024) 一致 */
   private readonly embeddingDim: number;
+  /** Seedream 图生图接入点（模式B 适配图）；未配则适配图生成降级，调用方回退 direct */
+  private readonly seedreamEp: string;
   private readonly callbackBaseUrl: string;
   private readonly ttsAppId: string;
   private readonly ttsAccessKey: string;
@@ -72,13 +74,14 @@ export class VolcanoApiService {
     this.seedanceRatio = '9:16';
     this.embeddingEp = process.env.VOLCANO_EMBEDDING_EP || this.config.get<string>('VOLCANO_EMBEDDING_EP', '');
     this.embeddingDim = parseInt(process.env.VOLCANO_EMBEDDING_DIM || this.config.get<string>('VOLCANO_EMBEDDING_DIM', '1024'), 10) || 1024;
+    this.seedreamEp = process.env.VOLCANO_SEEDREAM_EP || this.config.get<string>('VOLCANO_SEEDREAM_EP', '');
     this.callbackBaseUrl = process.env.SEEDANCE_CALLBACK_BASE_URL || this.config.get<string>('seedance.callbackBaseUrl', '');
     this.ttsAppId = process.env.VOLCANO_TTS_APP_ID || this.config.get<string>('VOLCANO_TTS_APP_ID', '');
     this.ttsAccessKey = process.env.VOLCANO_TTS_ACCESS_KEY || this.config.get<string>('VOLCANO_TTS_ACCESS_KEY', '');
     this.ttsApiKey = process.env.VOLCANO_TTS_API_KEY || this.config.get<string>('VOLCANO_TTS_API_KEY', '');
     this.ttsResourceId = process.env.VOLCANO_TTS_RESOURCE_ID || this.config.get<string>('VOLCANO_TTS_RESOURCE_ID', 'seed-tts-2.0');
     this.ttsVoiceId = process.env.TTS_VOICE_ID || this.config.get<string>('TTS_VOICE_ID', 'zh_female_vv_uranus_bigtts');
-    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp || 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}, seedanceR2v=${this.seedanceR2v}, seedanceRatio=${this.seedanceRatio}, embeddingEp=${this.embeddingEp || 'MISSING'}, embeddingDim=${this.embeddingDim}, tts=${this.isTTSConfigured() ? 'SET' : 'MISSING'}, ttsVoice=${this.ttsVoiceId}`);
+    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp || 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}, seedanceR2v=${this.seedanceR2v}, seedanceRatio=${this.seedanceRatio}, embeddingEp=${this.embeddingEp || 'MISSING'}, embeddingDim=${this.embeddingDim}, seedreamEp=${this.seedreamEp || 'MISSING'}, tts=${this.isTTSConfigured() ? 'SET' : 'MISSING'}, ttsVoice=${this.ttsVoiceId}`);
   }
 
   signCallback(taskId: string, secret: string) {
@@ -324,6 +327,76 @@ export class VolcanoApiService {
       return JSON.stringify(vec);
     } catch (err) {
       this.logger.warn(`Embedding failed: ${(err as Error).message}`);
+      return null;
+    }
+  }
+
+  /**
+   * 模式B 图生图（Doubao Seedream）：把原素材图按本幕剧本改造成该幕适配首帧。
+   * - 原图优先内联成 base64 data URI（绕开公网可达性，与 prepareReferenceImages 同思路）；
+   * - 走 Ark images/generations，取 b64_json/url，解码后**重新落 MinIO** 返回我方持久 URL
+   *   （Seedream 临时 URL 会过期，且 Seedance 云端需公网可拉取首帧）；
+   * - 未配置 VOLCANO_SEEDREAM_EP 或任一步失败 → 返回 null，调用方降级为 direct（用原素材图）。
+   */
+  async adaptShotImage(input: {
+    baseImageUrl?: string;
+    baseImageBuffer?: Buffer;
+    prompt: string;
+    size?: string;
+  }): Promise<string | null> {
+    if (!this.apiKey || !this.seedreamEp) {
+      if (!this.seedreamEp) this.logger.warn('VOLCANO_SEEDREAM_EP 未配置，跳过适配图生成（模式B降级为 direct）');
+      return null;
+    }
+
+    // 原图 → data URI（拿不到 buffer 时退回直接透传 URL）
+    let imageRef: string | null = null;
+    try {
+      let buf = input.baseImageBuffer ?? null;
+      if (!buf && input.baseImageUrl) buf = await this.minio.downloadFile(input.baseImageUrl);
+      if (buf?.length) {
+        const mime = this.detectMime(buf);
+        imageRef = `data:${mime};base64,${buf.toString('base64')}`;
+      } else if (input.baseImageUrl) {
+        imageRef = input.baseImageUrl;
+      }
+    } catch {
+      imageRef = input.baseImageUrl ?? null;
+    }
+    if (!imageRef) return null;
+
+    try {
+      const res = await fetch('https://ark.cn-beijing.volces.com/api/v3/images/generations', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.seedreamEp,
+          prompt: input.prompt,
+          image: imageRef,                 // 图生图/编辑：传原图
+          size: input.size || '720x1280',  // 竖屏 9:16，具体枚举以控制台接入点为准
+          response_format: 'b64_json',
+          watermark: false,
+        }),
+      });
+      const data = await res.json();
+      const item = data?.data?.[0];
+      let outBuf: Buffer | null = null;
+      if (item?.b64_json) {
+        outBuf = Buffer.from(item.b64_json as string, 'base64');
+      } else if (item?.url) {
+        const r = await fetch(item.url as string);
+        outBuf = Buffer.from(await r.arrayBuffer());
+      }
+      if (!outBuf?.length) {
+        this.logger.warn(`Seedream 适配图返回空 (ep=${this.seedreamEp}): ${JSON.stringify(data).slice(0, 300)}`);
+        return null;
+      }
+      const key = `adapted/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+      const savedUrl = await this.minio.uploadFile(key, outBuf, 'image/png');
+      this.logger.log(`Seedream 适配图生成成功 → ${savedUrl}`);
+      return savedUrl;
+    } catch (err) {
+      this.logger.warn(`Seedream 适配图生成失败: ${(err as Error).message}`);
       return null;
     }
   }

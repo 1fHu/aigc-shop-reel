@@ -1,6 +1,6 @@
 import { ConflictException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Script } from '../../database/entities/script.entity';
 import { Project } from '../../database/entities/project.entity';
 import { Material } from '../../database/entities/material.entity';
@@ -96,6 +96,8 @@ export class ScriptService {
 
     // 向量召回：为每一幕按描述从项目素材库召回最相关素材并绑定（修改 storyboard 内每个 shot）。
     await this.recallMaterialsForShots(projectId, storyboard);
+    // 模式B：对 adapted 幕预生成适配首帧（D=预生成，剧本页即可预览）。
+    await this.pregenerateAdaptedImages(storyboard);
 
     // 溯源：爆款仿写会同时带 referenceVideoId 与（来自该爆款的）面板因子，此时来源记为 factor_panel
     // 但 referenceVideoId 仍要落库，保证「仿写自哪条爆款 + 实际应用了哪些因子」完整可查。
@@ -186,6 +188,42 @@ export class ScriptService {
         this.logger.warn(`shot#${shot.index} 素材召回失败：${(err as Error).message}`);
       }
     }
+  }
+
+  /**
+   * 模式B 适配图预生成（D=预生成）：对 use_mode='adapted' 的幕，把原素材图 + 本幕剧本
+   * 喂给 Seedream 图生图，产出该幕适配首帧写入 shot.adapted_image_url（并行出图）。
+   * 出图失败 / 未配 Seedream → 该幕降级为 direct（仍用原素材缩略图当首帧），不阻断剧本生成。
+   */
+  private async pregenerateAdaptedImages(storyboard: ScriptShot[]): Promise<void> {
+    const adaptedShots = storyboard.filter((s) => s.material_use_mode === 'adapted' && s.material_id);
+    if (adaptedShots.length === 0) return;
+
+    const ids = [...new Set(adaptedShots.map((s) => s.material_id as string))];
+    const mats = await this.materialRepo.find({ where: { id: In(ids) } });
+    const thumbById = new Map(mats.map((m) => [m.id, m.thumbnailUrl] as const));
+
+    await Promise.all(
+      adaptedShots.map(async (shot) => {
+        const base = thumbById.get(shot.material_id as string);
+        if (!base) {
+          shot.material_use_mode = 'direct';
+          return;
+        }
+        const prompt =
+          `把参考图改造为下面这一幕竖屏 9:16 带货短视频的首帧画面，保持商品主体一致、写实、` +
+          `光影自然、色彩饱满、无字幕无水印无 logo。画面：${shot.description}` +
+          (shot.voiceover ? `；配音语境：${shot.voiceover}` : '');
+        const url = await this.volcano.adaptShotImage({ baseImageUrl: base, prompt });
+        if (url) {
+          shot.adapted_image_url = url;
+        } else {
+          // 出图失败/未配 → 降级 direct，用原素材图当首帧
+          shot.material_use_mode = 'direct';
+          this.logger.warn(`shot#${shot.index} 适配图生成失败，降级为 direct`);
+        }
+      }),
+    );
   }
 
   /**
@@ -297,9 +335,10 @@ export class ScriptService {
 
     const regenerated = await this.director.regenerateShot(productInfo, storyboard, shotIndex, creativeFactors);
     if (regenerated) {
-      // 画面变了，重新为这一幕做素材召回（仅这一幕，其余分镜绑定不动）
+      // 画面变了，重新为这一幕做素材召回 + 适配图预生成（仅这一幕，其余分镜绑定不动）
       const newShot: ScriptShot = { ...regenerated, index: shotIndex };
       await this.recallMaterialsForShots(script.projectId, [newShot]);
+      await this.pregenerateAdaptedImages([newShot]);
       const updated = storyboard.map((s) => (s.index === shotIndex ? newShot : s));
       await this.scriptRepo.update(id, { storyboard: updated as unknown as object });
       return { event: 'done', shot_index: shotIndex, shot: newShot };

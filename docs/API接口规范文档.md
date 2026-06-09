@@ -931,6 +931,7 @@ AIGC 带货视频生成系统
 |  |
 | --- |
 | v1.3 变更（素材召回）：①**生成闸门**——项目仍有 `status=parsing` 的素材时返回 **409**（msg「还有 N 个素材正在解析…」），前端应先用 `GET /api/scripts/readiness` 置灰生成按钮；②**素材向量召回**——生成时按每幕描述从项目素材库做 pgvector 余弦召回，命中素材后向 `scene` 增补字段：`material_id`（命中素材 UUID，无则 null）、`material_use_mode`（`none`/`direct`/`adapted`，由相似度阈值决定）、`material_score`（余弦相似度）。`thumb_url` 命中素材时回填素材缩略图/适配图作首帧预览。素材绑定为后端权威，前端只读，`PUT /storyboard` 不接受其改动。 |
+| v1.3 模式B（适配图，已接入）：`material_use_mode=adapted` 的幕在**生成剧本时即预生成**适配首帧——把原素材图 + 本幕剧本喂给 Doubao **Seedream** 图生图（env `VOLCANO_SEEDREAM_EP`），产图落 MinIO 后写入该幕 `thumb_url`，前端可直接预览。视频阶段把它当 **first_frame**（i2v，不受 Seedance r2v 开关影响）。未配置 Seedream 或出图失败时该幕自动降级为 `direct`（用原素材图当首帧），不阻断生成。 |
 
 ## GET /api/scripts/readiness 剧本生成就绪检查
 
