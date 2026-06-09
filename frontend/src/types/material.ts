@@ -15,6 +15,18 @@ export interface MaterialListItem {
   analysis: Record<string, unknown>;
 }
 
+/** GET /api/materials/global-search 跨项目素材检索结果条目 */
+export interface MaterialGlobalSearchItem {
+  id: string;
+  project_id: string;
+  project_name: string;
+  file_type: MaterialFileType;
+  file_name: string;
+  thumbnail_url: string;
+  status: MaterialStatus;
+  created_at: string;
+}
+
 /** POST /api/materials/upload 返回条目 */
 export interface MaterialUploadItem {
   id: string;

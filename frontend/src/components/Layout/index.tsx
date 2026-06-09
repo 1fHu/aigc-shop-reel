@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Input, Dropdown, App, type MenuProps } from 'antd';
+import { Dropdown, App, type MenuProps } from 'antd';
 import {
   AppstoreOutlined,
   FolderOpenOutlined,
@@ -9,7 +9,6 @@ import {
   QuestionCircleOutlined,
   UserOutlined,
   ThunderboltFilled,
-  SearchOutlined,
   BellOutlined,
   PlusOutlined,
   InfoCircleOutlined,
@@ -21,6 +20,7 @@ import {
 
 import { useAuthStore, selectUser, selectIsGuest } from '@/stores/authStore';
 import NewProjectModal from '@/components/NewProjectModal';
+import GlobalSearch from '@/components/GlobalSearch';
 import styles from './Layout.module.css';
 
 interface NavItem {
@@ -163,11 +163,7 @@ export default function AppLayout() {
         {/* Topbar */}
         <header className={styles.topbar}>
           <div className={styles.search}>
-            <Input
-              prefix={<SearchOutlined style={{ color: '#9CA3AF' }} />}
-              placeholder="搜索项目、脚本或素材..."
-              variant="filled"
-            />
+            <GlobalSearch />
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

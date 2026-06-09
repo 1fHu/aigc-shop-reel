@@ -21,6 +21,15 @@ export const materialHandlers = [
     });
   }),
 
+  // GET /api/materials/global-search?q=...（顶栏全局搜索，mock 下素材库为空返回空集）
+  http.get('/api/materials/global-search', () => {
+    return HttpResponse.json({
+      code: 200, msg: null, total: 0,
+      data: [],
+      traceId: `mock-${Date.now()}`,
+    });
+  }),
+
   // GET /api/materials?project_id=...
   http.get('/api/materials', ({ request }) => {
     const url = new URL(request.url);

@@ -170,6 +170,39 @@ export class MaterialService {
     return { deleted: true, referenced_shots: 0 };
   }
 
+  /**
+   * GET /api/materials/global-search 跨项目检索当前用户全部素材（按文件名 / 标签模糊匹配）。
+   * 供 Dashboard 顶栏全局搜索使用，返回所属项目信息以便前端跳转到对应素材库。
+   */
+  async globalSearch(userId: string, q = '', type = 'all', limit = 20) {
+    const keyword = q.trim();
+    if (!keyword) return [];
+
+    const qb = this.materialRepo
+      .createQueryBuilder('m')
+      .innerJoinAndSelect('m.project', 'p')
+      .where('p.userId = :userId', { userId })
+      .andWhere(
+        "(m.fileName ILIKE :kw OR array_to_string(coalesce(m.tags, '{}'), ' ') ILIKE :kw)",
+        { kw: `%${keyword}%` },
+      )
+      .orderBy('m.createdAt', 'DESC')
+      .take(limit);
+    if (type !== 'all') qb.andWhere('m.fileType = :type', { type });
+
+    const items = await qb.getMany();
+    return items.map((m) => ({
+      id: m.id,
+      project_id: m.projectId,
+      project_name: m.project?.name ?? '',
+      file_type: m.fileType,
+      file_name: m.fileName,
+      thumbnail_url: m.thumbnailUrl,
+      status: m.status,
+      created_at: m.createdAt.toISOString(),
+    }));
+  }
+
   /** GET /api/materials/search 多颗粒度检索（当前实现 keyword + tag 过滤；vector/slice 待补） */
   async search(userId: string, projectId: string, q = '', tags = '', level = 'material') {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
