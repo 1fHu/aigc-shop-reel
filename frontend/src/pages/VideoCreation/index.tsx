@@ -197,7 +197,7 @@ export default function VideoCreation() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.hl}>
-          <button className={styles.back} onClick={() => leave(pid ? `/projects/${pid}/script` : '/script-studio')}><ArrowLeftOutlined /></button>
+          <button className={styles.back} onClick={() => leave(pid ? `/projects/${pid}/script` : '/script-studio')}><ArrowLeftOutlined /> 返回分镜编辑</button>
           <h1 className={styles.tt}>项目详情：{task?.title || '智能视频生成'}</h1>
         </div>
         {done ? (

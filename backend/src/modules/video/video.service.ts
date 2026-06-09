@@ -301,7 +301,9 @@ export class VideoService {
       quality: 'HD',
       ratio: '9:16',
       video_url: v.videoUrl,
-      title: (script?.content as string)?.slice(0, 50) || 'AI 正在生成视频',
+      // title 仅作「视频/项目名」用途，不要塞状态文案——否则成片完成后标题仍显示「正在生成」。
+      // 无剧本内容时留空，由前端按当前状态回显合适文案（生成中/已完成）。
+      title: (script?.content as string)?.slice(0, 50) || undefined,
       shots,
       created_at: v.createdAt.toISOString(),
     };
