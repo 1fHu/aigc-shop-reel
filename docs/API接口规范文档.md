@@ -832,6 +832,43 @@ AIGC 带货视频生成系统
 | --- |
 | 删除执行软删除（DB 标记 deleted\_at）+ MinIO 文件异步清理，不影响已完成的视频文件。 |
 
+
+## GET /api/materials/global-search 全局素材搜索
+
+|  |
+| --- |
+| 🔒 需要鉴权：请求头携带 Authorization: Bearer <access\_token> |
+
+> 供 Dashboard 顶栏全局搜索使用：跨当前用户全部项目，按文件名 / 标签模糊匹配素材，返回所属项目信息以便前端跳转到对应素材库。与 `GET /api/materials/search` 的区别：不限定 `project_id`、不做向量/切片检索。
+
+**请求参数（Query）**
+
+| **参数** | **类型** | **必填** | **备注** |
+| --- | --- | --- | --- |
+| **q** | String | 否 | 关键词，模糊匹配 file\_name / tags（ILIKE）；为空返回空集 |
+| **type** | String | 否 | 文件类型筛选：image / video / all，默认 all |
+| **limit** | Integer | 否 | 返回数量上限，默认 20 |
+
+**返回参数**
+
+| **参数** | **类型** | **备注** |
+| --- | --- | --- |
+| **data[].id** | String | 素材 UUID |
+| **data[].project\_id** | String | 所属项目 UUID |
+| **data[].project\_name** | String | 所属项目名称 |
+| **data[].file\_type** | String | image / video |
+| **data[].file\_name** | String | 文件名 |
+| **data[].thumbnail\_url** | String | 缩略图 URL |
+| **data[].status** | String | parsing / ready / failed |
+| **data[].created\_at** | String | 创建时间（ISO 8601） |
+
+**返回示例**
+
+|  |
+| --- |
+| { "code": 200, "msg": null, "total": 2, "data": [ { "id": "mat-001", "project\_id": "proj-001", "project\_name": "夏季防晒霜", "file\_type": "video", "file\_name": "unboxing.mp4", "thumbnail\_url": "https://...", "status": "ready", "created\_at": "2026-06-09T03:00:00.000Z" } ], "traceId": "..." } |
+
+
 # 6. M5 剧本生成
 
 ## POST /api/scripts/generate 生成剧本（SSE 流式输出）

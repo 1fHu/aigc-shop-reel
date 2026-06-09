@@ -1,0 +1,38 @@
+.groupTitle {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6B7280;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.optIcon {
+  color: #4648D4;
+  flex-shrink: 0;
+}
+
+.optName {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #111827;
+  font-size: 13px;
+}
+
+.optMeta {
+  flex-shrink: 0;
+  color: #9CA3AF;
+  font-size: 12px;
+}
+
+.empty {
+  color: #9CA3AF;
+  font-size: 13px;
+}

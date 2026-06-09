@@ -60,6 +60,18 @@ export class MaterialController {
   }
 
   @UseGuards(AuthGuard('jwt'))
+  @Get('global-search')
+  async globalSearch(
+    @CurrentUser() user: AuthenticatedUser,
+    @Query('q') q = '',
+    @Query('type') type = 'all',
+    @Query('limit') limit = '20',
+  ) {
+    const results = await this.materialService.globalSearch(user.id, q, type, Number(limit) || 20);
+    return ok(results, results.length);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
   @Get('search')
   async search(
     @CurrentUser() user: AuthenticatedUser,
