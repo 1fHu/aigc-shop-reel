@@ -42,6 +42,9 @@ export default function ScriptStudio() {
   const [selectedIndex, setSelectedIndex] = useState(0);
   // 已生成视频的每镜片段地址 index → video_url，用于把播放器回显到分镜中央预览位
   const [shotClips, setShotClips] = useState<Record<number, string>>({});
+  // 正在重新生成的分镜 index 列表（非空时在本页轮询片段，完成后就地刷新播放器，不跳走）
+  const [regenPending, setRegenPending] = useState<number[]>([]);
+  const regenVideoIdRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(!!projectId);
   const [generating, setGenerating] = useState(false);
   const [generationDone, setGenerationDone] = useState(false);
@@ -149,6 +152,47 @@ export default function ScriptStudio() {
       .catch(() => { /* 无视频 / 拦截器已 toast，静默 */ });
     return () => { cancelled = true; };
   }, [projectId]);
+
+  // ---- 分镜重生轮询 ----
+  // 提交「生成分镜」后留在本页，轮询每镜状态：某镜片段一完成（先于整片合成）即就地刷新
+  // 其播放器（URL 路径不变，加版本号强制重载），让用户立刻看到重生结果；整片合成在后台继续，
+  // 用户点「查看视频」时再去视频页看合成成片。
+  useEffect(() => {
+    if (regenPending.length === 0 || !regenVideoIdRef.current) return;
+    const vid = regenVideoIdRef.current;
+    let cancelled = false;
+    let ticks = 0;
+    const MAX_TICKS = 240; // ~8 分钟安全上限（2s/次）
+
+    const tick = async () => {
+      if (++ticks > MAX_TICKS) { setRegenPending([]); regenVideoIdRef.current = null; return; }
+      try {
+        const shots = await videoService.getShots(vid);
+        if (cancelled) return;
+        const updates: Record<number, string> = {};
+        const stillPending = regenPending.filter((idx) => {
+          const s = shots.find((x) => x.index === idx);
+          if (s && (s.status === 'completed' || s.status === 'failed')) {
+            // 完成出片：加版本号强制 <video> 重载新内容（路径不变，浏览器否则用旧缓存）
+            if (s.status === 'completed' && s.video_url) {
+              updates[idx] = `${s.video_url}${s.video_url.includes('?') ? '&' : '?'}t=${Date.now()}`;
+            }
+            return false; // completed/failed 都视为该镜结束
+          }
+          return true;
+        });
+        if (Object.keys(updates).length) setShotClips((prev) => ({ ...prev, ...updates }));
+        if (stillPending.length !== regenPending.length) setRegenPending(stillPending);
+        if (stillPending.length === 0) {
+          regenVideoIdRef.current = null;
+          message.success('分镜已重新生成，可在编辑器查看；完整视频正在后台合成');
+        }
+      } catch { /* 拦截器已 toast，继续轮询 */ }
+    };
+
+    const timer = setInterval(tick, 2000);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [regenPending, message]);
 
   // ---- handlers ----
   const handleGenerate = useCallback(async (overrideFactors?: FactorState) => {
@@ -360,11 +404,13 @@ export default function ScriptStudio() {
       const sorted = [...selectedShotIndices].sort((a, b) => a - b);
       // 批量再生：后端只重生选中的分镜，保留未选中，最终合成
       await videoService.regenerateShots(latest.id, sorted, keepFrames);
-      message.success(`${sorted.length} 个分镜已提交重新生成`);
-      navigate(`/projects/${projectId}/video?scriptId=${scriptId}`);
+      message.success(`${sorted.length} 个分镜已提交重新生成，完成后将在编辑器中预览`);
+      // 留在分镜编辑页：启动轮询，片段完成即就地刷新播放器；不跳到视频页（整片合成在后台继续）
+      regenVideoIdRef.current = latest.id;
+      setRegenPending(sorted);
     } catch { message.error('分镜重新生成失败'); }
     setRegeneratingShots(false);
-  }, [projectId, scriptId, selectedShotIndices, keepFrames, navigate, message]);
+  }, [projectId, selectedShotIndices, keepFrames, message]);
 
   const handleViewVideo = useCallback(async () => {
     if (!projectId) return;
@@ -522,7 +568,8 @@ export default function ScriptStudio() {
         <ShotEditor
           scene={selectedScene}
           clipUrl={selectedScene ? shotClips[selectedScene.index] : undefined}
-          regenerating={regenerating}
+          regenerating={regenerating || (!!selectedScene && regenPending.includes(selectedScene.index))}
+          regenLabel={!!selectedScene && regenPending.includes(selectedScene.index) ? '正在重新生成该分镜视频…' : undefined}
           onChange={handleFieldChange}
           onRegenerate={handleRegenerateShot}
         />
@@ -575,10 +622,10 @@ export default function ScriptStudio() {
           <button
             className={styles.genBtn}
             onClick={handleRegenerateShots}
-            disabled={!scriptId || scenes.length === 0 || regeneratingShots}
+            disabled={!scriptId || scenes.length === 0 || regeneratingShots || regenPending.length > 0}
             style={{ background: '#F3F4F6', color: '#374151' }}
           >
-            <ReloadOutlined /> 生成分镜
+            <ReloadOutlined /> {regenPending.length > 0 ? `重生中…(${regenPending.length})` : '生成分镜'}
           </button>
           <button
             className={styles.genBtn}

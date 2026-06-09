@@ -25,6 +25,8 @@ interface ShotEditorProps {
   /** 该分镜已生成的视频片段地址；有值时在中央预览位渲染播放器（替代占位图） */
   clipUrl?: string;
   regenerating: boolean;
+  /** 重生进行中遮罩文案（区分「按因子重生剧本」与「重新生成分镜视频」） */
+  regenLabel?: string;
   onChange: (index: number, field: string, value: string | number) => void;
   onRegenerate: (index: number) => void;
 }
@@ -33,6 +35,7 @@ export default function ShotEditor({
   scene,
   clipUrl,
   regenerating,
+  regenLabel,
   onChange,
   onRegenerate,
 }: ShotEditorProps) {
@@ -78,7 +81,7 @@ export default function ShotEditor({
             <div className={styles.regenOverlay}>
               <div className={styles.regenPill}>
                 <span className={styles.regenDot} />
-                正在按新因子重新生成画面...
+                {regenLabel || '正在按新因子重新生成画面...'}
               </div>
             </div>
           )}
