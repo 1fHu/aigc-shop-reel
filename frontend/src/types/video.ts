@@ -41,6 +41,24 @@ export interface VideoTask {
   completed_at?: string;
 }
 
+/**
+ * GET /api/videos/:id/shots 返回的单分镜生成结果（含每镜片段地址）
+ * 用于分镜编辑页：视频生成完成后，把片段播放器回显到分镜中央预览位。
+ * status 为后端原始值（queued/processing/completed/failed），仅用来判断是否已出片。
+ */
+export interface VideoShotClip {
+  index: number;                    // 0-based，对齐 Scene.index
+  status: string;
+  description: string;
+  duration: number;
+  camera_motion: string;
+  voiceover: string;
+  subtitle: string;
+  video_url: string | null;         // 片段播放地址 /api/videos/:id/shots/:index/file（未出片为 null）
+  reference_image_url: string | null;
+  error_msg: string | null;
+}
+
 /** POST /api/videos/generate 请求体 */
 export interface GenerateVideoPayload {
   project_id: string;

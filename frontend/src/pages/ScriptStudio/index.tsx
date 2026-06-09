@@ -40,6 +40,8 @@ export default function ScriptStudio() {
   const [scenes, setScenes] = useState<Scene[]>([]);
   const [scriptId, setScriptId] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  // 已生成视频的每镜片段地址 index → video_url，用于把播放器回显到分镜中央预览位
+  const [shotClips, setShotClips] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(!!projectId);
   const [generating, setGenerating] = useState(false);
   const [generationDone, setGenerationDone] = useState(false);
@@ -124,6 +126,28 @@ export default function ScriptStudio() {
     }).catch(() => {}).finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+
+  // ---- 回显已生成视频的分镜片段 ----
+  // 若该项目已有「完成」的视频，拉取每镜片段地址，建 index → video_url 映射，
+  // 供编辑器把片段播放器放到分镜中央预览位（替代紫色占位图）。
+  useEffect(() => {
+    if (!projectId) return;
+    let cancelled = false;
+    videoService.getLatestByProject(projectId)
+      .then((latest) => {
+        if (cancelled || !latest || latest.status !== 'completed') return undefined;
+        return videoService.getShots(latest.id).then((shots) => {
+          if (cancelled) return;
+          const map: Record<number, string> = {};
+          shots.forEach((s) => {
+            if (s.video_url && s.status === 'completed') map[s.index] = s.video_url;
+          });
+          setShotClips(map);
+        });
+      })
+      .catch(() => { /* 无视频 / 拦截器已 toast，静默 */ });
+    return () => { cancelled = true; };
   }, [projectId]);
 
   // ---- handlers ----
@@ -497,6 +521,7 @@ export default function ScriptStudio() {
         />
         <ShotEditor
           scene={selectedScene}
+          clipUrl={selectedScene ? shotClips[selectedScene.index] : undefined}
           regenerating={regenerating}
           onChange={handleFieldChange}
           onRegenerate={handleRegenerateShot}

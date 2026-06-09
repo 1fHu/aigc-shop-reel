@@ -4,6 +4,7 @@ import type {
   GenerateVideoPayload,
   UpdateVideoSettingsPayload,
   VideoShot,
+  VideoShotClip,
   VideoTask,
   VideoTaskStatus,
 } from '@/types';
@@ -129,6 +130,14 @@ export const videoService = {
         const raw = data as unknown as RawVideoTask | null;
         return raw ? normalizeTask(raw) : null;
       });
+  },
+
+  /**
+   * 获取各分镜的生成结果（含每镜片段 video_url）。
+   * 分镜编辑页用它把已生成的片段播放器回显到中央预览位。
+   */
+  getShots(videoId: string): Promise<VideoShotClip[]> {
+    return api.get(`/videos/${videoId}/shots`).then((data) => (data as unknown as VideoShotClip[]) || []);
   },
 
   /** 单分镜重新生成 */
