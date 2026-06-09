@@ -45,20 +45,46 @@ export default function VideoCreation() {
   // 防止 regen 自动触发被重复执行（StrictMode 双挂载 / 重渲染）
   const autoGenRef = useRef(false);
 
+  // 本地倒计时：收到后端估算值后每秒自减 1
+  const countdownRef = useRef(0);
+  const [countdown, setCountdown] = useState(0);
+  const countdownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  const stopCountdown = () => {
+    if (countdownTimer.current) { clearInterval(countdownTimer.current); countdownTimer.current = null; }
+  };
+
+  const startCountdown = (seconds: number) => {
+    stopCountdown();
+    countdownRef.current = Math.max(0, Math.round(seconds));
+    setCountdown(countdownRef.current);
+    if (countdownRef.current <= 0) return;
+    countdownTimer.current = setInterval(() => {
+      countdownRef.current = Math.max(0, countdownRef.current - 1);
+      setCountdown(countdownRef.current);
+      if (countdownRef.current <= 0) stopCountdown();
+    }, 1000);
+  };
+
   const stopPolling = () => {
     if (poll.current) { clearInterval(poll.current); poll.current = null; }
   };
 
   const startPolling = (videoId: string, seed?: VideoTask) => {
-    if (seed) setTask(seed);
+    if (seed) { setTask(seed); if (seed.estimated_remaining > 0) startCountdown(seed.estimated_remaining); }
     stopPolling();
     let ticks = 0;
     poll.current = setInterval(() => {
-      if (++ticks > MAX_POLLS) { stopPolling(); setBusy(false); return; }
+      if (++ticks > MAX_POLLS) { stopPolling(); stopCountdown(); setBusy(false); return; }
       videoService.getStatus(videoId).then((n) => {
         setTask(n);
+        // 后端估算与本地倒计时差距超过 5 秒时同步一次
+        if (n.estimated_remaining > 0 && Math.abs(n.estimated_remaining - countdownRef.current) > 5) {
+          startCountdown(n.estimated_remaining);
+        }
         if (n.status === 'completed' || n.status === 'failed') {
           stopPolling();
+          stopCountdown();
           setBusy(false);
           if (n.status === 'completed') {
             videoService.getDownloadUrl(videoId).then((dl) => {
@@ -159,10 +185,11 @@ export default function VideoCreation() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid]);
 
-  // 卸载时兜底清理轮询，防止离开页面后 setInterval 泄漏
-  useEffect(() => stopPolling, []);
+  // 卸载时兜底清理轮询和倒计时，防止离开页面后 setInterval 泄漏
+  useEffect(() => { stopCountdown(); stopPolling(); }, []);
 
   const leave = (to: number | string) => {
+    stopCountdown();
     stopPolling();
     if (typeof to === 'number') navigate(to);
     else navigate(to);
@@ -173,7 +200,7 @@ export default function VideoCreation() {
 
   const handleDownload = async () => {
     if (!task?.id) return;
-    const token = localStorage.getItem('vidcraft_access_token');
+    const token = sessionStorage.getItem('vidcraft_access_token');
     const base = import.meta.env.VITE_API_BASE_URL || '/api';
     try {
       const res = await fetch(`${base}/videos/${task.id}/file`, {
@@ -247,7 +274,7 @@ export default function VideoCreation() {
               <span className={styles.ringLabel}>渲染中</span>
               <span className={styles.ringVal}>{task?.progress ?? 0}%</span>
             </div>
-            <div className={styles.ringRemain}>⏱ 预计剩余时间：<strong>{fmt(task?.estimated_remaining ?? 0)}</strong></div>
+            <div className={styles.ringRemain}>⏱ 预计剩余时间：<strong>{fmt(countdown)}</strong></div>
           </div>
           <p className={styles.genTitle}>AI正在生成您的视频</p>
           <p className={styles.genSub}>正在为您精心制作专属短视频，请稍候片刻</p>
@@ -308,6 +335,7 @@ export default function VideoCreation() {
             if (task?.id) {
               try { await videoService.cancel(task.id); } catch { /* ignore */ }
             }
+            stopCountdown();
             stopPolling();
             setBusy(false);
             setTask(null);

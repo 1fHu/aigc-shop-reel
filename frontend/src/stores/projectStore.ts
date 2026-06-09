@@ -1,9 +1,8 @@
 import { create } from 'zustand';
-
-// TODO: project state (list, current, CRUD actions)
+import type { ProjectListItem } from '@/types';
 
 interface ProjectState {
-  projects: never[];
+  projects: ProjectListItem[];
 }
 
 export const useProjectStore = create<ProjectState>(() => ({

@@ -1,9 +1,8 @@
 import { create } from 'zustand';
-
-// TODO: video state (generation progress, shot statuses, result)
+import type { VideoTask } from '@/types';
 
 interface VideoState {
-  tasks: never[];
+  tasks: VideoTask[];
 }
 
 export const useVideoStore = create<VideoState>(() => ({

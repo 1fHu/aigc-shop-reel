@@ -15,10 +15,13 @@ jobs:
         env:
           SSH_KEY: ${{ secrets.SERVER_SSH_KEY }}
           HOST: ${{ secrets.SERVER_HOST }}
+          KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
         run: |
           echo "$SSH_KEY" | base64 -d > key
           chmod 600 key
-          ssh -i key -o StrictHostKeyChecking=no ubuntu@$HOST '
+          mkdir -p ~/.ssh
+          echo "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          ssh -i key ubuntu@$HOST '
             cd ~/vidcraft
             git pull origin master
             sudo docker compose -f docker/docker-compose.prod.yml --env-file .env up -d --build

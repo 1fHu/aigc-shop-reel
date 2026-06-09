@@ -1,4 +1,4 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, InternalServerErrorException, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, writeFileSync, unlinkSync, readFileSync, statSync } from 'fs';
@@ -241,8 +241,22 @@ export class VideoService {
       await this.taskRepo.save(task);
     }
 
-    this.buildPromptAndSubmit(saved.id, projectId, script, productName, productInfo, imageUrls, materialContext, opts);
+    this.buildPromptAndSubmit(saved.id, projectId, script, productName, productInfo, imageUrls, materialContext, opts)
+      .catch((err) => this.logger.error(`generate async pipeline failed: ${(err as Error).message}`));
     return { id: saved.id, video_id: saved.id, trace_id: saved.traceId, task_count: taskCount, total_shots: taskCount, status: saved.status };
+  }
+
+  /** 根据已耗时和已完成镜数动态估算剩余秒数 */
+  private calcEstimate(startedAt: Date | null, completedShots: number, totalShots: number): number {
+    const remaining = totalShots - completedShots;
+    if (remaining <= 0) return 0;
+    const elapsed = (Date.now() - new Date(startedAt || Date.now()).getTime()) / 1000;
+    if (completedShots > 0) {
+      const avgPerShot = elapsed / completedShots;
+      return Math.round(avgPerShot * remaining);
+    }
+    // 还没有完成的镜数时用保守预估（120s/镜，含 API 生成 + 轮询等待）
+    return remaining * 120;
   }
 
   /** GET /api/videos/:id/status */
@@ -300,7 +314,7 @@ export class VideoService {
       render_id: v.traceId,
       status: v.status,
       progress,
-      estimated_remaining: totalShots - completedShots > 0 ? (totalShots - completedShots) * 15 : 0,
+      estimated_remaining: this.calcEstimate(v.createdAt, completedShots, totalShots),
       completed_shots: completedShots,
       total_shots: totalShots,
       resolution: '1080x1920',
@@ -391,7 +405,7 @@ export class VideoService {
     }
 
     await this.taskRepo.update({ videoId: id, shotIndex: index }, { status: 'failed', errorMsg: '分镜生成失败' });
-    throw new Error('分镜生成失败');
+    throw new InternalServerErrorException('分镜生成失败');
   }
 
   /** POST /api/videos/:id/finalize — 用已有分镜文件重新合成最终视频 */
@@ -466,7 +480,8 @@ export class VideoService {
     await this.videoRepo.update(id, { status: 'processing' });
 
     // 后台异步处理
-    this.processRegenerateShots(id, normalizedStoryboard, set, video, keepFrames);
+    this.processRegenerateShots(id, normalizedStoryboard, set, video, keepFrames)
+      .catch((err) => this.logger.error(`regenerateShots async pipeline failed: ${(err as Error).message}`));
     return { id, status: 'processing' };
   }
 
@@ -1194,7 +1209,7 @@ export class VideoService {
     const fileUrl = `/api/videos/${videoId}/file`;
     if (clipPaths.length === 0) {
       this.logger.error(`composite ${videoId}: 无可用分镜片段`);
-      throw new Error('无可用分镜片段');
+      throw new BadRequestException('无可用分镜片段');
     }
     if (clipPaths.length === 1) {
       copyFileSync(clipPaths[0], finalPath);

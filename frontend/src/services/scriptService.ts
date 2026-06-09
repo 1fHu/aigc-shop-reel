@@ -71,7 +71,7 @@ export const scriptService = {
    * MSW v2 也通过 ReadableStream 返回 text/event-stream，开发期能跑通。
    */
   async *generate(payload: GenerateScriptPayload): AsyncGenerator<GenerateStreamEvent> {
-    const token = localStorage.getItem('vidcraft_access_token');
+    const token = sessionStorage.getItem('vidcraft_access_token');
     const baseURL = import.meta.env.VITE_API_BASE_URL || '/api';
     const resp = await fetch(`${baseURL}/scripts/generate`, {
       method: 'POST',

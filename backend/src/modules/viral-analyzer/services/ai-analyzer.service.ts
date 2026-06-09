@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, Logger } from '@nestjs/common';
 import axios from 'axios';
 import * as fs from 'fs';
 
@@ -86,7 +86,7 @@ export class AIAnalyzerService {
     } catch (error) {
       this.logger.error('AI 分析失败', error);
       const msg = error instanceof Error ? error.message : String(error);
-      throw new Error(`AI 分析失败: ${msg}`);
+      throw new InternalServerErrorException(`AI 分析失败: ${msg}`);
     }
   }
 
@@ -161,7 +161,7 @@ export class AIAnalyzerService {
 
       // 验证必需字段
       if (!result.hook || !result.selling_points || !result.creative_factors) {
-        throw new Error('AI 返回的数据格式不完整');
+        throw new InternalServerErrorException('AI 返回的数据格式不完整');
       }
 
       return result;

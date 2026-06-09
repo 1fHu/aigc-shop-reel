@@ -67,7 +67,7 @@ export class VolcanoApiService {
     private readonly minio: MinioStorageService,
   ) {
     this.apiKey = process.env.VOLCANO_ACCESS_KEY || this.config.get<string>('VOLCANO_ACCESS_KEY', '');
-    this.embedding_apiKey = process.env.VOLCANO_EMBEDDING_API_key || this.config.get<string>('VOLCANO_EMBEDDING_API_key', '');
+    this.embedding_apiKey = process.env.VOLCANO_EMBEDDING_API_KEY || this.config.get<string>('VOLCANO_EMBEDDING_API_KEY', '');
     this.doubaoEp = process.env.VOLCANO_DOUBAO_SEED_EP || this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
     this.seedanceEp = process.env.VOLCANO_SEEDANCE_EP || this.config.get<string>('VOLCANO_SEEDANCE_EP', '');
     this.seedanceR2v = (process.env.VOLCANO_SEEDANCE_R2V_ENABLED || this.config.get<string>('VOLCANO_SEEDANCE_R2V_ENABLED', '')) === 'true';
@@ -156,7 +156,10 @@ export class VolcanoApiService {
       const data = await res.json();
       const text = data?.choices?.[0]?.message?.content || '';
       return text.split('\n').filter((l: string) => l.trim());
-    } catch { return []; }
+    } catch (err) {
+      this.logger.warn(`generateShotScript failed: ${(err as Error).message}`);
+      return [];
+    }
   }
 
   /** 生成带货视频 — 调用 Seedance 1.5 Pro，支持参考图 + 首尾帧控制 */

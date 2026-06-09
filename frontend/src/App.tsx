@@ -1,4 +1,6 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { Spin } from 'antd';
 
 import Layout from './components/Layout';
 import RequireAuth from './components/RequireAuth';
@@ -7,16 +9,22 @@ import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import Dashboard from './pages/Dashboard';
-import Projects from './pages/Projects';
-import MaterialLibrary from './pages/MaterialLibrary';
-import ScriptStudio from './pages/ScriptStudio';
-import VideoCreation from './pages/VideoCreation';
-import Analytics from './pages/Analytics';
-import GeneBank from './pages/GeneBank';
-import ViralAnalyzer from './pages/ViralAnalyzer';
-import ViralAnalyzerDetail from './pages/ViralAnalyzer/detail';
-import Help from './pages/Help';
-import Account from './pages/Account';
+
+const Projects = lazy(() => import('./pages/Projects'));
+const MaterialLibrary = lazy(() => import('./pages/MaterialLibrary'));
+const ScriptStudio = lazy(() => import('./pages/ScriptStudio'));
+const VideoCreation = lazy(() => import('./pages/VideoCreation'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const GeneBank = lazy(() => import('./pages/GeneBank'));
+const ViralAnalyzer = lazy(() => import('./pages/ViralAnalyzer'));
+const ViralAnalyzerDetail = lazy(() => import('./pages/ViralAnalyzer/detail'));
+const Help = lazy(() => import('./pages/Help'));
+const Account = lazy(() => import('./pages/Account'));
+const Subscription = lazy(() => import('./pages/Subscription'));
+
+function Lazy({ children }: { children: React.ReactNode }) {
+  return <Suspense fallback={<Spin style={{ display: 'block', marginTop: 120 }} size="large" />}>{children}</Suspense>;
+}
 
 /**
  * 路由设计：
@@ -46,22 +54,23 @@ function App() {
         <Route element={<RequireAuth><Layout /></RequireAuth>}>
           {/* 全局页面 */}
           <Route path="/" element={<Dashboard />} />
-          <Route path="/projects" element={<Projects />} />
-          <Route path="/analytics" element={<Analytics />} />
-          <Route path="/help" element={<Help />} />
-          <Route path="/gene-bank" element={<GeneBank />} />
+          <Route path="/projects" element={<Lazy><Projects /></Lazy>} />
+          <Route path="/analytics" element={<Lazy><Analytics /></Lazy>} />
+          <Route path="/help" element={<Lazy><Help /></Lazy>} />
+          <Route path="/gene-bank" element={<Lazy><GeneBank /></Lazy>} />
           <Route path="/viral-library" element={<Navigate to="/gene-bank" replace />} />
-          <Route path="/viral-analyzer" element={<ViralAnalyzer />} />
-          <Route path="/viral-analyzer/:id" element={<ViralAnalyzerDetail />} />
+          <Route path="/viral-analyzer" element={<Lazy><ViralAnalyzer /></Lazy>} />
+          <Route path="/viral-analyzer/:id" element={<Lazy><ViralAnalyzerDetail /></Lazy>} />
 
           {/* 快捷入口（无需项目 ID） */}
-          <Route path="/account" element={<Account />} />
-          <Route path="/script-studio" element={<ScriptStudio />} />
+          <Route path="/account" element={<Lazy><Account /></Lazy>} />
+          <Route path="/subscription" element={<Lazy><Subscription /></Lazy>} />
+          <Route path="/script-studio" element={<Lazy><ScriptStudio /></Lazy>} />
 
           {/* 项目内子页：素材库 → 分镜编辑 → 视频创作 */}
-          <Route path="/projects/:id/materials"    element={<MaterialLibrary />} />
-          <Route path="/projects/:id/script"       element={<ScriptStudio />} />
-          <Route path="/projects/:id/video"        element={<VideoCreation />} />
+          <Route path="/projects/:id/materials"    element={<Lazy><MaterialLibrary /></Lazy>} />
+          <Route path="/projects/:id/script"       element={<Lazy><ScriptStudio /></Lazy>} />
+          <Route path="/projects/:id/video"        element={<Lazy><VideoCreation /></Lazy>} />
         </Route>
       </Routes>
     </BrowserRouter>

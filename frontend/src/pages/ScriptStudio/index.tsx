@@ -301,7 +301,7 @@ export default function ScriptStudio() {
     if (!scriptId) return;
     setRegenerating(true);
     try {
-      const token = localStorage.getItem('vidcraft_access_token');
+      const token = sessionStorage.getItem('vidcraft_access_token');
       const resp = await fetch(`/api/scripts/${scriptId}/regenerate-shot`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
@@ -331,7 +331,7 @@ export default function ScriptStudio() {
     if (!scriptId) return;
     setApplyingFactor(true);
     try {
-      const token = localStorage.getItem('vidcraft_access_token');
+      const token = sessionStorage.getItem('vidcraft_access_token');
       const resp = await fetch(`/api/scripts/${scriptId}/replace-factor`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },

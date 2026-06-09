@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Put, Query, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query, Res, UseGuards, NotFoundException } from '@nestjs/common';
 import { Response } from 'express';
 import { join } from 'path';
 import { existsSync } from 'fs';
@@ -13,8 +13,8 @@ import { GetProjectVideoDto } from './dto/get-project-video.dto';
 export class VideoController {
   constructor(private readonly videoService: VideoService) {}
 
-  @UseGuards(AuthGuard('jwt'))
   @Get()
+  @UseGuards(AuthGuard('jwt'))
   async getLatestByProject(@CurrentUser() user: AuthenticatedUser, @Query() query: GetProjectVideoDto) {
     return ok(await this.videoService.getLatestByProject(query.project_id, user.id));
   }
@@ -44,7 +44,7 @@ export class VideoController {
     const composited = join(dir, `${id}-shot-${index}-composited.mp4`);
     const raw = join(dir, `${id}-shot-${index}.mp4`);
     const filePath = existsSync(composited) ? composited : raw;
-    if (!existsSync(filePath)) return res.status(404).json({ code: 404, msg: '分镜视频不存在' });
+    if (!existsSync(filePath)) throw new NotFoundException('分镜视频不存在');
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Accept-Ranges', 'bytes');
     res.sendFile(filePath);
@@ -100,7 +100,7 @@ export class VideoController {
   @Get(':id/file')
   getFile(@Param('id') id: string, @Res() res: Response) {
     const filePath = join(process.cwd(), '..', 'uploads', 'videos', `${id}.mp4`);
-    if (!existsSync(filePath)) return res.status(404).json({ code: 404, msg: '视频文件不存在' });
+    if (!existsSync(filePath)) throw new NotFoundException('视频文件不存在');
     res.setHeader('Content-Type', 'video/mp4');
     res.setHeader('Accept-Ranges', 'bytes');
     res.sendFile(filePath);

@@ -16,6 +16,8 @@ import {
   SettingOutlined,
   LogoutOutlined,
   VideoCameraOutlined,
+  LeftOutlined,
+  RightOutlined,
 } from '@ant-design/icons';
 
 import { useAuthStore, selectUser, selectIsGuest } from '@/stores/authStore';
@@ -56,6 +58,7 @@ export default function AppLayout() {
 
   const [bannerDismissed, setBannerDismissed] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
   const showGuestBanner = isGuest && !bannerDismissed;
 
@@ -99,13 +102,25 @@ export default function AppLayout() {
   return (
     <div className={styles.shell}>
       {/* =========== Sidebar =========== */}
-      <aside className={styles.sider}>
+      <aside className={`${styles.sider} ${collapsed ? styles.siderCollapsed : ''}`}>
         <div className={styles.brand}>
-          <div className={styles.brandLogo}><ThunderboltFilled /></div>
-          <div>
-            <div className={styles.brandText}>VidCraft</div>
-            <div className={styles.brandTagline}>PRO WORKSTATION</div>
+          <div className={styles.brandLeft}>
+            <div className={styles.brandLogo}><ThunderboltFilled /></div>
+            {!collapsed && (
+              <div>
+                <div className={styles.brandText}>VidCraft</div>
+                <div className={styles.brandTagline}>PRO WORKSTATION</div>
+              </div>
+            )}
           </div>
+          <button
+            type="button"
+            className={styles.collapseBtn}
+            onClick={() => setCollapsed((v) => !v)}
+            title={collapsed ? '展开侧栏' : '收起侧栏'}
+          >
+            {collapsed ? <RightOutlined /> : <LeftOutlined />}
+          </button>
         </div>
 
         <nav className={styles.nav}>
@@ -115,9 +130,10 @@ export default function AppLayout() {
               type="button"
               onClick={() => navigate(item.key)}
               className={`${styles.navItem} ${location.pathname === item.key ? styles.navItemActive : ''}`}
+              title={collapsed ? item.label : undefined}
             >
               <span className={styles.navIcon}>{item.icon}</span>
-              {item.label}
+              {!collapsed && item.label}
             </button>
           ))}
 
@@ -127,19 +143,26 @@ export default function AppLayout() {
             type="button"
             className={`${styles.navItem} ${location.pathname === '/help' ? styles.navItemActive : ''}`}
             onClick={() => navigate('/help')}
+            title={collapsed ? '帮助中心' : undefined}
           >
             <span className={styles.navIcon}><QuestionCircleOutlined /></span>
-            帮助中心
+            {!collapsed && '帮助中心'}
           </button>
-          <button type="button" className={styles.navItem}>
+          <button
+            type="button"
+            className={`${styles.navItem} ${location.pathname === '/account' ? styles.navItemActive : ''}`}
+            onClick={() => navigate('/account')}
+            title={collapsed ? '账户' : undefined}
+          >
             <span className={styles.navIcon}><UserOutlined /></span>
-            账户
+            {!collapsed && '账户'}
           </button>
         </nav>
 
         <button type="button" className={styles.createBtn} onClick={() => setCreateOpen(true)}>
-          <PlusOutlined /> Create New Video
+          <PlusOutlined /> {!collapsed && 'Create New Video'}
         </button>
+
       </aside>
 
       {/* =========== Main column =========== */}
@@ -167,7 +190,7 @@ export default function AppLayout() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className={styles.upgrade}>Upgrade Pro</button>
+            <button className={styles.upgrade} onClick={() => navigate('/subscription')}>Upgrade Pro</button>
             <button className={styles.iconBtn} aria-label="通知">
               <BellOutlined />
               <span className={styles.iconBtnDot} />

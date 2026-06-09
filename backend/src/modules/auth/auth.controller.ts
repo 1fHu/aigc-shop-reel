@@ -1,49 +1,66 @@
 import { Body, Controller, Post, Get, Put, Req, UseGuards, UseInterceptors, UploadedFile, HttpCode } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ThrottlerGuard } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { ok } from '../../common/api-response';
+import {
+  RegisterDto,
+  VerifyEmailDto,
+  LoginDto,
+  RefreshDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  ChangePasswordDto,
+  UpdateProfileDto,
+} from './dto/auth.dto';
 
 @Controller('api/auth')
+@UseGuards(ThrottlerGuard)
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('guest-login')
   guestLogin() {
     return ok(this.authService.guestLogin());
   }
 
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('register')
-  async register(@Body() body: { email: string; password: string; confirmPassword: string; nickname?: string }) {
+  async register(@Body() body: RegisterDto) {
     const result = await this.authService.register(body.email, body.password, body.confirmPassword, body.nickname);
     return ok(result);
   }
 
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('verify-email')
-  async verifyEmail(@Body() body: { email: string; code: string }) {
+  async verifyEmail(@Body() body: VerifyEmailDto) {
     return ok(await this.authService.verifyEmail(body.email, body.code));
   }
 
   @HttpCode(200)
+  @Throttle({ default: { limit: 10, ttl: 60000 } })
   @Post('login')
-  async login(@Body() body: { username: string; password: string }) {
+  async login(@Body() body: LoginDto) {
     const result = await this.authService.login(body.username, body.password);
     return ok(result);
   }
 
   @HttpCode(200)
   @Post('refresh')
-  refresh(@Body() body: { refreshToken: string }) {
+  refresh(@Body() body: RefreshDto) {
     return ok(this.authService.refresh(body.refreshToken));
   }
 
   @HttpCode(200)
   @UseGuards(AuthGuard('jwt'))
   @Post('logout')
-  logout(@Body() body: { refreshToken: string }) {
+  logout(@Body() body: RefreshDto) {
     return ok(this.authService.logout(body.refreshToken));
   }
 
@@ -55,14 +72,14 @@ export class AuthController {
 
   @UseGuards(AuthGuard('jwt'))
   @Put('profile')
-  updateProfile(@Req() request: { user: { id: string } }, @Body() body: { nickname?: string; avatar?: string; preferences?: Record<string, unknown> }) {
+  updateProfile(@Req() request: { user: { id: string } }, @Body() body: UpdateProfileDto) {
     return ok(this.authService.updateProfile(request.user.id, body.nickname, body.avatar, body.preferences));
   }
 
   @UseGuards(AuthGuard('jwt'))
   @HttpCode(200)
   @Put('password')
-  changePassword(@Req() request: { user: { id: string } }, @Body() body: { currentPassword: string; newPassword: string; confirmNewPassword: string }) {
+  changePassword(@Req() request: { user: { id: string } }, @Body() body: ChangePasswordDto) {
     return ok(this.authService.changePassword(request.user.id, body.currentPassword, body.newPassword, body.confirmNewPassword));
   }
 
@@ -75,14 +92,16 @@ export class AuthController {
   }
 
   @HttpCode(200)
+  @Throttle({ default: { limit: 3, ttl: 60000 } })
   @Post('forgot-password')
-  async forgotPassword(@Body() body: { email: string }) {
+  async forgotPassword(@Body() body: ForgotPasswordDto) {
     return ok(await this.authService.forgotPassword(body.email));
   }
 
   @HttpCode(200)
+  @Throttle({ default: { limit: 5, ttl: 60000 } })
   @Post('reset-password')
-  async resetPassword(@Body() body: { email: string; code: string; newPassword: string }) {
+  async resetPassword(@Body() body: ResetPasswordDto) {
     return ok(await this.authService.resetPassword(body.email, body.code, body.newPassword));
   }
 }

@@ -1,24 +1,17 @@
 import { create } from 'zustand';
-import { devtools, persist } from 'zustand/middleware';
+import { devtools } from 'zustand/middleware';
 
 import { authService } from '@/services/authService';
 import type { LoginPayload, RegisterPayload, User } from '@/types';
 
 /**
- * Auth Store —— Zustand store 的标准样板
- *
- * 设计约定（所有 store 都应遵循）：
- * 1. State 和 Actions 写在同一个 interface 里
- * 2. Action 命名用动词：login / logout / loadProfile / reset
- * 3. 异步 action 调 service 层，把结果写回 state
- * 4. 用 devtools 中间件方便 Redux DevTools 调试
- * 5. 需要持久化的 store（如 token）用 persist
- * 6. Hook 命名：use<Name>Store
- * 7. 业务组件用 selector 订阅：useAuthStore(s => s.user)，避免无关 re-render
+ * Auth Store
  *
  * Token 存储约定：
- * - accessToken: localStorage 'vidcraft_access_token'（axios 拦截器读取）
- * - refreshToken: localStorage 'vidcraft_refresh_token'（refresh 流程使用）
+ * - accessToken: sessionStorage 'vidcraft_access_token'（axios 拦截器读取，关闭标签页即清除）
+ * - refreshToken: sessionStorage 'vidcraft_refresh_token'
+ * - 不使用 localStorage 存储敏感 token，降低 XSS 风险
+ * - 不持久化 user state，应用启动时通过 loadProfile() 从服务端重新获取
  */
 
 const ACCESS_TOKEN_KEY = 'vidcraft_access_token';
@@ -55,20 +48,19 @@ const initialState = {
  * 把鉴权响应（accessToken + refreshToken + user）持久化到 localStorage + store
  */
 function persistTokens(accessToken: string, refreshToken: string) {
-  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
-  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+  sessionStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  sessionStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
 }
 
 function clearTokens() {
-  localStorage.removeItem(ACCESS_TOKEN_KEY);
-  localStorage.removeItem(REFRESH_TOKEN_KEY);
+  sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+  sessionStorage.removeItem(REFRESH_TOKEN_KEY);
 }
 
 export const useAuthStore = create<AuthState>()(
   devtools(
-    persist(
-      (set, get) => ({
-        ...initialState,
+    (set, get) => ({
+      ...initialState,
 
         login: async (payload) => {
           set({ loading: true }, false, 'auth/login/start');
@@ -124,7 +116,7 @@ export const useAuthStore = create<AuthState>()(
         },
 
         refreshAccess: async () => {
-          const refreshToken = get().refreshToken || localStorage.getItem(REFRESH_TOKEN_KEY);
+          const refreshToken = get().refreshToken || sessionStorage.getItem(REFRESH_TOKEN_KEY);
           if (!refreshToken) throw new Error('No refresh token available');
           const tokens = await authService.refresh(refreshToken);
           persistTokens(tokens.accessToken, tokens.refreshToken);
@@ -140,8 +132,7 @@ export const useAuthStore = create<AuthState>()(
         },
 
         logout: async () => {
-          // 后端要求 body 带 refreshToken 才能拉黑；从 store 取或回落到 localStorage
-          const refreshToken = get().refreshToken || localStorage.getItem(REFRESH_TOKEN_KEY) || '';
+          const refreshToken = get().refreshToken || sessionStorage.getItem(REFRESH_TOKEN_KEY) || '';
           try {
             if (refreshToken) {
               await authService.logout(refreshToken);
@@ -163,20 +154,9 @@ export const useAuthStore = create<AuthState>()(
           set({ ...initialState }, false, 'auth/reset');
         },
       }),
-      {
-        name: 'vidcraft-auth',
-        // 只持久化必要字段
-        partialize: (state) => ({
-          accessToken: state.accessToken,
-          refreshToken: state.refreshToken,
-          user: state.user,
-          isAuthenticated: state.isAuthenticated,
-        }),
-      },
+      { name: 'AuthStore' },
     ),
-    { name: 'AuthStore' },
-  ),
-);
+  );
 
 // -------- selectors（推荐组件中用这些，按需订阅） --------
 export const selectUser = (s: AuthState) => s.user;

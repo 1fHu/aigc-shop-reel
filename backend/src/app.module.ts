@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ThrottlerModule } from '@nestjs/throttler';
 import path from 'path';
 import configuration from './config/configuration';
 import { DatabaseModule } from './database/database.module';
@@ -30,6 +31,10 @@ import { ViralAnalyzerModule } from './modules/viral-analyzer/viral-analyzer.mod
       envFilePath: [path.resolve(process.cwd(), '.env'), path.resolve(process.cwd(), '../.env')],
       load: [configuration],
     }),
+    ThrottlerModule.forRoot([{
+      ttl: 60000,
+      limit: 30,
+    }]),
     MockStoreModule,
     DatabaseModule,
     RedisModule,

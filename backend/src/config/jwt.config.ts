@@ -7,7 +7,7 @@ export class JwtConfigService {
   constructor(private configService: ConfigService) {}
   createJwtOptions(): JwtModuleOptions {
     return {
-      secret: this.configService.get<string>('jwt.secret', 'dev-secret'),
+      secret: this.configService.get<string>('jwt.secret') || '',
       signOptions: { expiresIn: this.configService.get<string>('jwt.expiresIn', '7d') },
     };
   }

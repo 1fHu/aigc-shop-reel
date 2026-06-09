@@ -20,13 +20,32 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  transition: width 0.2s ease;
+  overflow: hidden;
+}
+
+.siderCollapsed {
+  width: 64px;
 }
 
 .brand {
   padding: 20px 20px 24px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  transition: padding 0.2s ease;
+}
+
+.brandLeft {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.siderCollapsed .brand {
+  padding: 20px 12px 24px;
+  justify-content: center;
 }
 
 .brandLogo {
@@ -81,6 +100,8 @@
   margin-bottom: 2px;
   transition: background 0.15s, color 0.15s;
   text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
 }
 
 .navItem:hover {
@@ -124,7 +145,13 @@
   justify-content: center;
   gap: 8px;
   box-shadow: 0 0 28px rgba(70, 72, 212, 0.35);
-  transition: opacity 0.15s, transform 0.15s;
+  transition: opacity 0.15s, transform 0.15s, margin 0.2s ease, border-radius 0.2s ease;
+  white-space: nowrap;
+}
+
+.siderCollapsed .createBtn {
+  margin: 12px 8px;
+  border-radius: 10px;
 }
 
 .createBtn:hover {
@@ -308,6 +335,33 @@
   justify-content: center;
   cursor: pointer;
   font-family: 'Geist', system-ui, sans-serif;
+}
+
+.collapseBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: transparent;
+  border: 1px solid #E5E7EB;
+  color: #6B7280;
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+}
+
+.siderCollapsed .collapseBtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.collapseBtn:hover {
+  background: #F8FAFC;
+  color: #111827;
 }
 
 /* ============ Content ============ */

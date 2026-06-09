@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AnalyzedVideo } from '../../database/entities/analyzed-video.entity';
@@ -63,7 +63,7 @@ export class ViralAnalyzerService {
 
       const video = await this.analyzedVideoRepo.findOne({ where: { id: videoId } });
       if (!video) {
-        throw new Error('视频记录不存在');
+        throw new NotFoundException('视频记录不存在');
       }
 
       // 1. 提取视频关键帧
@@ -233,11 +233,11 @@ export class ViralAnalyzerService {
 
     // 检查是否已完成分析
     if (video.status !== 'completed') {
-      throw new Error('视频尚未完成分析');
+      throw new BadRequestException('视频尚未完成分析');
     }
 
     if (!video.analysis || !video.creativeFactors) {
-      throw new Error('视频分析结果不完整');
+      throw new BadRequestException('视频分析结果不完整');
     }
 
     // 复制视频文件到 GeneBank 目录

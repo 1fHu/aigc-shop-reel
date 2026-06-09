@@ -179,7 +179,7 @@ CREATE TABLE diagnosis_reports (
 -- 13. analyzed_videos（爆款视频拆解：用户上传视频 → AI 拆解创作手法）
 CREATE TABLE analyzed_videos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id UUID NOT NULL,
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title VARCHAR(255) NOT NULL,
     original_filename VARCHAR(255) NOT NULL,
     video_path VARCHAR(500) NOT NULL,
@@ -221,3 +221,15 @@ CREATE INDEX idx_viral_library_status ON viral_library(status);
 CREATE INDEX idx_analyzed_videos_user_id ON analyzed_videos(user_id);
 CREATE INDEX idx_analyzed_videos_status ON analyzed_videos(status);
 CREATE INDEX idx_analyzed_videos_created_at ON analyzed_videos(created_at DESC);
+
+-- Additional indexes for filtering / status-based queries
+CREATE INDEX idx_materials_status ON materials(status);
+CREATE INDEX idx_materials_file_type ON materials(file_type);
+CREATE INDEX idx_videos_status ON videos(status);
+CREATE INDEX idx_video_tasks_status ON video_tasks(status);
+CREATE INDEX idx_video_tasks_seedance ON video_tasks(seedance_task_id);
+CREATE INDEX idx_scripts_status ON scripts(status);
+CREATE INDEX idx_scripts_strategy_type ON scripts(strategy_type);
+CREATE INDEX idx_projects_status ON projects(status);
+CREATE INDEX idx_projects_is_guest ON projects(is_guest);
+CREATE INDEX idx_users_email ON users(email);

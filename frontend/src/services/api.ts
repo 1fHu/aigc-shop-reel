@@ -30,7 +30,7 @@ const api = axios.create({
  */
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem('vidcraft_access_token');
+    const token = sessionStorage.getItem('vidcraft_access_token');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -75,10 +75,8 @@ api.interceptors.response.use(
       const url = error.config?.url ?? '';
       const isAuthRequest = /\/auth\/(login|register|guest-login|refresh)/.test(url);
 
-      localStorage.removeItem('vidcraft_access_token');
-      localStorage.removeItem('vidcraft_refresh_token');
-      // 同步清掉持久化的 auth store，否则整页刷新后 RequireAuth 仍按 isAuthenticated=true 放行
-      localStorage.removeItem('vidcraft-auth');
+      sessionStorage.removeItem('vidcraft_access_token');
+      sessionStorage.removeItem('vidcraft_refresh_token');
 
       if (!isAuthRequest) {
         // 已在登录相关页面时不再 toast / 跳转，避免循环
