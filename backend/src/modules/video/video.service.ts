@@ -139,6 +139,10 @@ function ttsWordsToSRT(tts: TTSResult): string {
 type ScriptShot = {
   index: number; description: string; camera_motion: string; duration: number;
   voiceover: string; subtitle: string; reference_image_url: string | null;
+  // 剧本阶段向量召回写入的素材绑定（可选，老剧本无此字段）
+  material_id?: string | null;
+  material_use_mode?: 'none' | 'direct' | 'adapted';
+  adapted_image_url?: string | null;
 };
 
 @Injectable()
@@ -647,16 +651,24 @@ export class VideoService {
 
         const tts = ttsResults.get(shot.index) || null;
         const targetDuration = tts ? getTTSDuration(tts) : (shot.duration || 3);
-        const extraImages = prevKeyframe ? [prevKeyframe] : [];
-        const baseRefs = prevKeyframe ? [] : refImages;
-        // [DEBUG] 逐镜起点：第 0 镜用素材库参考图(baseRefs)，后续镜用上一镜关键帧(extraImages)。
-        // 注意：当前 r2v=false 时这些图在 generateVideo 内会被开关挡掉，实际为纯文生视频。
+
+        // 剧本阶段向量召回绑定的素材 → 本幕首帧(first_frame / i2v，不受 r2v 开关限制)。
+        // 有绑定素材的幕优先用素材首帧；没绑定的幕回退到"上一镜关键帧作参考"的旧逻辑。
+        const boundRaw = await this.resolveBoundFirstFrame(shot);
+        const boundFirst = boundRaw ? (await this.prepareReferenceImages([boundRaw]))[0] : undefined;
+        const frameControl = boundFirst ? { startImage: boundFirst } : undefined;
+
+        const extraImages = (!boundFirst && prevKeyframe) ? [prevKeyframe] : [];
+        const baseRefs = (!boundFirst && !prevKeyframe) ? refImages : [];
+        // [DEBUG] 逐镜起点：有绑定素材→素材首帧；否则第 0 镜用素材库参考图(baseRefs)、后续镜用上一镜关键帧(extraImages)。
+        // 注意：baseRefs/extraImages 走 reference_image，当前 r2v=false 时会被开关挡掉；boundFirst 走 first_frame，不受开关影响。
         this.logger.log(
           `[gen] video=${videoId} shot#${shot.index} (${i + 1}/${orderedStoryboard.length}) ` +
+          `boundFirst=${boundFirst ? `yes(${shot.material_use_mode})` : 'no'} ` +
           `baseRefs=${baseRefs.length} prevKeyframe=${prevKeyframe ? 'yes' : 'no'} ` +
           `tts=${tts ? `${getTTSDuration(tts).toFixed(1)}s` : 'none'} targetDur=${targetDuration.toFixed(1)}s`,
         );
-        const path = await this.generateShot(videoId, shot, productName, productInfo, baseRefs, materialContext, targetDuration, extraImages, prevShot || undefined, opts?.custom_requirement);
+        const path = await this.generateShot(videoId, shot, productName, productInfo, baseRefs, materialContext, targetDuration, extraImages, prevShot || undefined, opts?.custom_requirement, frameControl);
 
         if (!path) {
           this.logger.warn(`[gen] video=${videoId} shot#${shot.index} produced NO path — skipping, prevKeyframe reset`);
@@ -702,6 +714,21 @@ export class VideoService {
    *    → 从 MinIO 取回字节内联成 base64 data URI，绕开公网可达性要求。
    * 下载失败的图片直接跳过（不阻断生成）。
    */
+  /**
+   * 解析某一幕在剧本阶段绑定的素材，返回该幕首帧图 URL（未走 prepareReferenceImages 内联前）。
+   * - adapted 且有预生成图(模式B，第二批) → 用适配图；
+   * - direct / adapted 降级 → 用素材缩略图；
+   * - none / 无绑定 / 老剧本 → null（回退到旧的关键帧衔接逻辑）。
+   */
+  private async resolveBoundFirstFrame(shot: ScriptShot): Promise<string | null> {
+    const mode = shot.material_use_mode;
+    if (!mode || mode === 'none') return null;
+    if (mode === 'adapted' && shot.adapted_image_url) return shot.adapted_image_url;
+    if (!shot.material_id) return null;
+    const mat = await this.materialRepo.findOne({ where: { id: shot.material_id } });
+    return mat?.thumbnailUrl || null;
+  }
+
   private async prepareReferenceImages(imageUrls: string[]): Promise<string[]> {
     const out: string[] = [];
     for (const url of imageUrls) {

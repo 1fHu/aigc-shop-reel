@@ -17,6 +17,14 @@ export class ScriptController {
     return ok(await this.scriptService.getLatestByProject(query.project_id, user.id));
   }
 
+  // 剧本生成就绪检查：素材全部解析完成（无 parsing）才允许生成。前端轮询置灰生成按钮。
+  // 注意：静态路由须先于 @Get(':id') 声明，避免被参数路由吞掉。
+  @UseGuards(AuthGuard('jwt'))
+  @Get('readiness')
+  async readiness(@CurrentUser() user: AuthenticatedUser, @Query() query: GetProjectScriptDto) {
+    return ok(await this.scriptService.getReadiness(query.project_id, user.id));
+  }
+
   @UseGuards(AuthGuard('jwt'))
   @Post('generate')
   async generate(
@@ -40,16 +48,23 @@ export class ScriptController {
     response.setHeader('Cache-Control', 'no-cache');
     response.setHeader('Connection', 'keep-alive');
     for (const shot of script.storyboard as Array<Record<string, unknown>>) {
+      // 召回到素材时缩略图用素材图/适配图（预览本幕首帧），否则占位图
+      const thumb = (shot.adapted_image_url as string) || (shot.reference_image_url as string)
+        || `https://placehold.co/400x240/8B5CF6/fff?text=Scene+${(shot.index as number) + 1}`;
       const scene = {
         id: `scene-${shot.index as number}`,
         index: shot.index,
         duration: (shot.duration as number) || 3,
-        thumb_url: `https://placehold.co/400x240/8B5CF6/fff?text=Scene+${(shot.index as number) + 1}`,
+        thumb_url: thumb,
         description: shot.description,
         camera_motion: shot.camera_motion || 'static',
         bgm: (shot.bgm as string) || 'Modern Beat',
         voiceover: shot.voiceover || '',
         subtitle: shot.subtitle || '',
+        // 素材绑定（前端只读展示，C=不允许手动改）
+        material_id: shot.material_id ?? null,
+        material_use_mode: shot.material_use_mode ?? 'none',
+        material_score: shot.material_score ?? null,
       };
       response.write(`data: ${JSON.stringify({ type: 'scene', scene })}\n\n`);
     }

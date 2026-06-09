@@ -203,6 +203,28 @@ export class MaterialService {
     }));
   }
 
+  /**
+   * POST /api/materials/reembed 重嵌入：把（指定项目或当前用户全部）ready 素材重新入队解析。
+   * 用途：切换 embedding 模型（如 doubao-embedding-large→vision）后，刷新存量素材的向量与标签，
+   * 否则旧向量与新查询不在同一空间，向量召回会失准。
+   * 重新置 status='parsing'（闸门/前端可感知进度），processor 跑完回 ready。
+   * 归属安全：innerJoin 项目并按 userId 过滤，绝不触碰他人素材。
+   */
+  async reembed(userId: string, projectId?: string) {
+    const qb = this.materialRepo
+      .createQueryBuilder('m')
+      .innerJoin('m.project', 'p')
+      .where('p.userId = :userId', { userId })
+      .andWhere("m.status = 'ready'");
+    if (projectId) qb.andWhere('m.projectId = :projectId', { projectId });
+    const mats = await qb.getMany();
+    for (const m of mats) {
+      await this.materialRepo.update(m.id, { status: 'parsing' });
+      await this.analysisQueue.add({ materialId: m.id });
+    }
+    return { reembedded: mats.length };
+  }
+
   /** GET /api/materials/search 多颗粒度检索（当前实现 keyword + tag 过滤；vector/slice 待补） */
   async search(userId: string, projectId: string, q = '', tags = '', level = 'material') {
     const project = await this.projectRepo.findOne({ where: { id: projectId } });
