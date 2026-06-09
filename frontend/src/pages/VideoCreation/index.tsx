@@ -101,7 +101,7 @@ export default function VideoCreation() {
       voice_id: localStorage.getItem('vidcraft_voice_id') || 'zh_female_vv_uranus_bigtts',
       subtitle_enabled: localStorage.getItem('vidcraft_subtitle') !== 'false',
       subtitle_style: {
-        font_size: Number(localStorage.getItem('vidcraft_sub_fontsize')) || 40,
+        font_size: Number(localStorage.getItem('vidcraft_sub_fontsize')) || 15,
         outline: Number(localStorage.getItem('vidcraft_sub_outline')) || 2.5,
         color: localStorage.getItem('vidcraft_sub_color') || '#FFFFFF',
         font_family: localStorage.getItem('vidcraft_sub_font') || 'Microsoft YaHei',
@@ -197,7 +197,7 @@ export default function VideoCreation() {
     <div className={styles.page}>
       <div className={styles.header}>
         <div className={styles.hl}>
-          <button className={styles.back} onClick={() => leave(pid ? `/projects/${pid}/script` : '/script-studio')}><ArrowLeftOutlined /></button>
+          <button className={styles.back} onClick={() => leave(pid ? `/projects/${pid}/script` : '/script-studio')}><ArrowLeftOutlined /> 返回分镜编辑</button>
           <h1 className={styles.tt}>项目详情：{task?.title || '智能视频生成'}</h1>
         </div>
         {done ? (

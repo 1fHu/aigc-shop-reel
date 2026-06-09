@@ -4,6 +4,7 @@ import type {
   GenerateVideoPayload,
   UpdateVideoSettingsPayload,
   VideoShot,
+  VideoShotClip,
   VideoTask,
   VideoTaskStatus,
 } from '@/types';
@@ -21,6 +22,7 @@ type RawVideoTask = Partial<VideoTask> & {
   completed_shots?: number;
   total_shots?: number;
   shots?: RawVideoShot[];
+  settings?: VideoTask['settings'];
 };
 
 const STATUS_MAP: Record<string, VideoTaskStatus> = {
@@ -93,6 +95,7 @@ function normalizeTask(raw: RawVideoTask): VideoTask {
     cover_url: raw.cover_url,
     download_url: (raw as any).download_url || (raw as any).video_url,
     error_message: (raw as any).error_message || (raw as any).error_msg,
+    settings: raw.settings ?? null,
     created_at: raw.created_at || new Date().toISOString(),
     completed_at: raw.completed_at,
   };
@@ -131,14 +134,39 @@ export const videoService = {
       });
   },
 
+  /**
+   * 获取各分镜的生成结果（含每镜片段 video_url）。
+   * 分镜编辑页用它把已生成的片段播放器回显到中央预览位。
+   */
+  getShots(videoId: string): Promise<VideoShotClip[]> {
+    return api.get(`/videos/${videoId}/shots`).then((data) => (data as unknown as VideoShotClip[]) || []);
+  },
+
   /** 单分镜重新生成 */
   regenerateShot(videoId: string, shotIndex: number): Promise<VideoShot> {
     return api.post(`/videos/${videoId}/shots/${shotIndex}/regenerate`, {});
   },
 
-  /** 批量重新生成选中分镜，保留未选中，最终合成。keepFrames=true 时用各片段原首尾帧约束新片 */
-  regenerateShots(videoId: string, shotIndices: number[], keepFrames = false): Promise<{ id: string; status: string; video_url?: string }> {
-    return api.post(`/videos/${videoId}/regenerate-shots`, { shot_indices: shotIndices, keep_frames: keepFrames });
+  /**
+   * 批量重新生成选中分镜，保留未选中，最终合成。keepFrames=true 时用各片段原首尾帧约束新片。
+   * settings：传当前面板的字幕/配音设置，让重生分镜按最新字号等设置烧字幕（否则后端沿用旧设置）。
+   */
+  regenerateShots(
+    videoId: string,
+    shotIndices: number[],
+    keepFrames = false,
+    settings?: {
+      voice_id?: string;
+      subtitle_enabled?: boolean;
+      subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string };
+      custom_requirement?: string;
+    },
+  ): Promise<{ id: string; status: string; video_url?: string }> {
+    return api.post(`/videos/${videoId}/regenerate-shots`, {
+      shot_indices: shotIndices,
+      keep_frames: keepFrames,
+      ...settings,
+    });
   },
 
   /** 用已有分镜文件重新合成最终视频 */

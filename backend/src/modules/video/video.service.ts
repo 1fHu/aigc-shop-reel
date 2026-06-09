@@ -170,6 +170,8 @@ export class VideoService {
     return {
       id: video.id, project_id: video.projectId, script_id: video.scriptId,
       video_url: video.videoUrl, status: video.status, trace_id: video.traceId,
+      // 本次视频所用字幕/配音设置，前端回填面板用
+      settings: video.settings || null,
       created_at: video.createdAt.toISOString(), updated_at: video.updatedAt.toISOString(),
     };
   }
@@ -209,7 +211,14 @@ export class VideoService {
       projectId, scriptId,
       status: 'processing',
       traceId: `vid-${Date.now()}`,
-      settings: { tts: { voice: opts?.voice_id || 'zh_female_qingxin' }, subtitle_style: opts?.subtitle_style || {} },
+      // 持久化本次生成所用的全部字幕/配音设置，供「返回分镜编辑页」按项目回填面板
+      settings: {
+        tts: { voice: opts?.voice_id || 'zh_female_qingxin' },
+        voice_id: opts?.voice_id || null,
+        subtitle_enabled: opts?.subtitle_enabled !== false,
+        subtitle_style: opts?.subtitle_style || {},
+        custom_requirement: opts?.custom_requirement || '',
+      },
     });
     // 临时存储 taskCount 供 status 查询
     (video as any)._taskCount = taskCount;
@@ -292,7 +301,9 @@ export class VideoService {
       quality: 'HD',
       ratio: '9:16',
       video_url: v.videoUrl,
-      title: (script?.content as string)?.slice(0, 50) || 'AI 正在生成视频',
+      // title 仅作「视频/项目名」用途，不要塞状态文案——否则成片完成后标题仍显示「正在生成」。
+      // 无剧本内容时留空，由前端按当前状态回显合适文案（生成中/已完成）。
+      title: (script?.content as string)?.slice(0, 50) || undefined,
       shots,
       created_at: v.createdAt.toISOString(),
     };
@@ -406,11 +417,29 @@ export class VideoService {
   }
 
   /** POST /api/videos/:id/regenerate-shots — 后台异步重新生成选中分镜，保留未选中的，最终合成 */
-  async regenerateShots(id: string, shotIndices: number[], keepFrames = false) {
+  async regenerateShots(
+    id: string,
+    shotIndices: number[],
+    keepFrames = false,
+    settingsOverride?: { voice_id?: string; subtitle_enabled?: boolean; subtitle_style?: { font_size?: number; outline?: number; color?: string; font_family?: string }; custom_requirement?: string },
+  ) {
     const video = await this.videoRepo.findOne({ where: { id } });
     if (!video) throw new NotFoundException('视频不存在');
     if (video.status !== 'completed' && video.status !== 'failed') {
       throw new BadRequestException('仅已完成或失败的任务可重新生成');
+    }
+
+    // 用前端当前选择覆盖该视频保存的字幕/配音设置，让重生分镜按最新设置烧字幕/配音
+    // （否则 processRegenerateShots 仍读旧的 video.settings.subtitle_style，前端改了字号也不生效）
+    if (settingsOverride) {
+      const cur = (video.settings || {}) as Record<string, unknown>;
+      const merged: Record<string, unknown> = { ...cur };
+      if (settingsOverride.voice_id !== undefined) { merged.voice_id = settingsOverride.voice_id; merged.tts = { voice: settingsOverride.voice_id }; }
+      if (settingsOverride.subtitle_enabled !== undefined) merged.subtitle_enabled = settingsOverride.subtitle_enabled;
+      if (settingsOverride.subtitle_style !== undefined) merged.subtitle_style = settingsOverride.subtitle_style;
+      if (settingsOverride.custom_requirement !== undefined) merged.custom_requirement = settingsOverride.custom_requirement;
+      video.settings = merged; // 同步内存对象，processRegenerateShots 用的是这个引用
+      await this.videoRepo.update(id, { settings: merged } as any);
     }
 
     const script = video.scriptId ? await this.scriptRepo.findOne({ where: { id: video.scriptId } }) : null;
@@ -798,7 +827,7 @@ export class VideoService {
       }
       const tag = attempt > 0 ? `[retry${attempt}]` : '';
       this.logger.log(`Video ${videoId} shot#${index}:${tag} submitting to Seedance (duration=${(targetDuration || shot.duration).toFixed(1)}s, refs=${refs.length}, startFrame=${!!frameControl?.startImage}, endFrame=${!!frameControl?.endImage})...`);
-      const result = await this.volcano.generateVideo(prompt, refs, hasFrame ? frameControl : undefined);
+      const result = await this.volcano.generateVideo(prompt, refs, hasFrame ? frameControl : undefined, targetDuration);
       if (!result?.taskId) {
         lastError = result?.error || 'Seedance 未返回任务';
         if (attempt < MAX_SHOT_RETRIES) continue;
@@ -1045,7 +1074,7 @@ export class VideoService {
           const srtFilterPath = basename(srtPath);
           // 使用文件名而非绝对路径：Windows 绝对路径中的盘符 : 会被 ffmpeg filter parser
           // 误当作参数分隔符，即使 \: 转义也不生效。设 spawn cwd 为 VIDEO_DIR 后用相对路径即可。
-          const fontSize = subtitleStyle?.font_size || 40;
+          const fontSize = subtitleStyle?.font_size || 15;
           const outline = subtitleStyle?.outline ?? 2.5;
           const color = subtitleStyle?.color || '#FFFFFF';
           const fontFamily = subtitleStyle?.font_family

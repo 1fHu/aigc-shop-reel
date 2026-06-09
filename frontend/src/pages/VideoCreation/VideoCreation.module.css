@@ -2,8 +2,8 @@
 
 .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; gap: 16px; flex-wrap: wrap; }
 .hl { display: inline-flex; align-items: center; gap: 12px; }
-.back { width: 32px; height: 32px; border-radius: 8px; border: none; background: transparent; color: #6B7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; }
-.back:hover { background: #F8FAFC; color: #111827; }
+.back { height: 36px; padding: 0 14px; border-radius: 8px; border: 1px solid #E5E7EB; background: #fff; color: #6B7280; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; font-weight: 500; }
+.back:hover { background: #F8FAFC; color: #111827; border-color: #D1D5DB; }
 .tt { font-family: 'Geist', system-ui, sans-serif; font-weight: 600; font-size: 20px; color: #111827; margin: 0; }
 .tid { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #9CA3AF; letter-spacing: 0.04em; }
 .ha { display: inline-flex; align-items: center; gap: 12px; }
