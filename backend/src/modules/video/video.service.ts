@@ -825,7 +825,7 @@ export class VideoService {
       }
       const tag = attempt > 0 ? `[retry${attempt}]` : '';
       this.logger.log(`Video ${videoId} shot#${index}:${tag} submitting to Seedance (duration=${(targetDuration || shot.duration).toFixed(1)}s, refs=${refs.length}, startFrame=${!!frameControl?.startImage}, endFrame=${!!frameControl?.endImage})...`);
-      const result = await this.volcano.generateVideo(prompt, refs, hasFrame ? frameControl : undefined);
+      const result = await this.volcano.generateVideo(prompt, refs, hasFrame ? frameControl : undefined, targetDuration);
       if (!result?.taskId) {
         lastError = result?.error || 'Seedance 未返回任务';
         if (attempt < MAX_SHOT_RETRIES) continue;

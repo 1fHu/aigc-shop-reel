@@ -48,6 +48,8 @@ export class VolcanoApiService {
   private readonly seedanceEp: string;
   /** 是否允许向 Seedance 传参考图（r2v）。仅 2.0 等支持 r2v 的端点可开；默认关（1.5 不传参考图） */
   private readonly seedanceR2v: boolean;
+  /** 输出视频画幅比例，作为 --ratio 文本命令追加到 prompt。TikTok 竖屏默认 9:16 */
+  private readonly seedanceRatio: string;
   private readonly embeddingEp: string;
   /** embedding 输出维度，必须与 DB materials.embedding 列 vector(1024) 一致 */
   private readonly embeddingDim: number;
@@ -67,6 +69,7 @@ export class VolcanoApiService {
     this.doubaoEp = process.env.VOLCANO_DOUBAO_SEED_EP || this.config.get<string>('VOLCANO_DOUBAO_SEED_EP', '');
     this.seedanceEp = process.env.VOLCANO_SEEDANCE_EP || this.config.get<string>('VOLCANO_SEEDANCE_EP', '');
     this.seedanceR2v = (process.env.VOLCANO_SEEDANCE_R2V_ENABLED || this.config.get<string>('VOLCANO_SEEDANCE_R2V_ENABLED', '')) === 'true';
+    this.seedanceRatio = '9:16';
     this.embeddingEp = process.env.VOLCANO_EMBEDDING_EP || this.config.get<string>('VOLCANO_EMBEDDING_EP', '');
     this.embeddingDim = parseInt(process.env.VOLCANO_EMBEDDING_DIM || this.config.get<string>('VOLCANO_EMBEDDING_DIM', '1024'), 10) || 1024;
     this.callbackBaseUrl = process.env.SEEDANCE_CALLBACK_BASE_URL || this.config.get<string>('seedance.callbackBaseUrl', '');
@@ -75,7 +78,7 @@ export class VolcanoApiService {
     this.ttsApiKey = process.env.VOLCANO_TTS_API_KEY || this.config.get<string>('VOLCANO_TTS_API_KEY', '');
     this.ttsResourceId = process.env.VOLCANO_TTS_RESOURCE_ID || this.config.get<string>('VOLCANO_TTS_RESOURCE_ID', 'seed-tts-2.0');
     this.ttsVoiceId = process.env.TTS_VOICE_ID || this.config.get<string>('TTS_VOICE_ID', 'zh_female_vv_uranus_bigtts');
-    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp || 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}, seedanceR2v=${this.seedanceR2v}, embeddingEp=${this.embeddingEp || 'MISSING'}, embeddingDim=${this.embeddingDim}, tts=${this.isTTSConfigured() ? 'SET' : 'MISSING'}, ttsVoice=${this.ttsVoiceId}`);
+    this.logger.log(`VolcanoApiService initialized — apiKey=${this.apiKey ? 'SET' : 'MISSING'}, doubaoEp=${this.doubaoEp || 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}, seedanceR2v=${this.seedanceR2v}, seedanceRatio=${this.seedanceRatio}, embeddingEp=${this.embeddingEp || 'MISSING'}, embeddingDim=${this.embeddingDim}, tts=${this.isTTSConfigured() ? 'SET' : 'MISSING'}, ttsVoice=${this.ttsVoiceId}`);
   }
 
   signCallback(taskId: string, secret: string) {
@@ -158,6 +161,7 @@ export class VolcanoApiService {
     prompt: string,
     imageUrls: string[] = [],
     opts?: { startImage?: string; endImage?: string },
+    duration = 5,
   ): Promise<{ taskId?: string; error?: string } | null> {
     if (!this.apiKey || !this.seedanceEp) {
       this.logger.warn(`Seedance not configured (apiKey=${this.apiKey ? 'SET' : 'MISSING'}, seedanceEp=${this.seedanceEp || 'MISSING'}), using mock`);
@@ -190,7 +194,7 @@ export class VolcanoApiService {
       }
       content.push({ type: 'text', text: prompt });
 
-      const body: Record<string, unknown> = { model: this.seedanceEp, content };
+      const body: Record<string, unknown> = { model: this.seedanceEp, content, ratio: this.seedanceRatio, duration: Math.round(duration) };
       if (this.callbackBaseUrl) {
         body.callback_url = `${this.callbackBaseUrl}/api/volcano/seedance-callback`;
       }
