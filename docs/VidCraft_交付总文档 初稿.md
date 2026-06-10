@@ -40,18 +40,18 @@
 3. **方法论提炼（因子库 / 灵感模板）** — 对爆款拆解结果归一为「策略 + 因子」结构化模板，因子按 `CreativeFactors` 枚举对齐，作为剧本生成的可复用配方。
 4. **剧本生成与干预** — 输入商品信息 + 策略/因子，由大模型组合出完整剧本（叙事框架、视觉风格、分镜脚本含画面/镜头运动/BGM/字幕、约束清单）；支持 Prompt 微调、分镜增删、台词改写、单分镜携因子重生成。
 5. **一键成片 + 智能剪辑** — 端到端产出 ≤15s 竖版带货视频：文生图/图生视频生成分镜画面 → FFmpeg 拼接转场 → 多语种 TTS 配音 + 字幕烧录（libass）+ BGM 合成 → 多分辨率/画幅导出。
-6. **任务进度与数据看板** — 长任务全程进度可视化（队列 + WebSocket 推送）、失败自动重试与兜底；数据看板以「生成因子 × 转化效果」做多因子归因可视化（mock 分发/转化数据）。
+6. **任务进度与数据看板** — 长任务全程进度可视化（前端 HTTP 轮询 GET /status）、失败自动重试与兜底；数据看板以「生成因子 × 转化效果」做多因子归因可视化（mock 分发/转化数据）。
 
 ---
 
 ## 3. 端到端使用流程
 
 1. 商家访问 https://vidcraft.icu，点击「游客体验」免注册进入工作台。
-2. 在**素材库**上传商品主图（或商品链接/视频），系统调用 Doubao Vision 自动解析出商品主体、类目、卖点，并对视频素材切片、生成 Embedding 入向量库。
+2. 在**素材库**上传商品主图（或商品链接/视频），系统调用 Doubao Vision 自动解析出商品主体、类目、卖点；视频素材抽取关键帧解析（≤30s），生成 Embedding 入向量库。
 3. 进入**剧本工作室**：选择「爆款仿写 / 灵感模板 / 策略+因子组合」任一模式，输入商品信息，一键生成分镜剧本；可在分镜时间轴上微调台词、替换因子、增删分镜。
 4. 确认剧本后点击**一键成片**，系统创建生成任务进入队列，文生图/图生视频逐分镜生成画面。
-5. 页面通过进度条 + WebSocket 实时展示每个分镜状态；失败分镜自动重试（最多 2 次），整体不阻塞。
-6. Worker（FFmpeg）拼接分镜、加转场、烧录字幕、合成 TTS 配音与 BGM，产出成片。
+5. 页面通过进度条 + HTTP 轮询（`GET /api/videos/:id/status`）展示每个分镜状态；失败分镜自动重试（最多 2 次），整体不阻塞。
+6. NestJS 内联调用 FFmpeg 拼接分镜、加转场、烧录字幕、合成 TTS 配音与 BGM，产出成片。
 7. 在**预览页**在线播放，支持单分镜重渲染（不重渲整片）与多分辨率 / 9:16、16:9 画幅导出。
 8. 在**数据看板**查看该视频生成因子与（mock）转化指标的归因分析，反哺下一轮创作。
 
@@ -72,12 +72,13 @@
                                           │
         ┌─────────────────────────────────┼──────────────────────────────┐
         │                                  │                               │
- ┌──────▼───────┐               ┌──────────▼──────────┐          ┌─────────▼─────────┐
- │  Frontend    │   REST/WS     │     Backend         │  HTTP    │  Worker           │
- │ React19+Vite │◄────────────► │  NestJS 10          │ ───────► │  Python FastAPI   │
- │ AntD/Zustand │               │  REST + WebSocket   │          │  FFmpeg 合成流水线 │
- │ Recharts     │               │  BullMQ 任务编排     │          │  scene_detect     │
- └──────────────┘               └────┬─────────┬──────┘          └───────────────────┘
+ ┌──────▼───────┐               ┌──────────▼──────────┐
+ │  Frontend    │   REST/轮询   │     Backend         │
+ │ React19+Vite │◄────────────► │  NestJS 10          │
+ │ AntD/Zustand │               │  REST + HTTP 轮询    │
+ │ Recharts     │               │  Bull 异步队列       │
+ └──────────────┘               │  内联 FFmpeg 合成    │
+                                └────┬─────────┬──────┘
                                      │         │
                   ┌──────────────────┘         └───────────────────┐
                   │                                                 │
@@ -92,20 +93,22 @@
         └────────────────────┘  └──────────────────────────┘
 ```
 
+> 注：`worker/`（Python FastAPI + FFmpeg）仅为预留脚手架，**未接入真实链路**；视频合成由 NestJS 内联调用 FFmpeg 完成，分镜进度由前端 HTTP 轮询 `GET /api/videos/:id/status` 获取。
+
 ### 4.2 核心技术栈
 
 | 层级 | 技术选型 |
 |---|---|
-| 前端 | React 19 + TypeScript + Vite + Ant Design 5 + Zustand + React Router 7 + Recharts + socket.io-client（MSW 做 mock） |
-| 后端 | NestJS 10 + TypeScript + TypeORM + BullMQ + Socket.IO + Passport/JWT + Swagger |
-| 视频合成 | Python 3.12 + FastAPI + FFmpeg（libass 字幕）+ 场景检测 |
+| 前端 | React 19 + TypeScript + Vite + Ant Design 5 + Zustand + React Router 7 + Recharts（MSW 做 mock） |
+| 后端 | NestJS 10 + TypeScript + TypeORM + Bull（Redis 异步队列）+ Passport/JWT + Swagger |
+| 视频合成 | NestJS 内联调用 FFmpeg（libass 字幕） |
 | 数据库 | PostgreSQL 16 + **pgvector**（向量检索，1024 维） |
-| 缓存 / 队列 | Redis 7 + BullMQ（Bull Board 可视化） |
+| 缓存 / 队列 | Redis 7 + Bull（Bull Board 可视化） |
 | 对象存储 | MinIO（S3 兼容） |
 | AI 能力 | 火山引擎 OpenAPI：Doubao（Vision/LLM）、Seedance（文生/图生视频）、TTS、Embedding |
 | 可观测性 | OpenTelemetry + Jaeger 全链路追踪 |
 | 工程化 | ESLint + Prettier + StyleLint + Husky + lint-staged；GitHub Actions CI/CD |
-| 部署 | Docker + Docker Compose（Nginx / Backend / Worker / PG / Redis / MinIO / Jaeger） |
+| 部署 | Docker + Docker Compose（Nginx / Backend / PG / Redis / MinIO / Jaeger；`worker` 容器为预留，未接入链路） |
 
 ### 4.3 大模型 / AI 能力使用说明
 
@@ -118,7 +121,7 @@
 | 语音合成 | 火山 TTS（`seed-tts-2.0`，多语种/多音色） | 创作模块：分镜配音（polyglot/dubbing） |
 | 向量化 | 火山 Embedding（1024 维） | 素材检索：slice/视频 Embedding 入 pgvector，向量召回 |
 | RAG / 检索 | pgvector 相似度 + 关键词/标签 | 剧本/创作的智能召回与爆款匹配 |
-| Agent 编排 | BullMQ 多阶段任务流（解析→生成→合成→重试） | 长链路一键成片的任务编排与失败兜底 |
+| 异步任务 | Bull（Redis）单阶段队列 | 素材上传后异步 AI 解析（打标 + 向量化）；视频生成当前在 Service 内同步执行 |
 
 ### 4.4 数据层（13 张业务表）
 
@@ -136,11 +139,11 @@
 
 2. **长耗时视频任务的进度体验与失败兜底**
    难点：单条成片需多次调用文生图/图生视频/TTS，耗时长且任一分镜可能失败或超时。
-   方案：BullMQ 队列编排多阶段任务 + Socket.IO 实时推送分镜级进度；Seedance 接入 `callback_url` 减少轮询；单分镜失败自动重试（`MAX_SHOT_RETRIES=2`），失败不阻塞整片，前端给出清晰失败反馈与重试入口。
+   方案：Seedance 接入 `callback_url` 异步回调；前端通过 HTTP 轮询 `GET /api/videos/:id/status` 展示分镜级进度；单分镜失败自动重试（`MAX_SHOT_RETRIES=2`），失败不阻塞整片，前端给出清晰失败反馈与重试入口。
 
 3. **成片字幕 / 配音的合成可靠性**
    难点：FFmpeg 默认不带 libass，字幕烧录与多语种 TTS 配音常因环境缺失而静默失败。
-   方案：Worker 镜像确保 FFmpeg 编译带 libass，默认字体 PingFang SC；TTS 走 `seed-tts-2.0` 多音色，配音 + 字幕 + BGM 在 FFmpeg 流水线统一合成；支持单分镜重渲染而非整片重渲。
+   方案：后端镜像确保 FFmpeg 带 libass，默认字体 PingFang SC；TTS 走 `seed-tts-2.0` 多音色，配音 + 字幕 + BGM 在 NestJS 内联的 FFmpeg 流水线统一合成；支持单分镜重渲染而非整片重渲。
 
 4. **创意因子的中英归一与稳定存储**
    难点：AI 拆解输出为中文自然语言，直接存储无法稳定聚合与归因。
@@ -155,7 +158,7 @@
 ## 6. 部署与访问说明
 
 - **线上访问**：https://vidcraft.icu —— 首页「游客体验」**免登录**直接体验核心链路，无权限申请、无付费墙。
-- **部署形态**：Docker Compose 单机编排（Nginx + Backend + Worker + PostgreSQL + Redis + MinIO + Jaeger）。
+- **部署形态**：Docker Compose 单机编排（Nginx + Backend + PostgreSQL + Redis + MinIO + Jaeger；compose 含预留 `worker` 容器，未接入真实链路）。
 - **CI/CD**：GitHub Actions，提交触发构建；生产 Dockerfile + `entrypoint.sh` 启动前自动执行 DB 初始化/迁移。
 - **本地一键启动**：见附录 README（`npm run docker:up` → `npm run db:init && db:seed` → `npm run dev`）。
 - **关键入口**：前端 `:5173`、API/Swagger `:3000/api`、Bull Board `:3000/admin/queues`、Jaeger `:16686`、MinIO `:9001`。

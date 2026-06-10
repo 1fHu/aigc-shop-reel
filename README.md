@@ -6,9 +6,10 @@ AIGC 带货视频生成系统 — 面向 TikTok 电商商家的智能视频工�
 
 | 层级 | 技术 |
 |---|---|
-| 前端 | React 18 + TypeScript + Vite 5 + Ant Design 5 + Zustand |
-| 后端 | NestJS 10 + TypeScript + BullMQ |
-| 视频合成 | Python FastAPI + FFmpeg |
+| 前端 | React 19 + TypeScript + Vite 8 + Ant Design 5 + Zustand |
+| 后端 | NestJS 10 + TypeScript |
+| 异步队列 | Bull (Redis) — 素材 AI 解析异步任务 |
+| 视频合成 | NestJS 内联调用 FFmpeg |
 | 数据库 | PostgreSQL 16 + pgvector (向量检索) |
 | 缓存/队列 | Redis 7 |
 | 对象存储 | MinIO |
@@ -22,7 +23,6 @@ AIGC 带货视频生成系统 — 面向 TikTok 电商商家的智能视频工�
 
 - Node.js >= 20
 - pnpm >= 9
-- Python >= 3.12
 - Docker & Docker Compose
 
 ### 1. 克隆与配置
@@ -45,7 +45,6 @@ npm run docker:up
 
 ```bash
 npm install
-cd worker && pip install -r requirements.txt
 ```
 
 ### 4. 初始化数据库
@@ -62,7 +61,6 @@ npm run dev          # 全栈启动
 # 或单独启动
 npm run dev:frontend # http://localhost:5173
 npm run dev:backend  # http://localhost:3000
-npm run dev:worker   # http://localhost:8000
 ```
 
 ### 6. 访问
@@ -97,11 +95,8 @@ vidcraft/
 │       ├── modules/      # 业务模块
 │       ├── common/       # 过滤器/拦截器/守卫
 │       ├── database/     # 实体与迁移
-│       └── queue/        # BullMQ 任务
-├── worker/            # Python 视频合成
-│   └── app/
-│       ├── api/          # 合成端点
-│       └── services/     # FFmpeg 处理
+│       └── queue/        # Bull 异步任务（素材 AI 解析）
+├── worker/            # Python FFmpeg 服务（预留脚手架，未集成进真实链路）
 ├── docker/            # Docker 配置
 ├── scripts/           # SQL 初始化 + 辅助脚本
 └── docs/              # 技术文档

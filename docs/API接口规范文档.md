@@ -693,7 +693,7 @@ AIGC 带货视频生成系统
 
 |  |
 | --- |
-| 上传完成后异步触发 AI 解析流程：NestJS VolcanoApiService 调用 Doubao Vision 提取标签与描述，再调用 Doubao Embedding 进行 1024 维向量化（存入 pgvector）；视频素材同时触发 Python FastAPI 执行 FFmpeg 场景切片。 |
+| 上传完成后入 Bull 队列异步触发 AI 解析流程：NestJS VolcanoApiService 调用 Doubao Vision 提取标签与描述，再调用 Doubao Embedding 进行 1024 维向量化（存入 pgvector）；视频素材由 NestJS 内联 FFmpeg/ffprobe 取时长并抽取关键帧（≤30s）后打标。 |
 
 ## GET /api/materials 获取素材列表
 
@@ -1148,7 +1148,7 @@ AIGC 带货视频生成系统
 
 |  |
 | --- |
-| 配额不足时返回 code: 429，msg: '本月配额已耗尽，请升级套餐'。生成任务并发提交至 BullMQ 队列，每个分镜独立调用 Seedance API（携带 HMAC 签名的 callback\_url + traceId）。 |
+| 配额不足时返回 code: 429，msg: '本月配额已耗尽，请升级套餐'。生成任务在 NestJS VideoService 内逐分镜调用 Seedance API（携带 HMAC 签名的 callback\_url + traceId）。 |
 
 ## GET /api/videos/:id/status 获取视频生成状态
 
@@ -1193,7 +1193,7 @@ AIGC 带货视频生成系统
 
 |  |
 | --- |
-| 推荐通过 WebSocket 订阅实时推送（见下方 WebSocket 协议章节），此接口作为轮询兜底（建议间隔 5s）。 |
+| 当前进度通过 HTTP 轮询本接口获取（建议间隔 5s）；WebSocket 实时推送为规划中能力，尚未实现（见下方 WebSocket 协议章节的现状说明）。 |
 
 **返回示例**
 
@@ -1423,7 +1423,7 @@ AIGC 带货视频生成系统
 
 |  |
 | --- |
-| 诊断调用 Analyst Agent（Doubao-Seed-2.0-pro），传入完播率数据 + 场景流失分布进行分析，结果通过 WebSocket 推送 diagnosis:completed 事件，或前端轮询 GET /api/analytics/:video\_id/diagnosis 获取。 |
+| 诊断调用 Analyst Agent（Doubao-Seed-2.0-pro），传入完播率数据 + 场景流失分布进行分析，结果由前端轮询 GET /api/analytics/:video\_id/diagnosis 获取。 |
 
 ## GET /api/analytics/:video\_id/diagnosis 获取诊断报告
 
@@ -1585,7 +1585,7 @@ AIGC 带货视频生成系统
 
 |  |
 | --- |
-| 异步拆解流程：① yt-dlp 获取公开元数据（标题/描述/封面图，不下载视频本体）→ ② Doubao Vision 分析封面图 → ③ Doubao 大模型生成结构化拆解报告 → ④ Doubao Embedding 向量化存入 pgvector。完成后通过 WebSocket 推送 viral\_library:analyzed 事件。URL 重复导入时返回 code: 409，data 包含已有条目信息。 |
+| 异步拆解流程：① yt-dlp 获取公开元数据（标题/描述/封面图，不下载视频本体）→ ② Doubao Vision 分析封面图 → ③ Doubao 大模型生成结构化拆解报告 → ④ Doubao Embedding 向量化存入 pgvector。完成状态由前端轮询获取。URL 重复导入时返回 code: 409，data 包含已有条目信息。 |
 
 ## POST /api/viral-library/upload-analyze 上传自有视频做结构化拆解
 
@@ -1723,7 +1723,9 @@ AIGC 带货视频生成系统
 | **male\_mature** | 男声-成熟 | 适合科技、汽车、金融类目 |
 | **female\_professional** | 女声-专业 | 适合教育、医疗、B2B类目 |
 
-**D. WebSocket 协议规范（v1.2 补充）**
+**D. WebSocket 协议规范（规划中，当前未实现）**
+
+> ⚠️ **现状对齐**：WebSocket 实时推送**尚未实现**。后端 `VideoGateway` 为 TODO 桩、未接入业务，前端 `socket.io-client` 依赖已装但未连接。**当前所有进度/状态均通过 HTTP 轮询 `GET /api/videos/:id/status`（建议间隔 5s）获取**。下文协议为未来规划，落地前不对外承诺。
 
 **D.1 连接方式**
 
