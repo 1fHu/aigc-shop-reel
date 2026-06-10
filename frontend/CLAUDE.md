@@ -30,7 +30,7 @@
 - HTTP：axios（已封装拦截器，service 直接 import 用）
 - 图表：Recharts
 - 拖拽：@dnd-kit
-- 实时：socket.io-client
+- 进度：HTTP 轮询 `GET /api/videos/:id/status`（socket.io-client 依赖已装但未接入）
 - Mock：MSW（`VITE_USE_MOCK=true` 开启）
 
 ---
