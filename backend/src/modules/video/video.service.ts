@@ -1140,7 +1140,18 @@ export class VideoService {
       // 无音频且无法烧字幕 → 无需合成
       if (!hasAudio && !burnSubs) return videoPath;
 
-      const buildArgs = (withSubs: boolean): string[] => {
+      const fontSize = subtitleStyle?.font_size || 15;
+      const outline = subtitleStyle?.outline ?? 2.5;
+      const color = subtitleStyle?.color || '#FFFFFF';
+      const requestedFont = subtitleStyle?.font_family
+        || process.env.SUBTITLE_FONT_FAMILY
+        || '';
+      const fallbackFont = process.platform === 'win32' ? 'Microsoft YaHei'
+        : process.platform === 'darwin' ? 'PingFang SC'
+        : 'Noto Sans CJK SC';
+      const primaryFont = requestedFont || fallbackFont;
+
+      const buildArgs = (withSubs: boolean, fontFamily?: string): string[] => {
         const a = hasAudio
           ? ['-y', '-i', videoPath, '-i', audioPath]
           : ['-y', '-i', videoPath];
@@ -1148,19 +1159,12 @@ export class VideoService {
           const srtFilterPath = basename(srtPath);
           // 使用文件名而非绝对路径：Windows 绝对路径中的盘符 : 会被 ffmpeg filter parser
           // 误当作参数分隔符，即使 \: 转义也不生效。设 spawn cwd 为 VIDEO_DIR 后用相对路径即可。
-          const fontSize = subtitleStyle?.font_size || 15;
-          const outline = subtitleStyle?.outline ?? 2.5;
-          const color = subtitleStyle?.color || '#FFFFFF';
-          const fontFamily = subtitleStyle?.font_family
-            || process.env.SUBTITLE_FONT_FAMILY
-            || (process.platform === 'win32' ? 'Microsoft YaHei'
-              : process.platform === 'darwin' ? 'PingFang SC'
-              : 'Noto Sans CJK SC');
+          const f = fontFamily || primaryFont;
           // 颜色 hex #RRGGBB → ASS &HBBGGRR 格式 (去掉#，反转RGB)
           const hex = color.replace('#', '');
           const assColor = `&H00${hex[4] || 'F'}${hex[5] || 'F'}${hex[2] || 'F'}${hex[3] || 'F'}${hex[0] || 'F'}${hex[1] || 'F'}`;
-          this.logger.log(`compositeShot #${shotIndex} subtitle: Fontsize=${fontSize}, Fontname=${fontFamily}, Outline=${outline}, Color=${color}`);
-          a.push('-vf', `subtitles=${srtFilterPath}:charenc=UTF-8:force_style='Fontsize=${fontSize},Fontname=${fontFamily},PrimaryColour=${assColor},OutlineColour=&H00000000,Outline=${outline},BorderStyle=1,MarginV=80'`);
+          this.logger.log(`compositeShot #${shotIndex} subtitle: Fontsize=${fontSize}, Fontname=${f}, Outline=${outline}, Color=${color}`);
+          a.push('-vf', `subtitles=${srtFilterPath}:charenc=UTF-8:force_style='Fontsize=${fontSize},Fontname=${f},PrimaryColour=${assColor},OutlineColour=&H00000000,Outline=${outline},BorderStyle=1,MarginV=80'`);
         }
         a.push('-c:v', 'libx264', '-pix_fmt', 'yuv420p');
         if (hasAudio) {
@@ -1182,11 +1186,23 @@ export class VideoService {
       });
 
       try {
-        await runFfmpeg(buildArgs(burnSubs));
+        await runFfmpeg(buildArgs(burnSubs, primaryFont));
       } catch (err) {
         if (burnSubs) {
-          // 字幕烧录失败（字体缺失/滤镜异常）→ 降级只混音频，至少保住 TTS 配音
-          this.logger.warn(`compositeShot #${shotIndex} 烧字幕失败，降级仅混音频: ${(err as Error).message}`);
+          // 如果用户选了特定字体且与 fallback 不同，先尝试用 fallback 字体重试
+          if (requestedFont && requestedFont !== fallbackFont) {
+            this.logger.warn(`compositeShot #${shotIndex} 字体 "${requestedFont}" 烧录失败，尝试 fallback 字体 "${fallbackFont}": ${(err as Error).message}`);
+            try {
+              await runFfmpeg(buildArgs(true, fallbackFont));
+              return outPath;
+            } catch (err2) {
+              this.logger.warn(`compositeShot #${shotIndex} fallback 字体也失败: ${(err2 as Error).message}`);
+            }
+          } else {
+            this.logger.warn(`compositeShot #${shotIndex} 烧字幕失败: ${(err as Error).message}`);
+          }
+          // 最终降级：只混音频，不烧字幕
+          this.logger.warn(`compositeShot #${shotIndex} 降级仅混音频`);
           await runFfmpeg(buildArgs(false));
         } else {
           throw err;
