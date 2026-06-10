@@ -1,0 +1,151 @@
+/* ============================================================
+   Subscription page styles (placeholder — 施工中)
+   ============================================================ */
+
+.page {
+  padding: 32px;
+  max-width: 1100px;
+}
+
+/* ============ Header ============ */
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  gap: 16px;
+}
+
+.headerTitle {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 30px;
+  letter-spacing: -0.01em;
+  color: #111827;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.titleIcon {
+  color: #F59E0B;
+}
+
+.headerSubtitle {
+  font-size: 14px;
+  color: #6B7280;
+  margin-top: 8px;
+}
+
+/* ============ Notice ============ */
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  margin-bottom: 28px;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 10px;
+  color: #92400E;
+  font-size: 14px;
+}
+
+.noticeIcon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+/* ============ Plans ============ */
+.plans {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.planCard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 28px 24px;
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-radius: 16px;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.planCard:hover {
+  box-shadow: 0 8px 24px rgba(17, 24, 39, 0.08);
+  transform: translateY(-2px);
+}
+
+.planHighlight {
+  border-color: #F59E0B;
+  box-shadow: 0 8px 24px rgba(245, 158, 11, 0.12);
+}
+
+.popularTag {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  margin: 0;
+}
+
+.planName {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 600;
+  font-size: 18px;
+  color: #111827;
+}
+
+.planPrice {
+  margin: 16px 0 20px;
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.priceValue {
+  font-family: 'Geist', system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 32px;
+  color: #111827;
+}
+
+.pricePeriod {
+  font-size: 14px;
+  color: #6B7280;
+}
+
+.featureList {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 24px;
+  flex: 1;
+}
+
+.featureList li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #374151;
+  padding: 6px 0;
+}
+
+.featureIcon {
+  color: #10B981;
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.planButton {
+  margin-top: auto;
+}
+
+@media (max-width: 900px) {
+  .plans {
+    grid-template-columns: 1fr;
+  }
+}
