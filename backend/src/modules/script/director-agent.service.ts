@@ -151,7 +151,7 @@ ${factorPrompt}
     // 基础 prompt
     let prompt = `你是 TikTok 电商带货短视频的导演。请基于商品信息和创作策略，生成 4-6 个分镜的脚本。
 严格只返回一个 JSON 数组，数组每个元素格式：
-{"description":"画面内容(中文一句话)","camera_motion":"运镜方式，取值之一: push-in/static/tracking/pan/zoom-out/handheld","duration":分镜时长秒数(2-5的整数),"voiceover":"口播文案(中文)","subtitle":"字幕(中文，简短)"}
+{"description":"画面内容(中文一句话)","camera_motion":"运镜方式，取值之一: push-in/static/tracking/pan/zoom-out/handheld","duration":分镜时长秒数(4-8的整数),"voiceover":"口播文案(中文)","subtitle":"字幕(中文，简短)"}
 分镜应按顺序覆盖：抓眼球的开场 Hook → 产品外观/卖点特写 → 使用场景或效果展示 → 细节/信任背书
 创作策略：${strategy}
 商品信息：${JSON.stringify(productInfo)}`;
@@ -195,8 +195,8 @@ ${factorPrompt}
             ? s.camera_motion
             : 'static';
         const duration = Number.isFinite(s.duration as number)
-          ? Math.min(6, Math.max(2, Math.round(s.duration as number)))
-          : 3;
+          ? Math.min(12, Math.max(4, Math.round(s.duration as number)))
+          : 4;
         return {
           index,
           description: (s.description as string).trim(),
@@ -237,7 +237,7 @@ ${factorPrompt}
       {
         description: `开场 Hook：${hook}`,
         camera_motion: 'push-in',
-        duration: 3,
+        duration: 4,
         voiceover: hook,
         subtitle: '别划走',
         bgm: 'Modern Beat',
@@ -246,7 +246,7 @@ ${factorPrompt}
       {
         description: `${name} 产品外观与核心卖点特写`,
         camera_motion: 'static',
-        duration: 3,
+        duration: 4,
         voiceover: points[0] ? `它最大的亮点就是${points[0]}` : `${name} 的设计很有诚意`,
         subtitle: points[0] || '核心卖点',
         bgm: 'Modern Beat',
@@ -255,7 +255,7 @@ ${factorPrompt}
       {
         description: `使用场景演示：${scene}`,
         camera_motion: 'tracking',
-        duration: 3,
+        duration: 4,
         voiceover: `${scene}，用起来格外顺手`,
         subtitle: scene,
         bgm: 'Modern Beat',
@@ -264,7 +264,7 @@ ${factorPrompt}
       {
         description: points[1] ? `卖点细节展示：${points[1]}` : `适合人群：${audience}`,
         camera_motion: 'push-in',
-        duration: 3,
+        duration: 4,
         voiceover: points[1] ? `而且${points[1]}` : `特别适合${audience}`,
         subtitle: points[1] || audience,
         bgm: 'Modern Beat',

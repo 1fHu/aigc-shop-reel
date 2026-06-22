@@ -693,6 +693,9 @@ export class VideoService {
           continue;
         }
 
+        // 在 compositeShot 之前提取尾帧，避免字幕被烧进参考帧
+        prevKeyframe = await this.extractKeyframeDataUri(videoId, shot.index, path);
+
         const composited = await this.compositeShot(videoId, shot.index, path, subtitleEnabled ? tts : null, opts?.subtitle_style, targetDuration);
         const finalPath = composited || path;
         if (!composited) {
@@ -703,8 +706,6 @@ export class VideoService {
           previewUrl: `/api/videos/${videoId}/shots/${shot.index}/file`,
         });
         compositedClips.push(finalPath);
-
-        prevKeyframe = await this.extractKeyframeDataUri(videoId, shot.index, finalPath);
       }
 
       if (compositedClips.length === 0) {
