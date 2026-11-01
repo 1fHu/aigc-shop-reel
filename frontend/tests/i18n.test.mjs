@@ -152,3 +152,29 @@ test('every backend and mock factor option has an English display label', () => 
   visit(source);
   assert.ok(count > 15);
 });
+
+test('the live backend default guest name switches without changing the account record', () => {
+  const guestLoad = sourceLoader();
+  const { userDisplayName } = guestLoad('src/i18n/userDisplayName');
+  const store = guestLoad('src/stores/languageStore').useLanguageStore;
+  const guest = Object.freeze({ nickname: '体验用户', is_guest: true });
+  assert.equal(userDisplayName(guest), 'Guest');
+  store.getState().setLanguage('zh-CN');
+  assert.equal(userDisplayName(guest), '体验用户');
+  store.getState().setLanguage('en-US');
+  assert.equal(userDisplayName(guest), 'Guest');
+  assert.equal(guest.nickname, '体验用户');
+});
+
+test('real and custom nicknames remain unchanged even when they match interface copy', () => {
+  const guestLoad = sourceLoader();
+  const { userDisplayName } = guestLoad('src/i18n/userDisplayName');
+  const store = guestLoad('src/stores/languageStore').useLanguageStore;
+  for (const language of ['en-US', 'zh-CN']) {
+    store.getState().setLanguage(language);
+    assert.equal(userDisplayName({ nickname: '体验用户', is_guest: false }), '体验用户');
+    assert.equal(userDisplayName({ nickname: '我的自定义昵称', is_guest: true }), '我的自定义昵称');
+    assert.equal(userDisplayName({ nickname: 'Dashboard', is_guest: false }), 'Dashboard');
+    assert.equal(userDisplayName(null), 'VidCrafter');
+  }
+});

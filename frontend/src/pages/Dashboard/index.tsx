@@ -1,3 +1,4 @@
+import { userDisplayName } from '@/i18n/userDisplayName';
 import { metricLabel } from '@/i18n/displayText';
 import { demoText } from '@/i18n/demoContent';
 import { t as translate, useLanguage } from '@/i18n';
@@ -130,7 +131,7 @@ export default function Dashboard() {
       <div className={styles.header}>
         <div>
           <h1 className={styles.headerTitle}>
-            {greeting()}，{user?.nickname || 'VidCrafter'}{' '}
+            {greeting()}，{userDisplayName(user)}{' '}
             <span style={{ display: 'inline-block' }}>👋</span>
           </h1>
           <p className={styles.headerSubtitle}>{translate("准备好为您的 TikTok 商店创作下一个爆款视频了吗？")}</p>

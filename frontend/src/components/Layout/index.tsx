@@ -1,3 +1,4 @@
+import { userDisplayName } from '@/i18n/userDisplayName';
 import { t as translate, useLanguage } from '@/i18n';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useState } from 'react';
@@ -81,14 +82,15 @@ export default function AppLayout() {
     navigate('/login', { replace: true });
   };
 
-  const avatarLetter = (user?.nickname || 'V').slice(0, 1).toUpperCase();
+  const displayName = userDisplayName(user, translate('游客'));
+  const avatarLetter = displayName.slice(0, 1).toUpperCase() || 'V';
 
   const avatarMenu: MenuProps['items'] = [
     {
       key: 'profile',
       label: (
         <div style={{ minWidth: 180 }}>
-          <div style={{ fontWeight: 500, color: '#111827' }}>{user?.nickname ?? translate("游客")}</div>
+          <div style={{ fontWeight: 500, color: '#111827' }}>{displayName}</div>
           <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
             {isGuest ? translate("游客模式 · 配额 ") + (user?.video_quota ?? 0) : user?.email}
           </div>

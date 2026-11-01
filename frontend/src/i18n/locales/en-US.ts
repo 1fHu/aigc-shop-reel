@@ -1033,6 +1033,7 @@ const enUS = {
   "急速剪辑": "Rapid cuts",
   "限时折扣": "Limited-time discount",
   "社交证明": "Social proof",
-  "场景共鸣": "Relatable use case"
+  "场景共鸣": "Relatable use case",
+  "体验用户": "Guest"
 };
 export default enUS;

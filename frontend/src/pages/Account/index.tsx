@@ -1,3 +1,4 @@
+import { userDisplayName } from '@/i18n/userDisplayName';
 import { t as translate, useLanguage, useFormLanguage } from '@/i18n';
 import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
@@ -92,7 +93,7 @@ export default function AccountPage() {
     }
   };
 
-  const avatarLetter = (user?.nickname || 'V').slice(0, 1).toUpperCase();
+  const avatarLetter = userDisplayName(user, 'V').slice(0, 1).toUpperCase();
 
   return (
     <div className={styles.page}>
