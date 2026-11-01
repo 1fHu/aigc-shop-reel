@@ -1,5 +1,7 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
+import { categoryLabel } from '@/types';
 import { formatDate } from '@/i18n/displayText';
-import { t as translate, useLanguage } from '@/i18n';
+import { t as translate, useLanguage, confirmLocalized } from '@/i18n';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Upload, App, Modal } from 'antd';
@@ -45,12 +47,12 @@ function toMaterialItem(m: MaterialListItem): MaterialItem {
     id: m.id,
     type: m.file_type,
     // 标题：普通素材用 AI 概括的「主要内容」(summary)；商品主图用商品名(name)；都没有回退文件名
-    name: (a.summary as string) || (a.name as string) || m.file_name || translate("未命名"),
+    name: (a.summary as string) || (a.name as string) || m.file_name || '',
     cover: (a.cover_url as string) || m.thumbnail_url || '',
     tag: isProduct ? 'PRODUCT' : undefined,
     duration: m.duration ? `${Math.round(m.duration)}s` : undefined,
     time: m.created_at || '',
-    fileSize: m.file_size ? `${(m.file_size / 1024 / 1024).toFixed(1)} MB` : translate("未知"),
+    fileSize: m.file_size ? `${(m.file_size / 1024 / 1024).toFixed(1)} MB` : '',
     fileType: m.file_type === 'video' ? 'video/mp4' : 'image/jpeg',
     description: a.description as string,
     quality: a.quality as string,
@@ -184,7 +186,7 @@ export default function MaterialLibrary() {
   };
 
   const handleDelete = (item: MaterialItem) => {
-    modal.confirm({
+    confirmLocalized(modal, {
       title: translate("确认删除"),
       icon: <ExclamationCircleOutlined />,
       content: translate("确定要删除素材「{0}」吗？此操作不可撤销。", { "0": item.name }),
@@ -251,7 +253,7 @@ export default function MaterialLibrary() {
           {filtered.map((m) => (
             <div key={m.id} className={styles.card} onClick={() => setActive(m)}>
               <div className={styles.cover}>
-                <img src={m.cover} alt={m.name}/>
+                <img src={m.cover} alt={m.name || translate("未命名")}/>
                 <button
                   className={styles.deleteBtn}
                   disabled={deletingId === m.id}
@@ -260,13 +262,13 @@ export default function MaterialLibrary() {
                 >
                   <DeleteOutlined />
                 </button>
-                {m.tag && <span className={`${styles.cardTag} ${m.tag==='TIKTOK READY'?styles.cardTagReady:styles.cardTagProduct}`}>{m.tag}</span>}
+                {m.tag && <span className={`${styles.cardTag} ${m.tag==='TIKTOK READY'?styles.cardTagReady:styles.cardTagProduct}`}>{translate(m.tag)}</span>}
                 {m.status==='parsing' && <span className={styles.parsingBadge}>{translate("解析中")}</span>}
                 {m.status==='failed' && <span className={styles.failedBadge}>{translate("失败")}</span>}
                 {m.duration && <span className={styles.duration}>{m.duration}</span>}
               </div>
               <div className={styles.cardBody}>
-                <div className={styles.cardTitle}>{m.name}</div>
+                <div className={styles.cardTitle}>{m.name || translate("未命名")}</div>
                 {m.category
                   ? <div style={{fontSize:11,color:'#4648D4',marginTop:2}}>{m.category}</div>
                   : m.description && <div style={{fontSize:11,color:'#9CA3AF',marginTop:2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{m.description}</div>}
@@ -281,13 +283,13 @@ export default function MaterialLibrary() {
         <div className={styles.drawerBackdrop} onClick={()=>setActive(null)}/>
         <aside className={styles.drawer}>
           <div className={styles.drawerHeader}><h2 className={styles.drawerTitle}>{translate("素材详情")}</h2><button className={styles.drawerClose} onClick={()=>setActive(null)}><CloseOutlined/></button></div>
-          <div className={styles.drawerImage}><img src={active.cover} alt={active.name}/></div>
-          <div className={styles.sectionLabel}>{translate("素材名称")}</div><div style={{fontSize:16,fontWeight:500,marginBottom:12}}>{active.name}</div>
+          <div className={styles.drawerImage}><img src={active.cover} alt={active.name || translate("未命名")}/></div>
+          <div className={styles.sectionLabel}>{translate("素材名称")}</div><div style={{fontSize:16,fontWeight:500,marginBottom:12}}>{active.name || translate("未命名")}</div>
           <div className={styles.detailGrid}>
-            {active.category && <div className={styles.detailCard}><div className={styles.detailLabel}>{translate("品类")}</div><div className={styles.detailValue}>{active.category}</div></div>}
+            {active.category && <div className={styles.detailCard}><div className={styles.detailLabel}>{translate("品类")}</div><div className={styles.detailValue}>{categoryLabel(active.category)}</div></div>}
             {active.quality && <div className={styles.detailCard}><div className={styles.detailLabel}>{translate("画质")}</div><div className={styles.detailValue}>{active.quality}</div></div>}
             <div className={styles.detailCard}><div className={styles.detailLabel}>{translate("状态")}</div><div className={styles.detailValue}>{active.status}</div></div>
-            <div className={styles.detailCard}><div className={styles.detailLabel}>{translate("文件大小")}</div><div className={styles.detailValue}>{active.fileSize}</div></div>
+            <div className={styles.detailCard}><div className={styles.detailLabel}>{translate("文件大小")}</div><div className={styles.detailValue}>{active.fileSize || translate("未知")}</div></div>
             <div className={styles.detailCard}><div className={styles.detailLabel}>{translate("文件类型")}</div><div className={styles.detailValue}>{active.fileType}</div></div>
           </div>
           {active.description && <div style={{marginTop:16}}><div className={styles.sectionLabel}>{translate("内容描述")}</div><div style={{fontSize:13,color:'#6B7280',marginTop:4}}>{active.description}</div></div>}
@@ -316,7 +318,7 @@ export default function MaterialLibrary() {
         </aside>
       </>)}
 
-      <Modal open={uploadMode !== null} onCancel={() => setUploadMode(null)} footer={null} width={480} destroyOnClose title={uploadMode === 'cover' ? translate("上传商品主图") : translate("上传素材")}>
+      <Modal closable={{ 'aria-label': translate("关闭") }} open={uploadMode !== null} onCancel={() => setUploadMode(null)} footer={null} width={480} destroyOnClose title={<ModalTitle>{uploadMode === 'cover' ? translate("上传商品主图") : translate("上传素材")}</ModalTitle>}>
         <div style={{textAlign:'center',padding:'16px 0'}}>
           {uploadMode === 'cover' ? (
             <Upload.Dragger name="image" multiple={false} accept="image/*" showUploadList={false} beforeUpload={handleCoverUpload}>

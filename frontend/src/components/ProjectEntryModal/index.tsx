@@ -1,3 +1,4 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
 import { t as translate, useLanguage } from '@/i18n';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -110,8 +111,9 @@ export default function ProjectEntryModal({ open, project, onClose }: Props) {
 
   return (
     <Modal
+      closable={{ 'aria-label': translate("关闭") }}
       open={open}
-      title={project ? translate("项目：{0}", { "0": project.name }) : translate("项目工作台")}
+      title={<ModalTitle>{project ? translate("项目：{0}", { "0": project.name }) : translate("项目工作台")}</ModalTitle>}
       onCancel={onClose}
       footer={null}
       width={520}

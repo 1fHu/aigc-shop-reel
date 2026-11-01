@@ -1,3 +1,5 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
+import { demoText } from '@/i18n/demoContent';
 import { t as translate, useLanguage } from '@/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -44,7 +46,7 @@ function relativeTime(iso: string): string {
  *    （目前先用 sessionStorage 存，下次进 ScriptStudio 时读出来）
  */
 export default function GeneBank() {
-  useLanguage();
+  const language = useLanguage();
   const CATEGORY_OPTIONS: { value: CategoryFilter; label: string }[] = [
     { value: 'all',         label: translate("全部") },
     { value: 'beauty',      label: translate("美妆") },
@@ -100,17 +102,18 @@ export default function GeneBank() {
 
   // 客户端筛选（数据量小，无需重新请求）
   const filtered = useMemo(() => {
+    void language;
     const kw = keyword.trim().toLowerCase();
     return cards.filter((c) => {
       if (category !== 'all' && c.analysis_report.category !== category) return false;
       if (platform !== 'all' && c.platform !== platform) return false;
       if (kw) {
-        const blob = `${c.title} ${JSON.stringify(c.analysis_report)}`.toLowerCase();
+        const blob = `${c.title} ${demoText(c.id, c.title)} ${JSON.stringify(c.analysis_report)} ${c.analysis_report.style_tags.map((tag) => translate(tag)).join(" ")}`.toLowerCase();
         if (!blob.includes(kw)) return false;
       }
       return true;
     });
-  }, [cards, category, platform, keyword]);
+  }, [cards, category, platform, keyword, language]);
 
   // 用户在抽屉点"应用因子并去剧本" → 暂存待应用因子并弹出项目选择
   const handleApplyFactors = (cardId: string, factors: Partial<ViralRecommendedFactors>) => {
@@ -221,7 +224,7 @@ export default function GeneBank() {
               onClick={() => setOpenId(card.id)}
             >
               <div className={styles.cardCover}>
-                <img src={card.thumbnail_url} alt={card.title} />
+                <img src={card.thumbnail_url} alt={demoText(card.id, card.title)} />
                 <span className={styles.platformPill}>
                   {translate(VIRAL_PLATFORM_LABELS[card.platform])}
                 </span>
@@ -232,7 +235,7 @@ export default function GeneBank() {
                 )}
               </div>
               <div className={styles.cardBody}>
-                <h3 className={styles.cardTitle}>{card.title}</h3>
+                <h3 className={styles.cardTitle}>{demoText(card.id, card.title)}</h3>
                 <div className={styles.cardChips}>
                   <span className={`${styles.cardChip} ${styles.cardChipBrand}`}>
                     <FireOutlined /> {card.analysis_report.shot_count} {translate("镜")}
@@ -261,8 +264,9 @@ export default function GeneBank() {
 
       {/* 选择目标项目：应用因子需绑定到某个项目的剧本生成 */}
       <Modal
+      closable={{ 'aria-label': translate("关闭") }}
         open={pendingApply !== null}
-        title={translate("选择要应用到的项目")}
+        title={<ModalTitle>{translate("选择要应用到的项目")}</ModalTitle>}
         onCancel={() => setPendingApply(null)}
         footer={null}
         destroyOnClose

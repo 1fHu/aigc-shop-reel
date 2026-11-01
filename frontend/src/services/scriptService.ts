@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import api from './api';
 import type {
   FactorGroup,
@@ -85,7 +86,7 @@ export const scriptService = {
     });
 
     if (!resp.ok || !resp.body) {
-      throw new Error(`Generate failed: ${resp.status}`);
+      throw new Error(`${t('剧本生成失败')} (HTTP ${resp.status})`);
     }
 
     const reader = resp.body.getReader();

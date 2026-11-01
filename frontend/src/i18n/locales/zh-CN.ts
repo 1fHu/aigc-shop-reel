@@ -35,6 +35,7 @@ const zhCN: Record<keyof typeof enUS, string> = {
   "TIKTOK READY": "适合 TikTok",
   "PRODUCT": "商品",
   "AI STUDIO": "AI 工作室",
+  'Scene {0}': '分镜 {0}',
   high: '高', medium: '中', low: '低',
 };
 export default zhCN;

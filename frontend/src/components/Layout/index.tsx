@@ -165,7 +165,7 @@ export default function AppLayout() {
         </nav>
 
         <button type="button" className={styles.createBtn} onClick={() => setCreateOpen(true)}>
-          <PlusOutlined /> {!collapsed && 'Create New Video'}
+          <PlusOutlined /> {!collapsed && translate('Create New Video')}
         </button>
 
       </aside>

@@ -1,3 +1,4 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
 import { t as translate, useLanguage, useFormLanguage } from '@/i18n';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -57,8 +58,9 @@ export default function NewProjectModal({ open, onClose, onCreated }: Props) {
 
   return (
     <Modal
+      closable={{ 'aria-label': translate("关闭") }}
       open={open}
-      title={translate("新建项目")}
+      title={<ModalTitle>{translate("新建项目")}</ModalTitle>}
       onCancel={handleClose}
       footer={
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>

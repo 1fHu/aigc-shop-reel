@@ -1,3 +1,5 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
+import { demoText } from '@/i18n/demoContent';
 import { t as translate, useLanguage } from '@/i18n';
 import { useEffect, useState } from 'react';
 import { Drawer, Skeleton, Tag, Button } from 'antd';
@@ -74,7 +76,7 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
       open={open}
       onClose={onClose}
       width={520}
-      title={card ? card.title : translate("AI 拆解报告")}
+      title={<ModalTitle>{card ? demoText(card.id, card.title) : translate("AI 拆解报告")}</ModalTitle>}
       destroyOnClose
       placement="right"
     >
@@ -96,7 +98,7 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
                 </video>
               ) : (
                 <div className={styles.thumbBox}>
-                  <img src={card.thumbnail_url} alt={card.title} />
+                  <img src={card.thumbnail_url} alt={demoText(card.id, card.title)} />
                 </div>
               )}
               <span className={styles.platformPill}>
@@ -124,7 +126,7 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
             <div className={styles.sectionTitle}>
               <ThunderboltOutlined /> {translate("Hook 手法")}
             </div>
-            <p className={styles.sectionText}>{report?.hook}</p>
+            <p className={styles.sectionText}>{report?.hook ? translate(report.hook) : ''}</p>
           </div>
 
           {report?.selling_points && report.selling_points.length > 0 && (
@@ -142,7 +144,7 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
             <div className={styles.sectionTitle}>
               <ClockCircleOutlined /> {translate("节奏 ·")} {report?.shot_count} {translate("个分镜")}
             </div>
-            <p className={styles.sectionText}>{report?.rhythm}</p>
+            <p className={styles.sectionText}>{report?.rhythm ? translate(report.rhythm) : ''}</p>
           </div>
 
           <div className={styles.reportSection}>

@@ -1,3 +1,4 @@
+import { useLanguageStore } from '@/stores/languageStore';
 import { metricLabel } from '@/i18n/displayText';
 import { demoText } from '@/i18n/demoContent';
 import { t as translate, useLanguage } from '@/i18n';
@@ -67,16 +68,16 @@ const METRIC_LABELS: Record<AnalyticsMetric, string> = {
 
 function formatNumber(n: number): string {
   if (n >= 100_000) return `${(n / 1000).toFixed(1)}k`;
-  return n.toLocaleString();
+  return n.toLocaleString(useLanguageStore.getState().language);
 }
 
 function formatCurrency(n: number): string {
   if (n >= 10_000) return `¥${(n / 1000).toFixed(1)}k`;
-  return `¥${n.toLocaleString()}`;
+  return `¥${n.toLocaleString(useLanguageStore.getState().language)}`;
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
+  return new Date(iso).toLocaleDateString(useLanguageStore.getState().language);
 }
 
 /**
@@ -268,7 +269,7 @@ export default function Analytics() {
               <tr>
                 <th>{translate("生成因子")}</th>
                 {metricKeys.map((m) => (
-                  <th key={m}>{METRIC_LABELS[m]}</th>
+                  <th key={m}>{translate(METRIC_LABELS[m])}</th>
                 ))}
               </tr>
             </thead>

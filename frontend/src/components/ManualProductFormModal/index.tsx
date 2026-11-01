@@ -1,3 +1,4 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
 import { t as translate, useLanguage, useFormLanguage } from '@/i18n';
 import { useState } from 'react';
 import { Modal, Form, Input, Select, Button, App, Space } from 'antd';
@@ -102,8 +103,9 @@ export default function ManualProductFormModal({
 
   return (
     <Modal
+      closable={{ 'aria-label': translate("关闭") }}
       open={open}
-      title={initialValue ? translate("编辑商品信息") : translate("手动填写商品信息")}
+      title={<ModalTitle>{initialValue ? translate("编辑商品信息") : translate("手动填写商品信息")}</ModalTitle>}
       onCancel={handleClose}
       width={560}
       destroyOnClose

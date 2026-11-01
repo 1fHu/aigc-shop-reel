@@ -1,3 +1,4 @@
+import { formatDate } from '@/i18n/displayText';
 import { t as translate, useLanguage } from '@/i18n';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -209,7 +210,7 @@ const ViralAnalyzer: React.FC = () => {
                       description={
                         <div className="card-description">
                           {item.duration && <span>{item.duration}{translate("秒")}</span>}
-                          <span>{new Date(item.created_at).toLocaleDateString()}</span>
+                          <span>{formatDate(item.created_at)}</span>
                         </div>
                       }
                     />

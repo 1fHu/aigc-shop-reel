@@ -1,20 +1,16 @@
+import { useLanguageStore } from '@/stores/languageStore';
+import { t as translate, useLanguage } from '@/i18n';
 import { CheckCircleFilled } from '@ant-design/icons';
 import { Select, Switch, Slider, Input, Tag } from 'antd';
 import type { FactorGroup, FactorState, FactorKey, ScriptHistoryEntry } from '@/types';
 import styles from './ScriptStudio.module.css';
 
-const FONT_FAMILIES = [
-  { value: 'Microsoft YaHei', label: '微软雅黑' },
-  { value: 'SimHei', label: '黑体' },
-  { value: 'PingFang SC', label: '苹方' },
-  { value: 'KaiTi', label: '楷体' },
-  { value: 'Arial', label: 'Arial' },
-];
+
 
 const PRESET_COLORS = ['#FFFFFF', '#FFD700', '#00FF88', '#FF6B6B', '#64B5F6', '#FF9800'];
 
 /** 每个因子维度都附带的「自定义」选项标签 */
-const CUSTOM_LABEL = '自定义';
+
 
 interface FactorPanelProps {
   factors: FactorGroup[];
@@ -62,12 +58,22 @@ export default function FactorPanel({
   customRequirement,
   onCustomRequirementChange,
 }: FactorPanelProps) {
+  useLanguage();
+  const FONT_FAMILIES = [
+    { value: 'Microsoft YaHei', label: translate("微软雅黑") },
+    { value: 'SimHei', label: translate("黑体") },
+    { value: 'PingFang SC', label: translate("苹方") },
+    { value: 'KaiTi', label: translate("楷体") },
+    { value: 'Arial', label: 'Arial' },
+  ];
+  const CUSTOM_LABEL = translate("自定义");
+
   return (
     <div className={styles.factors}>
       <div className={styles.colHead}>
-        <span className={styles.colTitle}>创作因子</span>
+        <span className={styles.colTitle}>{translate("创作因子")}</span>
         <Tag color={isDefault ? 'default' : 'blue'} style={{ marginInlineEnd: 0 }}>
-          {isDefault ? '默认因子' : '自定义因子'}
+          {isDefault ? translate("默认因子") : translate("自定义因子")}
         </Tag>
         <span style={{
           fontSize: 11,
@@ -77,7 +83,7 @@ export default function FactorPanel({
           gap: 4,
         }}>
           <CheckCircleFilled style={{ fontSize: 12 }} />
-          {applying ? '应用中' : '已应用'}
+          {applying ? translate("应用中") : translate("已应用")}
         </span>
       </div>
       <div className={styles.factorsBody}>
@@ -87,7 +93,7 @@ export default function FactorPanel({
           const isCustom = current !== undefined && !group.options.includes(current);
           return (
             <div key={group.key} className={styles.factorGroupBlock}>
-              <div className={styles.factorGroupLabel}>{group.label}</div>
+              <div className={styles.factorGroupLabel}>{translate(group.label)}</div>
               <div className={styles.factorChips}>
                 {group.options.map((opt) => (
                   <button
@@ -96,7 +102,7 @@ export default function FactorPanel({
                     onClick={() => onFactorChange(group.key, opt)}
                     disabled={applying}
                   >
-                    {opt}
+                    {translate(opt)}
                   </button>
                 ))}
                 <button
@@ -114,7 +120,7 @@ export default function FactorPanel({
                   size="small"
                   value={current}
                   onChange={(e) => onFactorChange(group.key, e.target.value)}
-                  placeholder={`输入自定义${group.label}…`}
+                  placeholder={translate("输入自定义{0}…", { "0": translate(group.label) })}
                   disabled={applying}
                   style={{ marginTop: 6 }}
                   allowClear
@@ -127,17 +133,17 @@ export default function FactorPanel({
         {history.length > 0 && (
           <>
             <div className={styles.factorDivider} />
-            <div className={styles.factorGroupLabel}>操作历史</div>
+            <div className={styles.factorGroupLabel}>{translate("操作历史")}</div>
             {history.map((entry) => (
               <div key={entry.id} className={styles.historyEntry}>
                 <span className={styles.historyTime}>
-                  {new Date(entry.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(entry.timestamp).toLocaleTimeString(useLanguageStore.getState().language, { hour: '2-digit', minute: '2-digit' })}
                 </span>
                 <div>
-                  <div className={styles.historyMsg}>{entry.message}</div>
+                  <div className={styles.historyMsg}>{translate(entry.message)}</div>
                   {entry.affected_scene_ids.length > 0 && (
                     <div className={styles.historyAffected}>
-                      affected: {entry.affected_scene_ids.join(' / ')}
+                      {translate("affected:")}{entry.affected_scene_ids.join(' / ')}
                     </div>
                   )}
                 </div>
@@ -147,7 +153,7 @@ export default function FactorPanel({
         )}
 
         <div className={styles.factorDivider} />
-        <div className={styles.factorGroupLabel}>视频配音</div>
+        <div className={styles.factorGroupLabel}>{translate("视频配音")}</div>
         <div style={{ marginBottom: 12 }}>
           <Select
             value={voiceId}
@@ -155,21 +161,21 @@ export default function FactorPanel({
             style={{ width: '100%', marginBottom: 8 }}
             options={[
               { value: 'zh_female_vv_uranus_bigtts', label: 'vivi 2.0' },
-              { value: 'zh_female_xiaohe_uranus_bigtts', label: '小何' },
-              { value: 'zh_male_taocheng_uranus_bigtts', label: '小天' },
-              { value: 'zh_male_m191_uranus_bigtts', label: '云舟' },
+              { value: 'zh_female_xiaohe_uranus_bigtts', label: translate("小何") },
+              { value: 'zh_male_taocheng_uranus_bigtts', label: translate("小天") },
+              { value: 'zh_male_m191_uranus_bigtts', label: translate("云舟") },
             ]}
           />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-            <span style={{ color: '#6B7280', fontSize: 13 }}>字幕</span>
+            <span style={{ color: '#6B7280', fontSize: 13 }}>{translate("字幕")}</span>
             <Switch size="small" checked={subtitleEnabled} onChange={onSubtitleChange} />
           </div>
           {subtitleEnabled && (
             <>
-              <div className={styles.factorGroupLabel} style={{ marginTop: 0 }}>字幕样式</div>
+              <div className={styles.factorGroupLabel} style={{ marginTop: 0 }}>{translate("字幕样式")}</div>
               <div style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#9CA3AF' }}>
-                  <span>字体大小</span>
+                  <span>{translate("字体大小")}</span>
                   <span>{subtitleFontSize}px</span>
                 </div>
                 <Slider
@@ -181,7 +187,7 @@ export default function FactorPanel({
               </div>
               <div style={{ marginBottom: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: '#9CA3AF' }}>
-                  <span>描边粗细</span>
+                  <span>{translate("描边粗细")}</span>
                   <span>{subtitleOutline.toFixed(1)}</span>
                 </div>
                 <Slider
@@ -192,7 +198,7 @@ export default function FactorPanel({
                 />
               </div>
               <div style={{ marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: '#9CA3AF' }}>字体颜色</span>
+                <span style={{ fontSize: 12, color: '#9CA3AF' }}>{translate("字体颜色")}</span>
                 <div style={{ display: 'flex', gap: 6, marginTop: 4, flexWrap: 'wrap' }}>
                   {PRESET_COLORS.map((c) => (
                     <button
@@ -207,7 +213,7 @@ export default function FactorPanel({
                 </div>
               </div>
               <div style={{ marginBottom: 8 }}>
-                <span style={{ fontSize: 12, color: '#9CA3AF' }}>字体样式</span>
+                <span style={{ fontSize: 12, color: '#9CA3AF' }}>{translate("字体样式")}</span>
                 <Select
                   value={subtitleFontFamily}
                   onChange={onSubtitleFontFamilyChange}
@@ -229,18 +235,18 @@ export default function FactorPanel({
                   textShadow: `0 0 ${subtitleOutline}px rgba(0,0,0,0.8), 0 0 ${subtitleOutline * 1.5}px rgba(0,0,0,0.6)`,
                   fontWeight: 600,
                 }}>
-                  参考字幕
+                  {translate("参考字幕")}
                 </span>
               </div>
             </>
           )}
           <div className={styles.factorDivider} style={{ marginTop: 8 }} />
-          <div className={styles.factorGroupLabel}>自定义需求</div>
+          <div className={styles.factorGroupLabel}>{translate("自定义需求")}</div>
           <div style={{ marginBottom: 12 }}>
             <Input.TextArea
               value={customRequirement}
               onChange={(e) => onCustomRequirementChange(e.target.value)}
-              placeholder="描述你对视频整体的额外要求，如风格、色调、节奏、特效等…"
+              placeholder={translate("描述你对视频整体的额外要求，如风格、色调、节奏、特效等…")}
               rows={3}
               style={{ fontSize: 13 }}
             />

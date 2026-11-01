@@ -1,21 +1,37 @@
-import { useEffect, useRef } from 'react';
-import type { FormInstance } from 'antd';
+import { ModalTitle } from '../components/LanguageSwitcher';
+import { createElement, useEffect, useRef } from 'react';
+import type { FormInstance, Modal, ModalFuncProps } from 'antd';
 import { useLanguageStore } from '../stores/languageStore';
-import enUS from './locales/en-US';
-import zhCN from './locales/zh-CN';
+import { translateText } from './translate';
 
 export function useLanguage() {
   return useLanguageStore((state) => state.language);
 }
 
-const sources = new Map(Object.entries(enUS).map(([source, english]) => [english, source]));
-
-/** Read the current language at call time, including in async callbacks and API errors. */
+/** Resolve at call time so async completions use the current interface language. */
 export function t(source: string, values: Record<string, string | number> = {}): string {
-  const key = sources.get(source) ?? source;
-  const dictionary: Record<string, string> = useLanguageStore.getState().language === 'zh-CN' ? zhCN : enUS;
-  const text = dictionary[key] ?? source;
-  return text.replace(/\{(\w+)\}/g, (match, name: string) => String(values[name] ?? match));
+  return translateText(source, useLanguageStore.getState().language, values);
+}
+
+/** Static confirm dialogs need an explicit update when the shared language changes. */
+export function confirmLocalized(modal: { confirm: typeof Modal.confirm }, options: ModalFuncProps) {
+  let unsubscribe = () => {};
+  const localized = () => Object.fromEntries(
+    ['title', 'content', 'okText', 'cancelText'].map((key) => {
+      const value = options[key as keyof ModalFuncProps];
+      const text = typeof value === 'string' ? t(value) : value;
+      return [key, key === 'title' ? createElement(ModalTitle, null, text) : text];
+    }),
+  );
+  const instance = modal.confirm({
+    ...options,
+    ...localized(),
+    afterClose: () => { unsubscribe(); options.afterClose?.(); },
+  });
+  unsubscribe = useLanguageStore.subscribe((state, previous) => {
+    if (state.language !== previous.language) instance.update(localized());
+  });
+  return instance;
 }
 
 /** Update existing validation errors without validating, submitting, or resetting inputs. */

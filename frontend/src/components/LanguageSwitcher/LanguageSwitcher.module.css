@@ -1,2 +1,4 @@
 .switcher { flex-shrink: 0; }
-.floating { position: fixed; top: 16px; right: 20px; z-index: 1000; }
+.floating { position: fixed; top: 16px; right: 20px; z-index: 1100; }
+.modalTitle { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-right: 28px; }
+.modalTitle > span { min-width: 0; overflow-wrap: anywhere; }

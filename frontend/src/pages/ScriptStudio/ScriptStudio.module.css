@@ -241,10 +241,10 @@
 }
 
 /* Drag handle 鼠标指针 */
-.sceneCardIcon[aria-label="拖拽排序"] {
+.sceneCardIcon[data-drag-handle="true"] {
   cursor: grab;
 }
-.sceneCardIcon[aria-label="拖拽排序"]:active {
+.sceneCardIcon[data-drag-handle="true"]:active {
   cursor: grabbing;
 }
 

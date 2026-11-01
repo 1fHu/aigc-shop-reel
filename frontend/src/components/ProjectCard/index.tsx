@@ -1,4 +1,4 @@
-import { t as translate, useLanguage } from '@/i18n';
+import { t as translate, useLanguage, confirmLocalized } from '@/i18n';
 import { useNavigate } from 'react-router-dom';
 import { Tag, Dropdown, App } from 'antd';
 import { ClockCircleOutlined, EyeOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -60,7 +60,7 @@ export default function ProjectCard({
   const isGenerating = project.status === 'script_pending' || project.status === 'video_pending' || project.status === 'in_progress';
 
   const handleDelete = () => {
-    modal.confirm({
+    confirmLocalized(modal, {
       title: translate("确认删除"),
       content: translate("确定要删除项目「{0}」吗？删除后不可恢复。", { "0": project.name }),
       okText: translate("确认删除"),
