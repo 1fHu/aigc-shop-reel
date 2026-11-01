@@ -1,3 +1,4 @@
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Button, Input, App } from 'antd';
@@ -66,6 +67,7 @@ export default function ResetPassword() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: '1.1fr 1fr' }}>
+      <LanguageSwitcher floating />
       {/* ============ 左：品牌秀 ============ */}
       <div className={styles.brandPanel}>
         <div className={styles.aurora} />

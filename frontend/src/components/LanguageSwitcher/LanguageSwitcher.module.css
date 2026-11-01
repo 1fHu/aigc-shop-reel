@@ -1,0 +1,2 @@
+.switcher { flex-shrink: 0; }
+.floating { position: fixed; top: 16px; right: 20px; z-index: 1000; }

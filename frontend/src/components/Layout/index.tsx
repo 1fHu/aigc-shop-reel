@@ -1,3 +1,4 @@
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Dropdown, App, type MenuProps } from 'antd';
@@ -190,6 +191,7 @@ export default function AppLayout() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <LanguageSwitcher />
             <button className={styles.upgrade} onClick={() => navigate('/subscription')}>Upgrade Pro</button>
             <button className={styles.iconBtn} aria-label="通知">
               <BellOutlined />

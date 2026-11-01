@@ -1,3 +1,4 @@
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { Button, Input, App } from 'antd';
@@ -124,6 +125,7 @@ export default function Register() {
 
   return (
     <div style={{ minHeight: '100vh', display: 'grid', gridTemplateColumns: '1.1fr 1fr' }}>
+      <LanguageSwitcher floating />
       {leftPanel}
 
       <div className={styles.formPanel}>
