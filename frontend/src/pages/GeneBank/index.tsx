@@ -1,3 +1,4 @@
+import { t as translate, useLanguage } from '@/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Input, Skeleton, App, Modal, List, Button, Empty, Spin } from 'antd';
@@ -17,33 +18,18 @@ import styles from './GeneBank.module.css';
 
 type CategoryFilter = 'all' | 'beauty' | 'electronics' | 'sports' | 'home' | 'food' | 'fashion' | 'mother_baby' | 'pet';
 
-const CATEGORY_OPTIONS: { value: CategoryFilter; label: string }[] = [
-  { value: 'all',         label: '全部' },
-  { value: 'beauty',      label: '美妆' },
-  { value: 'electronics', label: '电子产品' },
-  { value: 'sports',      label: '运动' },
-  { value: 'home',        label: '家居' },
-  { value: 'food',        label: '食品' },
-  { value: 'fashion',     label: '服饰' },
-  { value: 'mother_baby', label: '母婴' },
-  { value: 'pet',         label: '宠物' },
-];
 
-const PLATFORM_OPTIONS: Array<{ value: ViralPlatform | 'all'; label: string }> = [
-  { value: 'all',       label: '全部平台' },
-  { value: 'tiktok',    label: 'TikTok' },
-  { value: 'youtube',   label: 'YouTube' },
-  { value: 'instagram', label: 'Instagram' },
-];
+
+
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const day = Math.floor(diff / 86_400_000);
-  if (day === 0) return '今天';
-  if (day === 1) return '昨天';
-  if (day < 7) return `${day} 天前`;
-  if (day < 30) return `${Math.floor(day / 7)} 周前`;
-  return `${Math.floor(day / 30)} 个月前`;
+  if (day === 0) return translate("今天");
+  if (day === 1) return translate("昨天");
+  if (day < 7) return translate("{0} 天前", { "0": day });
+  if (day < 30) return translate("{0} 周前", { "0": Math.floor(day / 7) });
+  return translate("{0} 个月前", { "0": Math.floor(day / 30) });
 }
 
 /**
@@ -58,6 +44,25 @@ function relativeTime(iso: string): string {
  *    （目前先用 sessionStorage 存，下次进 ScriptStudio 时读出来）
  */
 export default function GeneBank() {
+  useLanguage();
+  const CATEGORY_OPTIONS: { value: CategoryFilter; label: string }[] = [
+    { value: 'all',         label: translate("全部") },
+    { value: 'beauty',      label: translate("美妆") },
+    { value: 'electronics', label: translate("电子产品") },
+    { value: 'sports',      label: translate("运动") },
+    { value: 'home',        label: translate("家居") },
+    { value: 'food',        label: translate("食品") },
+    { value: 'fashion',     label: translate("服饰") },
+    { value: 'mother_baby', label: translate("母婴") },
+    { value: 'pet',         label: translate("宠物") },
+  ];
+  const PLATFORM_OPTIONS: Array<{ value: ViralPlatform | 'all'; label: string }> = [
+    { value: 'all',       label: translate("全部平台") },
+    { value: 'tiktok',    label: 'TikTok' },
+    { value: 'youtube',   label: 'YouTube' },
+    { value: 'instagram', label: 'Instagram' },
+  ];
+
   const navigate = useNavigate();
   const { message } = App.useApp();
 
@@ -127,7 +132,7 @@ export default function GeneBank() {
       applied_at: new Date().toISOString(),
     }));
     setPendingApply(null);
-    message.success('已应用因子，正在进入剧本工作台…');
+    message.success(translate("已应用因子，正在进入剧本工作台…"));
     navigate(`/projects/${projectId}/script`);
   };
 
@@ -136,18 +141,18 @@ export default function GeneBank() {
       {/* Header */}
       <div className={styles.header}>
         <div className={styles.headerLeft}>
-          <h1 className={styles.title}>爆款模板库</h1>
+          <h1 className={styles.title}>{translate("爆款模板库")}</h1>
           <p className={styles.subtitle}>
-            探索经过 AI 智能解析的优质带货视频，借鉴 Hook 手法 / 节奏 / 视觉风格，一键生成同款剧本
+            {translate("探索经过 AI 智能解析的优质带货视频，借鉴 Hook 手法 / 节奏 / 视觉风格，一键生成同款剧本")}
             <br />
-            使用模板请前往项目分镜编辑选择模板
+            {translate("使用模板请前往项目分镜编辑选择模板")}
           </p>
         </div>
         <div className={styles.searchWrap}>
           <Input
             size="large"
             prefix={<SearchOutlined style={{ color: '#9CA3AF' }} />}
-            placeholder="搜索标题 / 卖点 / 风格..."
+            placeholder={translate("搜索标题 / 卖点 / 风格...")}
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             allowClear
@@ -158,7 +163,7 @@ export default function GeneBank() {
       {/* Filters */}
       <div className={styles.filters}>
         <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>品类</span>
+          <span className={styles.filterLabel}>{translate("品类")}</span>
           {CATEGORY_OPTIONS.map((c) => (
             <button
               key={c.value}
@@ -174,7 +179,7 @@ export default function GeneBank() {
         <div className={styles.filterDivider} />
 
         <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>平台</span>
+          <span className={styles.filterLabel}>{translate("平台")}</span>
           {PLATFORM_OPTIONS.map((p) => (
             <button
               key={p.value}
@@ -200,8 +205,8 @@ export default function GeneBank() {
       {/* Empty */}
       {!loading && filtered.length === 0 && (
         <div className={styles.empty}>
-          <h3>没有匹配的爆款模板</h3>
-          <p>试试切换品类或平台筛选，或清空搜索词</p>
+          <h3>{translate("没有匹配的爆款模板")}</h3>
+          <p>{translate("试试切换品类或平台筛选，或清空搜索词")}</p>
         </div>
       )}
 
@@ -218,7 +223,7 @@ export default function GeneBank() {
               <div className={styles.cardCover}>
                 <img src={card.thumbnail_url} alt={card.title} />
                 <span className={styles.platformPill}>
-                  {VIRAL_PLATFORM_LABELS[card.platform]}
+                  {translate(VIRAL_PLATFORM_LABELS[card.platform])}
                 </span>
                 {card.performance_score !== null && (
                   <span className={styles.scorePill}>
@@ -230,10 +235,10 @@ export default function GeneBank() {
                 <h3 className={styles.cardTitle}>{card.title}</h3>
                 <div className={styles.cardChips}>
                   <span className={`${styles.cardChip} ${styles.cardChipBrand}`}>
-                    <FireOutlined /> {card.analysis_report.shot_count} 镜
+                    <FireOutlined /> {card.analysis_report.shot_count} {translate("镜")}
                   </span>
                   {card.analysis_report.style_tags.slice(0, 2).map((t) => (
-                    <span key={t} className={styles.cardChip}>{t}</span>
+                    <span key={t} className={styles.cardChip}>{translate(t)}</span>
                   ))}
                 </div>
                 <div className={styles.cardMeta}>
@@ -257,7 +262,7 @@ export default function GeneBank() {
       {/* 选择目标项目：应用因子需绑定到某个项目的剧本生成 */}
       <Modal
         open={pendingApply !== null}
-        title="选择要应用到的项目"
+        title={translate("选择要应用到的项目")}
         onCancel={() => setPendingApply(null)}
         footer={null}
         destroyOnClose
@@ -267,9 +272,9 @@ export default function GeneBank() {
             <Spin />
           </div>
         ) : projects.length === 0 ? (
-          <Empty description="还没有项目，先去创建一个">
+          <Empty description={translate("还没有项目，先去创建一个")}>
             <Button type="primary" onClick={() => navigate('/projects')}>
-              去创建项目
+              {translate("去创建项目")}
             </Button>
           </Empty>
         ) : (
@@ -280,13 +285,13 @@ export default function GeneBank() {
               <List.Item
                 actions={[
                   <Button key="pick" type="link" onClick={() => handleChooseProject(p.id)}>
-                    应用到此项目 →
+                    {translate("应用到此项目 →")}
                   </Button>,
                 ]}
               >
                 <List.Item.Meta
                   title={p.name}
-                  description={`${p.video_count} 个视频 · 更新于 ${relativeTime(p.updated_at)}`}
+                  description={translate("{0} 个视频 · 更新于 {1}", { "0": p.video_count, "1": relativeTime(p.updated_at) })}
                 />
               </List.Item>
             )}

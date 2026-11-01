@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 /**
  * 商品（Product）相关类型
  * 严格按后端 dto/update-product.dto.ts 对齐（后端 v1.1+）
@@ -27,7 +28,7 @@ export const PRODUCT_CATEGORY_LABELS: Record<ProductCategory, string> = {
 /** 安全展示 category：枚举值显示中文，否则原样返回（兜底 legacy 数据） */
 export function categoryLabel(value: string | undefined | null): string {
   if (!value) return '';
-  return (PRODUCT_CATEGORY_LABELS as Record<string, string>)[value] || value;
+  return t((PRODUCT_CATEGORY_LABELS as Record<string, string>)[value] || value);
 }
 
 /**

@@ -1,3 +1,6 @@
+import { metricLabel } from '@/i18n/displayText';
+import { demoText } from '@/i18n/demoContent';
+import { t as translate, useLanguage } from '@/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button, Skeleton } from 'antd';
@@ -45,10 +48,10 @@ const STAT_ICON_MAP: Record<StatCardData['key'], React.ReactNode> = {
 
 function greeting(): string {
   const h = new Date().getHours();
-  if (h < 6) return '深夜好';
-  if (h < 12) return '早安';
-  if (h < 18) return '下午好';
-  return '晚上好';
+  if (h < 6) return translate("深夜好");
+  if (h < 12) return translate("早安");
+  if (h < 18) return translate("下午好");
+  return translate("晚上好");
 }
 
 function progressByStatus(status: ProjectListItem['status']): number | undefined {
@@ -59,6 +62,9 @@ function progressByStatus(status: ProjectListItem['status']): number | undefined
 }
 
 export default function Dashboard() {
+  useLanguage();
+
+
   const navigate = useNavigate();
   const user = useAuthStore(selectUser);
 
@@ -127,10 +133,10 @@ export default function Dashboard() {
             {greeting()}，{user?.nickname || 'VidCrafter'}{' '}
             <span style={{ display: 'inline-block' }}>👋</span>
           </h1>
-          <p className={styles.headerSubtitle}>准备好为您的 TikTok 商店创作下一个爆款视频了吗？</p>
+          <p className={styles.headerSubtitle}>{translate("准备好为您的 TikTok 商店创作下一个爆款视频了吗？")}</p>
         </div>
         <div className={styles.headerActions}>
-          <Button icon={<PlusOutlined />} onClick={() => setNewProjectOpen(true)}>新建项目</Button>
+          <Button icon={<PlusOutlined />} onClick={() => setNewProjectOpen(true)}>{translate("新建项目")}</Button>
         </div>
       </div>
 
@@ -141,7 +147,7 @@ export default function Dashboard() {
             key={s.key}
             icon={STAT_ICON_MAP[s.key]}
             variant={STAT_VARIANT_MAP[s.key]}
-            label={s.label}
+            label={metricLabel(s.key, s.label)}
             value={s.value}
             trend={s.trend}
             trendDir={s.trend_dir}
@@ -155,8 +161,8 @@ export default function Dashboard() {
         {/* Recent projects */}
         <div>
           <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}>最近项目</h2>
-            <button className={styles.viewAll} onClick={() => navigate('/projects')}>查看全部 →</button>
+            <h2 className={styles.sectionTitle}>{translate("最近项目")}</h2>
+            <button className={styles.viewAll} onClick={() => navigate('/projects')}>{translate("查看全部 →")}</button>
           </div>
           <div className={styles.recentGrid}>
             {recentProjects.length > 0 ? (
@@ -171,7 +177,7 @@ export default function Dashboard() {
               ))
             ) : (
               <div style={{ gridColumn: '1 / -1', color: '#6B7280', fontSize: 14 }}>
-                暂无最近项目
+                {translate("暂无最近项目")}
               </div>
             )}
           </div>
@@ -180,10 +186,10 @@ export default function Dashboard() {
         {/* Trend column */}
         <div>
           <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}>性能趋势</h2>
+            <h2 className={styles.sectionTitle}>{translate("性能趋势")}</h2>
             <div className={styles.trendLegend}>
-              <span><span className={styles.legendDot} style={{ background: '#4648D4' }} />生成数</span>
-              <span><span className={styles.legendDot} style={{ background: '#0EA5E9' }} />观看量</span>
+              <span><span className={styles.legendDot} style={{ background: '#4648D4' }} />{translate("生成数")}</span>
+              <span><span className={styles.legendDot} style={{ background: '#0EA5E9' }} />{translate("观看量")}</span>
             </div>
           </div>
 
@@ -200,8 +206,8 @@ export default function Dashboard() {
                 <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fontSize: 10, fill: '#9CA3AF' }} axisLine={false} tickLine={false} width={32} />
                 <Tooltip contentStyle={{ borderRadius: 8, fontSize: 12, border: '1px solid #E5E7EB' }} />
-                <Line type="monotone" dataKey="生成数" stroke="url(#lineBrand)" strokeWidth={2.5} dot={false} />
-                <Line type="monotone" dataKey="观看量" stroke="#0EA5E9" strokeWidth={2} strokeDasharray="3 3" dot={false} />
+                <Line type="monotone" dataKey={translate("生成数")} stroke="url(#lineBrand)" strokeWidth={2.5} dot={false} />
+                <Line type="monotone" dataKey={translate("观看量")} stroke="#0EA5E9" strokeWidth={2} strokeDasharray="3 3" dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
@@ -213,8 +219,8 @@ export default function Dashboard() {
                 <RiseOutlined />
               </div>
               <div>
-                <div className={styles.highlightLabel}>最高转化日</div>
-                <div className={styles.highlightSubLabel}>{data.highlight.best_conversion.date}</div>
+                <div className={styles.highlightLabel}>{translate("最高转化日")}</div>
+                <div className={styles.highlightSubLabel}>{translate(data.highlight.best_conversion.date)}</div>
               </div>
               <div className={styles.highlightValue}>{data.highlight.best_conversion.rate}</div>
             </div>
@@ -224,8 +230,8 @@ export default function Dashboard() {
                 <ThunderboltOutlined />
               </div>
               <div>
-                <div className={styles.highlightLabel}>爆款潜力预测</div>
-                <div className={styles.highlightSubLabel}>{data.highlight.viral_prediction.category}</div>
+                <div className={styles.highlightLabel}>{translate("爆款潜力预测")}</div>
+                <div className={styles.highlightSubLabel}>{demoText('dashboard', data.highlight.viral_prediction.category)}</div>
               </div>
               <span
                 style={{
@@ -238,7 +244,7 @@ export default function Dashboard() {
                   textTransform: 'capitalize',
                 }}
               >
-                {data.highlight.viral_prediction.level}
+                {translate(data.highlight.viral_prediction.level)}
               </span>
             </div>
           </div>
@@ -246,11 +252,11 @@ export default function Dashboard() {
       </div>
 
       <footer className={styles.footer}>
-        <span>© 2026 VidCraft AI Workstation. 让视频营销更简单。</span>
+        <span>{translate("© 2026 VidCraft AI Workstation. 让视频营销更简单。")}</span>
         <div>
-          <a href="#">服务条款</a>
-          <a href="#">隐私政策</a>
-          <a href="#">联系我们</a>
+          <a href="#">{translate("服务条款")}</a>
+          <a href="#">{translate("隐私政策")}</a>
+          <a href="#">{translate("联系我们")}</a>
         </div>
       </footer>
 

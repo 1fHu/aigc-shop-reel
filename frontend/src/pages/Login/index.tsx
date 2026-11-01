@@ -1,3 +1,4 @@
+import { t as translate, useLanguage } from '@/i18n';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -25,6 +26,9 @@ import styles from './Login.module.css';
  * 已登录用户访问 /login 自动重定向到目标页。
  */
 export default function Login() {
+  useLanguage();
+
+
   const navigate = useNavigate();
   const location = useLocation();
   const { message } = App.useApp();
@@ -49,7 +53,7 @@ export default function Login() {
   const handleGuestLogin = async () => {
     try {
       await guestLogin();
-      message.success('已进入游客模式');
+      message.success(translate("已进入游客模式"));
     } catch {
       // 拦截器已统一 toast，这里仅兜底
     }
@@ -58,15 +62,15 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.username || !form.password) {
-      message.warning('请填写用户名和密码');
+      message.warning(translate("请填写用户名和密码"));
       return;
     }
     try {
       await login({ username: form.username, password: form.password });
-      message.success('登录成功');
+      message.success(translate("登录成功"));
     } catch (err: any) {
-      const msg = err?.response?.data?.msg || err?.message || '登录失败，请重试';
-      message.error(msg);
+      const msg = err?.response?.data?.msg || err?.message || translate("登录失败，请重试");
+      message.error(translate(msg));
     }
   };
 
@@ -96,8 +100,7 @@ export default function Login() {
                 VidCraft
               </div>
               <div className={styles.monoTagline} style={{ marginTop: 4 }}>
-                AIGC × TIKTOK COMMERCE
-              </div>
+                {translate("AIGC × TIKTOK COMMERCE")}</div>
             </div>
           </div>
 
@@ -149,7 +152,7 @@ export default function Login() {
                   padding: '2px 10px', borderRadius: 999, fontSize: 11, fontWeight: 500,
                 }}
               >
-                完播率 68.4%
+                {translate("完播率 68.4%")}
               </span>
             </div>
 
@@ -171,10 +174,9 @@ export default function Login() {
                 alt="Watch"
               />
               <span className={styles.hotPill} style={{ position: 'absolute', top: 8, right: 8 }}>
-                HOT CONTENT
-              </span>
+                {translate("HOT CONTENT")}</span>
               <div className={`${styles.statOverlay} ${styles.glass}`}>
-                <div className={styles.label}>本月生成数</div>
+                <div className={styles.label}>{translate("本月生成数")}</div>
                 <div className={styles.value} style={{ fontSize: 18 }}>1,284</div>
               </div>
             </div>
@@ -183,9 +185,9 @@ export default function Login() {
           {/* Feature pills */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {[
-              { icon: <ThunderboltFilled />, text: '30 分钟出片' },
-              { icon: <ControlOutlined />, text: '因子级干预' },
-              { icon: <LineChartOutlined />, text: '数据反哺创作' },
+              { icon: <ThunderboltFilled />, text: translate("30 分钟出片") },
+              { icon: <ControlOutlined />, text: translate("因子级干预") },
+              { icon: <LineChartOutlined />, text: translate("数据反哺创作") },
             ].map((p) => (
               <div
                 key={p.text}
@@ -221,8 +223,8 @@ export default function Login() {
             </span>
           </div>
 
-          <h1 className={styles.heading}>欢迎回来</h1>
-          <p className={styles.subheading}>登录开始你的 AI 视频创作之旅</p>
+          <h1 className={styles.heading}>{translate("欢迎回来")}</h1>
+          <p className={styles.subheading}>{translate("登录开始你的 AI 视频创作之旅")}</p>
 
           {/* Guest CTA */}
           <Button
@@ -242,23 +244,23 @@ export default function Login() {
               border: 'none',
             }}
           >
-            {loading ? '正在准备体验环境...' : '游客一键体验'}
+            {loading ? translate("正在准备体验环境...") : translate("游客一键体验")}
           </Button>
           <p style={{ textAlign: 'center', fontSize: 12, color: '#9CA3AF', marginTop: 12 }}>
-            无需注册 · 预置示例项目 · 即刻体验完整流程
+            {translate("无需注册 · 预置示例项目 · 即刻体验完整流程")}
           </p>
 
-          <div className={styles.dividerWithText}><span>或使用账号登录</span></div>
+          <div className={styles.dividerWithText}><span>{translate("或使用账号登录")}</span></div>
 
           <form onSubmit={handleSubmit}>
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>
-                用户名或邮箱
+                {translate("用户名或邮箱")}
               </label>
               <Input
                 size="large"
                 prefix={<UserOutlined style={{ color: '#9CA3AF' }} />}
-                placeholder="你的用户名"
+                placeholder={translate("你的用户名")}
                 value={form.username}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
                 autoComplete="username"
@@ -267,12 +269,12 @@ export default function Login() {
 
             <div style={{ marginBottom: 12 }}>
               <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>
-                密码
+                {translate("密码")}
               </label>
               <Input.Password
                 size="large"
                 prefix={<LockOutlined style={{ color: '#9CA3AF' }} />}
-                placeholder="至少 8 位"
+                placeholder={translate("至少 8 位")}
                 value={form.password}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 autoComplete="current-password"
@@ -284,21 +286,21 @@ export default function Login() {
                 checked={form.remember}
                 onChange={(e) => setForm({ ...form, remember: e.target.checked })}
               >
-                <span style={{ color: '#6B7280' }}>记住我</span>
+                <span style={{ color: '#6B7280' }}>{translate("记住我")}</span>
               </Checkbox>
-              <Link to="/forgot-password" style={{ color: '#4648D4' }}>忘记密码？</Link>
+              <Link to="/forgot-password" style={{ color: '#4648D4' }}>{translate("忘记密码？")}</Link>
             </div>
 
             <Button htmlType="submit" block size="large" loading={loading} style={{ height: 44, fontWeight: 600 }}>
-              {loading ? '登录中...' : '登录'}
+              {loading ? translate("登录中...") : translate("登录")}
             </Button>
           </form>
 
           <p style={{ textAlign: 'center', fontSize: 14, color: '#6B7280', marginTop: 24 }}>
-            还没有账号？<Link to="/register" style={{ color: '#4648D4', fontWeight: 500, marginLeft: 4 }}>立即注册</Link>
+            {translate("还没有账号？")}<Link to="/register" style={{ color: '#4648D4', fontWeight: 500, marginLeft: 4 }}>{translate("立即注册")}</Link>
           </p>
 
-          <p className={styles.footer}>© 2026 VidCraft · 服务条款 · 隐私政策</p>
+          <p className={styles.footer}>{translate("© 2026 VidCraft · 服务条款 · 隐私政策")}</p>
         </div>
       </div>
     </div>

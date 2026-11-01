@@ -1,3 +1,4 @@
+import { t as translate, useLanguage } from '@/i18n';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Upload, message, Card, List, Tag, Button, Empty, Spin } from 'antd';
@@ -9,6 +10,9 @@ import './index.css';
 const { Dragger } = Upload;
 
 const ViralAnalyzer: React.FC = () => {
+  useLanguage();
+
+
   const navigate = useNavigate();
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,7 +29,7 @@ const ViralAnalyzer: React.FC = () => {
       setVideos(data.items);
       setTotal(data.total);
     } catch {
-      message.error('加载失败');
+      message.error(translate("加载失败"));
     } finally {
       setLoading(false);
     }
@@ -45,12 +49,12 @@ const ViralAnalyzer: React.FC = () => {
     beforeUpload: (file) => {
       const isVideo = file.type.startsWith('video/');
       if (!isVideo) {
-        message.error('只能上传视频文件！');
+        message.error(translate("只能上传视频文件！"));
         return false;
       }
       const isLt500M = file.size / 1024 / 1024 < 500;
       if (!isLt500M) {
-        message.error('视频大小不能超过 500MB！');
+        message.error(translate("视频大小不能超过 500MB！"));
         return false;
       }
       return true;
@@ -59,13 +63,13 @@ const ViralAnalyzer: React.FC = () => {
       setUploading(true);
       try {
         const result = await viralAnalyzerService.upload(file as File);
-        message.success('上传成功，AI 正在分析中...');
+        message.success(translate("上传成功，AI 正在分析中..."));
         onSuccess?.(result);
         // 刷新列表
         loadVideos();
       } catch (error) {
         const msg = (error as { response?: { data?: { msg?: string } } }).response?.data?.msg;
-        message.error(msg || '上传失败');
+        message.error(msg || translate("上传失败"));
         onError?.(error as Error);
       } finally {
         setUploading(false);
@@ -78,10 +82,10 @@ const ViralAnalyzer: React.FC = () => {
     e.stopPropagation();
     try {
       await viralAnalyzerService.delete(id);
-      message.success('删除成功');
+      message.success(translate("删除成功"));
       loadVideos();
     } catch {
-      message.error('删除失败');
+      message.error(translate("删除失败"));
     }
   };
 
@@ -93,10 +97,10 @@ const ViralAnalyzer: React.FC = () => {
   // 状态标签
   const renderStatusTag = (status: string) => {
     const statusMap = {
-      pending: { color: 'default', text: '等待分析' },
-      analyzing: { color: 'processing', text: '分析中' },
-      completed: { color: 'success', text: '已完成' },
-      failed: { color: 'error', text: '分析失败' },
+      pending: { color: 'default', text: translate("等待分析") },
+      analyzing: { color: 'processing', text: translate("分析中") },
+      completed: { color: 'success', text: translate("已完成") },
+      failed: { color: 'error', text: translate("分析失败") },
     };
     const config = statusMap[status as keyof typeof statusMap];
     return <Tag color={config.color}>{config.text}</Tag>;
@@ -108,10 +112,10 @@ const ViralAnalyzer: React.FC = () => {
         <div className="header-content">
           <div className="title-section">
             <ThunderboltOutlined className="title-icon" />
-            <h1 className="page-title">优质视频分析器</h1>
+            <h1 className="page-title">{translate("优质视频分析器")}</h1>
           </div>
           <p className="page-description">
-            上传视频文件，AI 自动拆解创作手法，提取 Hook、卖点、节奏、风格等创作因子
+            {translate("上传视频文件，AI 自动拆解创作手法，提取 Hook、卖点、节奏、风格等创作因子")}
           </p>
         </div>
       </div>
@@ -124,10 +128,10 @@ const ViralAnalyzer: React.FC = () => {
               <InboxOutlined />
             </p>
             <p className="ant-upload-text">
-              {uploading ? '上传中...' : '点击或拖拽视频文件到此区域上传'}
+              {uploading ? translate("上传中...") : translate("点击或拖拽视频文件到此区域上传")}
             </p>
             <p className="ant-upload-hint">
-              支持 MP4、MOV、AVI 等格式，单个文件不超过 500MB
+              {translate("支持 MP4、MOV、AVI 等格式，单个文件不超过 500MB")}
             </p>
           </Dragger>
         </Card>
@@ -135,8 +139,8 @@ const ViralAnalyzer: React.FC = () => {
         {/* 拆解历史列表 */}
         <div className="videos-section">
           <div className="section-header">
-            <h2 className="section-title">最近拆解项目</h2>
-            <span className="section-count">共 {total} 个项目已拆解完成</span>
+            <h2 className="section-title">{translate("最近拆解项目")}</h2>
+            <span className="section-count">{translate("共")} {total} {translate("个项目已拆解完成")}</span>
           </div>
 
           {loading ? (
@@ -145,7 +149,7 @@ const ViralAnalyzer: React.FC = () => {
             </div>
           ) : videos.length === 0 ? (
             <Empty
-              description="还没有拆解记录，上传你的第一个视频吧"
+              description={translate("还没有拆解记录，上传你的第一个视频吧")}
               image={Empty.PRESENTED_IMAGE_SIMPLE}
             />
           ) : (
@@ -188,7 +192,7 @@ const ViralAnalyzer: React.FC = () => {
                           handleViewDetail(item.id);
                         }}
                       >
-                        查看
+                        {translate("查看")}
                       </Button>,
                       <Button
                         type="text"
@@ -196,7 +200,7 @@ const ViralAnalyzer: React.FC = () => {
                         icon={<DeleteOutlined />}
                         onClick={(e) => handleDelete(item.id, e)}
                       >
-                        删除
+                        {translate("删除")}
                       </Button>,
                     ]}
                   >
@@ -204,7 +208,7 @@ const ViralAnalyzer: React.FC = () => {
                       title={<div className="card-title">{item.title}</div>}
                       description={
                         <div className="card-description">
-                          {item.duration && <span>{item.duration}秒</span>}
+                          {item.duration && <span>{item.duration}{translate("秒")}</span>}
                           <span>{new Date(item.created_at).toLocaleDateString()}</span>
                         </div>
                       }

@@ -13,7 +13,7 @@ const sources = new Map(Object.entries(enUS).map(([source, english]) => [english
 /** Read the current language at call time, including in async callbacks and API errors. */
 export function t(source: string, values: Record<string, string | number> = {}): string {
   const key = sources.get(source) ?? source;
-  const dictionary = useLanguageStore.getState().language === 'zh-CN' ? zhCN : enUS;
+  const dictionary: Record<string, string> = useLanguageStore.getState().language === 'zh-CN' ? zhCN : enUS;
   const text = dictionary[key] ?? source;
   return text.replace(/\{(\w+)\}/g, (match, name: string) => String(values[name] ?? match));
 }

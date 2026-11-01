@@ -1,3 +1,4 @@
+import { t as translate, useLanguage } from '@/i18n';
 import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
@@ -16,6 +17,9 @@ import styles from './ForgotPassword.module.css';
 type Step = 'input' | 'code' | 'done';
 
 export default function ForgotPassword() {
+  useLanguage();
+
+
   const { message } = App.useApp();
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -32,32 +36,32 @@ export default function ForgotPassword() {
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmed = email.trim();
-    if (!trimmed) { message.warning('请输入邮箱地址'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { message.warning('请输入有效的邮箱地址'); return; }
+    if (!trimmed) { message.warning(translate("请输入邮箱地址")); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) { message.warning(translate("请输入有效的邮箱地址")); return; }
 
     setLoading(true);
     try {
       await fetch('/api/auth/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: trimmed }) });
-      message.success('验证码已发送');
+      message.success(translate("验证码已发送"));
       setStep('code');
       startCountdown();
-    } catch { message.error('发送失败'); }
+    } catch { message.error(translate("发送失败")); }
     finally { setLoading(false); }
   };
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code || code.length !== 6) { message.warning('请输入6位验证码'); return; }
-    if (!newPassword || newPassword.length < 8) { message.warning('密码至少8位，须包含字母与数字'); return; }
+    if (!code || code.length !== 6) { message.warning(translate("请输入6位验证码")); return; }
+    if (!newPassword || newPassword.length < 8) { message.warning(translate("密码至少8位，须包含字母与数字")); return; }
 
     setLoading(true);
     try {
       const r = await fetch('/api/auth/reset-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email.trim(), code, newPassword }) });
       const d = await r.json();
       if (d.code !== 200) throw new Error(d.msg);
-      message.success('密码已重置');
+      message.success(translate("密码已重置"));
       setStep('done');
-    } catch { message.error('验证码错误或已过期'); }
+    } catch { message.error(translate("验证码错误或已过期")); }
     finally { setLoading(false); }
   };
 
@@ -103,8 +107,7 @@ export default function ForgotPassword() {
                 VidCraft
               </div>
               <div className={styles.monoTagline} style={{ marginTop: 4 }}>
-                AIGC × TIKTOK COMMERCE
-              </div>
+                {translate("AIGC × TIKTOK COMMERCE")}</div>
             </div>
           </div>
 
@@ -169,7 +172,7 @@ export default function ForgotPassword() {
                   fontWeight: 500,
                 }}
               >
-                完播率 68.4%
+                {translate("完播率 68.4%")}
               </span>
             </div>
 
@@ -191,10 +194,9 @@ export default function ForgotPassword() {
                 alt="Watch"
               />
               <span className={styles.hotPill} style={{ position: 'absolute', top: 8, right: 8 }}>
-                HOT CONTENT
-              </span>
+                {translate("HOT CONTENT")}</span>
               <div className={`${styles.statOverlay} ${styles.glass}`}>
-                <div className={styles.label}>本月生成数</div>
+                <div className={styles.label}>{translate("本月生成数")}</div>
                 <div className={styles.value} style={{ fontSize: 18 }}>
                   1,284
                 </div>
@@ -205,9 +207,9 @@ export default function ForgotPassword() {
           {/* Feature pills */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {[
-              { icon: <ThunderboltFilled />, text: '30 分钟出片' },
-              { icon: <ControlOutlined />, text: '因子级干预' },
-              { icon: <LineChartOutlined />, text: '数据反哺创作' },
+              { icon: <ThunderboltFilled />, text: translate("30 分钟出片") },
+              { icon: <ControlOutlined />, text: translate("因子级干预") },
+              { icon: <LineChartOutlined />, text: translate("数据反哺创作") },
             ].map((p) => (
               <div
                 key={p.text}
@@ -253,37 +255,37 @@ export default function ForgotPassword() {
 
           {step === 'input' && (
             <>
-              <h1 className={styles.heading}>忘记密码</h1>
-              <p className={styles.subheading}>输入注册邮箱，接收验证码</p>
+              <h1 className={styles.heading}>{translate("忘记密码")}</h1>
+              <p className={styles.subheading}>{translate("输入注册邮箱，接收验证码")}</p>
               <form onSubmit={handleSendCode} style={{ marginTop: 32 }}>
                 <div style={{ marginBottom: 24 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>邮箱地址</label>
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>{translate("邮箱地址")}</label>
                   <Input size="large" prefix={<MailOutlined style={{ color: '#9CA3AF' }} />} placeholder="name@company.com" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" autoFocus />
                 </div>
                 <Button htmlType="submit" type="primary" block size="large" loading={loading} className={`${styles.brandGradient} ${styles.glowButton}`} style={{ height: 48, borderRadius: 12, fontSize: 15, fontWeight: 600, border: 'none' }}>
-                  {loading ? '发送中...' : '发送验证码'}
+                  {loading ? translate("发送中...") : translate("发送验证码")}
                 </Button>
               </form>
             </>
           )}
           {step === 'code' && (
             <>
-              <h1 className={styles.heading}>重置密码</h1>
-              <p className={styles.subheading}>验证码已发送至 <strong>{email}</strong></p>
+              <h1 className={styles.heading}>{translate("重置密码")}</h1>
+              <p className={styles.subheading}>{translate("验证码已发送至")} <strong>{email}</strong></p>
               <form onSubmit={handleReset} style={{ marginTop: 32 }}>
                 <div style={{ marginBottom: 16 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>验证码</label>
-                  <Input size="large" placeholder="6位数字" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} autoFocus />
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>{translate("验证码")}</label>
+                  <Input size="large" placeholder={translate("6位数字")} value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} maxLength={6} autoFocus />
                 </div>
                 <div style={{ marginBottom: 24 }}>
-                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>新密码</label>
-                  <Input.Password size="large" placeholder="至少8位，包含字母和数字" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
+                  <label style={{ display: 'block', fontSize: 12, fontWeight: 500, color: '#374151', marginBottom: 6 }}>{translate("新密码")}</label>
+                  <Input.Password size="large" placeholder={translate("至少8位，包含字母和数字")} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} autoComplete="new-password" />
                 </div>
                 <Button htmlType="submit" type="primary" block size="large" loading={loading} className={`${styles.brandGradient} ${styles.glowButton}`} style={{ height: 48, borderRadius: 12, fontSize: 15, fontWeight: 600, border: 'none' }}>
-                  {loading ? '重置中...' : '重置密码'}
+                  {loading ? translate("重置中...") : translate("重置密码")}
                 </Button>
                 <p style={{ textAlign: 'center', fontSize: 13, marginTop: 12 }}>
-                    {retrySec > 0 ? <span style={{ color: '#9CA3AF' }}>{retrySec}s 后可重新发送</span> : <a onClick={() => setStep('input')} style={{ color: '#4648D4', cursor: 'pointer' }}>重新发送验证码</a>}
+                    {retrySec > 0 ? <span style={{ color: '#9CA3AF' }}>{retrySec}{translate("s 后可重新发送")}</span> : <a onClick={() => setStep('input')} style={{ color: '#4648D4', cursor: 'pointer' }}>{translate("重新发送验证码")}</a>}
                   </p>
               </form>
             </>
@@ -291,19 +293,19 @@ export default function ForgotPassword() {
           {step === 'done' && (
             <>
               <div style={{ textAlign: 'center', marginTop: 16 }}><CheckCircleFilled style={{ fontSize: 56, color: '#10B981' }} /></div>
-              <h1 className={styles.heading} style={{ textAlign: 'center', marginTop: 20 }}>密码已重置</h1>
-              <p className={styles.subheading} style={{ textAlign: 'center' }}>使用新密码登录即可</p>
+              <h1 className={styles.heading} style={{ textAlign: 'center', marginTop: 20 }}>{translate("密码已重置")}</h1>
+              <p className={styles.subheading} style={{ textAlign: 'center' }}>{translate("使用新密码登录即可")}</p>
             </>
           )}
 
           <p style={{ textAlign: 'center', fontSize: 14, color: '#6B7280', marginTop: 28 }}>
             <Link to="/login" style={{ color: '#4648D4', fontWeight: 500 }}>
               <ArrowLeftOutlined style={{ marginRight: 4 }} />
-              返回登录
+              {translate("返回登录")}
             </Link>
           </p>
 
-          <p className={styles.footer}>© 2026 VidCraft · 服务条款 · 隐私政策</p>
+          <p className={styles.footer}>{translate("© 2026 VidCraft · 服务条款 · 隐私政策")}</p>
         </div>
       </div>
     </div>

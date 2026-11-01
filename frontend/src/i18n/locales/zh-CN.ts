@@ -1,5 +1,40 @@
 import enUS from './en-US';
 
-/** Chinese source keys preserve the original interface copy. */
-const zhCN: Record<string, string> = Object.fromEntries(Object.keys(enUS).map((key) => [key, key]));
+const zhCN: Record<keyof typeof enUS, string> = {
+  ...Object.fromEntries(Object.keys(enUS).map((key) => [key, key])) as Record<keyof typeof enUS, string>,
+  "Dashboard": "工作台",
+  "Projects": "项目",
+  "Gene Bank": "基因库",
+  "Video Analyzer": "视频分析器",
+  "Analytics": "数据分析",
+  "Create New Video": "创建新视频",
+  "+ Create New Video": "+ 创建新视频",
+  "Upgrade Pro": "升级 Pro",
+  "PRO WORKSTATION": "专业工作台",
+  "HOT CONTENT": "热门内容",
+  "AIGC × TIKTOK COMMERCE": "AIGC × TikTok 电商",
+  "AIGC x TikTok Commerce": "AIGC × TikTok 电商",
+  "ANALYTICS": "数据分析",
+  "Video": "视频",
+  "Scene": "分镜",
+  "SCENE": "分镜",
+  "Scene 0": "分镜 0",
+  "SELLING POINTS": "核心卖点",
+  "PACING": "节奏",
+  "STYLE": "风格",
+  "Free": "免费版",
+  "Team": "团队版",
+  "Modern Beat": "现代节拍",
+  "Cinematic": "电影配乐",
+  "Energy Pop": "活力流行",
+  "Lo-Fi Chill": "轻松低保真",
+  "Acoustic": "原声",
+  "affected:": "影响分镜：",
+  "VIEWS": "观看量",
+  "SHARES": "分享数",
+  "TIKTOK READY": "适合 TikTok",
+  "PRODUCT": "商品",
+  "AI STUDIO": "AI 工作室",
+  high: '高', medium: '中', low: '低',
+};
 export default zhCN;

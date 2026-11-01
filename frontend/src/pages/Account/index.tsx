@@ -1,3 +1,4 @@
+import { t as translate, useLanguage, useFormLanguage } from '@/i18n';
 import { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { Form, Input, Button, Tabs, Upload, App } from 'antd';
@@ -12,6 +13,9 @@ const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
 
 export default function AccountPage() {
+  useLanguage();
+
+
   const { message } = App.useApp();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -27,7 +31,9 @@ export default function AccountPage() {
   const [passwordSaving, setPasswordSaving] = useState(false);
 
   const [profileForm] = Form.useForm();
+  useFormLanguage(profileForm);
   const [passwordForm] = Form.useForm();
+  useFormLanguage(passwordForm);
 
   const handleTabChange = (key: string) => {
     setSearchParams({ tab: key }, { replace: true });
@@ -39,7 +45,7 @@ export default function AccountPage() {
       setProfileSaving(true);
       const updated = await authService.updateProfile({ nickname: values.nickname });
       updateUser(updated);
-      message.success('个人资料已更新');
+      message.success(translate("个人资料已更新"));
     } catch {
       // validation error already shown by Form
     } finally {
@@ -49,11 +55,11 @@ export default function AccountPage() {
 
   const handleAvatarBeforeUpload: UploadProps['beforeUpload'] = (file) => {
     if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
-      message.error('仅支持 JPG/PNG/WebP 格式的头像');
+      message.error(translate("仅支持 JPG/PNG/WebP 格式的头像"));
       return false;
     }
     if (file.size > MAX_AVATAR_SIZE) {
-      message.error('头像文件不能超过 5MB');
+      message.error(translate("头像文件不能超过 5MB"));
       return false;
     }
     handleUploadAvatar(file);
@@ -65,7 +71,7 @@ export default function AccountPage() {
     try {
       const result = await authService.uploadAvatar(file);
       updateUser({ avatar_url: result.avatar_url });
-      message.success('头像已更新');
+      message.success(translate("头像已更新"));
     } finally {
       setAvatarUploading(false);
     }
@@ -76,7 +82,7 @@ export default function AccountPage() {
       const values = await passwordForm.validateFields();
       setPasswordSaving(true);
       await authService.changePassword(values);
-      message.success('密码已修改，请重新登录');
+      message.success(translate("密码已修改，请重新登录"));
       passwordForm.resetFields();
       navigate('/login', { replace: true });
     } catch {
@@ -91,7 +97,7 @@ export default function AccountPage() {
   return (
     <div className={styles.page}>
       <div className={styles.header}>
-        <h1>账户设置</h1>
+        <h1>{translate("账户设置")}</h1>
       </div>
 
       <Tabs
@@ -103,7 +109,7 @@ export default function AccountPage() {
             label: (
               <span>
                 <UserOutlined style={{ marginRight: 6 }} />
-                个人资料
+                {translate("个人资料")}
               </span>
             ),
             children: (
@@ -120,7 +126,7 @@ export default function AccountPage() {
                     accept="image/jpeg,image/png,image/webp"
                   >
                     <Button icon={<UploadOutlined />} loading={avatarUploading}>
-                      上传新头像
+                      {translate("上传新头像")}
                     </Button>
                   </Upload>
                 </div>
@@ -132,13 +138,13 @@ export default function AccountPage() {
                 >
                   <Form.Item
                     name="nickname"
-                    label="用户名"
+                    label={translate("用户名")}
                     rules={[
-                      { required: true, message: '请输入用户名' },
-                      { min: 2, max: 30, message: '用户名需 2-30 个字符' },
+                      { required: true, message: translate("请输入用户名") },
+                      { min: 2, max: 30, message: translate("用户名需 2-30 个字符") },
                     ]}
                   >
-                    <Input placeholder="输入新的用户名" />
+                    <Input placeholder={translate("输入新的用户名")} />
                   </Form.Item>
 
                   <Form.Item>
@@ -147,7 +153,7 @@ export default function AccountPage() {
                       onClick={handleSaveProfile}
                       loading={profileSaving}
                     >
-                      保存修改
+                      {translate("保存修改")}
                     </Button>
                   </Form.Item>
                 </Form>
@@ -159,13 +165,13 @@ export default function AccountPage() {
             label: (
               <span>
                 <LockOutlined style={{ marginRight: 6 }} />
-                安全设置
+                {translate("安全设置")}
               </span>
             ),
             disabled: isGuest,
             children: isGuest ? (
               <div className={styles.guestNotice}>
-                游客模式不支持修改密码。请登录或注册账号。
+                {translate("游客模式不支持修改密码。请登录或注册账号。")}
               </div>
             ) : (
               <div className={styles.formSection}>
@@ -175,48 +181,48 @@ export default function AccountPage() {
                 >
                   <Form.Item
                     name="currentPassword"
-                    label="当前密码"
-                    rules={[{ required: true, message: '请输入当前密码' }]}
+                    label={translate("当前密码")}
+                    rules={[{ required: true, message: translate("请输入当前密码") }]}
                   >
-                    <Input.Password placeholder="输入当前密码" />
+                    <Input.Password placeholder={translate("输入当前密码")} />
                   </Form.Item>
 
                   <Form.Item
                     name="newPassword"
-                    label="新密码"
+                    label={translate("新密码")}
                     rules={[
-                      { required: true, message: '请输入新密码' },
-                      { min: 8, message: '密码至少 8 位' },
+                      { required: true, message: translate("请输入新密码") },
+                      { min: 8, message: translate("密码至少 8 位") },
                       {
                         pattern: /[a-zA-Z]/,
-                        message: '密码须包含字母',
+                        message: translate("密码须包含字母"),
                       },
                       {
                         pattern: /[0-9]/,
-                        message: '密码须包含数字',
+                        message: translate("密码须包含数字"),
                       },
                     ]}
                   >
-                    <Input.Password placeholder="至少 8 位，须包含字母与数字" />
+                    <Input.Password placeholder={translate("至少 8 位，须包含字母与数字")} />
                   </Form.Item>
 
                   <Form.Item
                     name="confirmNewPassword"
-                    label="确认新密码"
+                    label={translate("确认新密码")}
                     dependencies={['newPassword']}
                     rules={[
-                      { required: true, message: '请再次输入新密码' },
+                      { required: true, message: translate("请再次输入新密码") },
                       ({ getFieldValue }) => ({
                         validator(_, value) {
                           if (!value || getFieldValue('newPassword') === value) {
                             return Promise.resolve();
                           }
-                          return Promise.reject(new Error('两次输入的密码不一致'));
+                          return Promise.reject(new Error(translate("两次输入的密码不一致")));
                         },
                       }),
                     ]}
                   >
-                    <Input.Password placeholder="再次输入新密码" />
+                    <Input.Password placeholder={translate("再次输入新密码")} />
                   </Form.Item>
 
                   <Form.Item>
@@ -225,7 +231,7 @@ export default function AccountPage() {
                       onClick={handleChangePassword}
                       loading={passwordSaving}
                     >
-                      修改密码
+                      {translate("修改密码")}
                     </Button>
                   </Form.Item>
                 </Form>
@@ -234,10 +240,10 @@ export default function AccountPage() {
           },
           {
             key: 'preferences',
-            label: '偏好设置',
+            label: translate("偏好设置"),
             children: (
               <div className={styles.guestNotice}>
-                偏好设置即将上线，敬请期待。
+                {translate("偏好设置即将上线，敬请期待。")}
               </div>
             ),
           },
