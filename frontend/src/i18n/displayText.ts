@@ -24,3 +24,11 @@ const metricSources: Record<string, string> = {
 export function metricLabel(key: string, fallback: string): string {
   return t(metricSources[key] ?? fallback);
 }
+
+/** Localize known system history while retaining custom factor text verbatim. */
+export function historyText(source: string): string {
+  const replaced = /^替换 "(.*)" → (.*)$/.exec(source);
+  return replaced
+    ? t('替换 "{0}" → {1}', { 0: t(replaced[1]), 1: t(replaced[2]) })
+    : t(source);
+}

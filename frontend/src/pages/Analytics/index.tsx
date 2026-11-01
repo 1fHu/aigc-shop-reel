@@ -77,7 +77,7 @@ function formatCurrency(n: number): string {
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString(useLanguageStore.getState().language);
+  return new Date(iso).toLocaleDateString(useLanguageStore.getState().language, { timeZone: 'UTC' });
 }
 
 /**

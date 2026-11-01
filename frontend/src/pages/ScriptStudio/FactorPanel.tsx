@@ -1,3 +1,4 @@
+import { historyText } from '@/i18n/displayText';
 import { useLanguageStore } from '@/stores/languageStore';
 import { t as translate, useLanguage } from '@/i18n';
 import { CheckCircleFilled } from '@ant-design/icons';
@@ -140,7 +141,7 @@ export default function FactorPanel({
                   {new Date(entry.timestamp).toLocaleTimeString(useLanguageStore.getState().language, { hour: '2-digit', minute: '2-digit' })}
                 </span>
                 <div>
-                  <div className={styles.historyMsg}>{translate(entry.message)}</div>
+                  <div className={styles.historyMsg}>{historyText(entry.message)}</div>
                   {entry.affected_scene_ids.length > 0 && (
                     <div className={styles.historyAffected}>
                       {translate("affected:")}{entry.affected_scene_ids.join(' / ')}

@@ -83,7 +83,7 @@ export default function ShotEditor({
               preload="metadata"
             />
           ) : (
-            <img src={scene.thumb_url} alt={`Scene ${scene.index + 1}`} />
+            <img src={scene.thumb_url} alt={translate("Scene {0}", { 0: scene.index + 1 })} />
           )}
           {/* 召回到素材图（direct/adapted）时，允许删除 → 回退默认占位图 */}
           {!clipUrl && onDeleteMaterial && scene.material_use_mode && scene.material_use_mode !== 'none' && (
@@ -125,7 +125,7 @@ export default function ShotEditor({
           <div className={styles.fieldGroup}>
             <label className={styles.fieldLabel}>{translate("镜头运动")}</label>
             <Select
-              labelRender={({ label }) => typeof label === 'string' ? translate(label) : label}
+              labelRender={({ label, value }) => typeof label === 'string' ? translate(label) : label ?? translate(String(value))}
               style={{ width: '100%' }}
               value={scene.camera_motion || 'static'}
               onChange={(v) => onChange(scene.index, 'camera_motion', v)}
@@ -135,7 +135,7 @@ export default function ShotEditor({
           <div className={styles.fieldGroup}>
             <label className={styles.fieldLabel}>BGM</label>
             <Select
-              labelRender={({ label }) => typeof label === 'string' ? translate(label) : label}
+              labelRender={({ label, value }) => typeof label === 'string' ? translate(label) : label ?? translate(String(value))}
               style={{ width: '100%' }}
               value={scene.bgm || 'Modern Beat'}
               onChange={(v) => onChange(scene.index, 'bgm', v)}
