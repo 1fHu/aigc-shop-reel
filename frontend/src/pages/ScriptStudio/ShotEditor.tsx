@@ -1,24 +1,12 @@
+import { t as translate, useLanguage } from '@/i18n';
 import { Input, Select, Tag, Spin, Popconfirm } from 'antd';
 import { ReloadOutlined, DeleteOutlined } from '@ant-design/icons';
 import type { Scene } from '@/types';
 import styles from './ScriptStudio.module.css';
 
-const CAMERA_OPTIONS = [
-  { value: 'push-in', label: '缓推镜（Slow Zoom-in）' },
-  { value: 'static', label: '固定镜（Static）' },
-  { value: 'tracking', label: '跟拍（Tracking）' },
-  { value: 'pan', label: '摇镜（Pan）' },
-  { value: 'zoom-out', label: '拉远（Zoom-out）' },
-  { value: 'handheld', label: '手持（Handheld）' },
-];
 
-const BGM_OPTIONS = [
-  { value: 'Modern Beat', label: 'Modern Beat' },
-  { value: 'Cinematic', label: 'Cinematic' },
-  { value: 'Energy Pop', label: 'Energy Pop' },
-  { value: 'Lo-Fi Chill', label: 'Lo-Fi Chill' },
-  { value: 'Acoustic', label: 'Acoustic' },
-];
+
+
 
 interface ShotEditorProps {
   scene: Scene | undefined;
@@ -42,11 +30,28 @@ export default function ShotEditor({
   onRegenerate,
   onDeleteMaterial,
 }: ShotEditorProps) {
+  useLanguage();
+  const BGM_OPTIONS = [
+    { value: 'Modern Beat', label: translate("Modern Beat") },
+    { value: 'Cinematic', label: translate("Cinematic") },
+    { value: 'Energy Pop', label: translate("Energy Pop") },
+    { value: 'Lo-Fi Chill', label: translate("Lo-Fi Chill") },
+    { value: 'Acoustic', label: translate("Acoustic") },
+  ];
+  const CAMERA_OPTIONS = [
+    { value: 'push-in', label: translate("缓推镜（Slow Zoom-in）") },
+    { value: 'static', label: translate("固定镜（Static）") },
+    { value: 'tracking', label: translate("跟拍（Tracking）") },
+    { value: 'pan', label: translate("摇镜（Pan）") },
+    { value: 'zoom-out', label: translate("拉远（Zoom-out）") },
+    { value: 'handheld', label: translate("手持（Handheld）") },
+  ];
+
   if (!scene) {
     return (
       <div className={styles.editor}>
         <div className={styles.editorInner} style={{ textAlign: 'center', paddingTop: 120, color: '#9CA3AF' }}>
-          选择一个分镜开始编辑
+          {translate("选择一个分镜开始编辑")}
         </div>
       </div>
     );
@@ -62,7 +67,7 @@ export default function ShotEditor({
           </div>
           <button className={styles.regenBtn} onClick={() => onRegenerate(scene.index)} disabled={regenerating}>
             {regenerating ? <Spin size="small" /> : <ReloadOutlined />}
-            {' '}重生剧本
+            {' '}{translate("重生剧本")}
           </button>
         </div>
 
@@ -78,19 +83,19 @@ export default function ShotEditor({
               preload="metadata"
             />
           ) : (
-            <img src={scene.thumb_url} alt={`Scene ${scene.index + 1}`} />
+            <img src={scene.thumb_url} alt={translate("Scene {0}", { 0: scene.index + 1 })} />
           )}
           {/* 召回到素材图（direct/adapted）时，允许删除 → 回退默认占位图 */}
           {!clipUrl && onDeleteMaterial && scene.material_use_mode && scene.material_use_mode !== 'none' && (
             <Popconfirm
-              title="删除该幕图片素材？"
-              description="删除后将用默认占位图代替"
-              okText="删除"
-              cancelText="取消"
+              title={translate("删除该幕图片素材？")}
+              description={translate("删除后将用默认占位图代替")}
+              okText={translate("删除")}
+              cancelText={translate("取消")}
               okButtonProps={{ danger: true }}
               onConfirm={() => onDeleteMaterial(scene.index)}
             >
-              <button type="button" className={styles.materialDeleteBtn} title="删除图片素材">
+              <button type="button" className={styles.materialDeleteBtn} title={translate("删除图片素材")}>
                 <DeleteOutlined />
               </button>
             </Popconfirm>
@@ -99,7 +104,7 @@ export default function ShotEditor({
             <div className={styles.regenOverlay}>
               <div className={styles.regenPill}>
                 <span className={styles.regenDot} />
-                {regenLabel || '正在按新因子重新生成画面...'}
+                {regenLabel || translate("正在按新因子重新生成画面...")}
               </div>
             </div>
           )}
@@ -107,7 +112,7 @@ export default function ShotEditor({
 
         {/* Prompt / 画面描述 */}
         <div className={styles.fieldGroup}>
-          <label className={styles.fieldLabel}>Prompt · 画面描述</label>
+          <label className={styles.fieldLabel}>{translate("Prompt · 画面描述")}</label>
           <Input.TextArea
             rows={3}
             value={scene.description}
@@ -118,8 +123,9 @@ export default function ShotEditor({
         {/* Camera + BGM row */}
         <div className={styles.fieldRow}>
           <div className={styles.fieldGroup}>
-            <label className={styles.fieldLabel}>镜头运动</label>
+            <label className={styles.fieldLabel}>{translate("镜头运动")}</label>
             <Select
+              labelRender={({ label, value }) => typeof label === 'string' ? translate(label) : label ?? translate(String(value))}
               style={{ width: '100%' }}
               value={scene.camera_motion || 'static'}
               onChange={(v) => onChange(scene.index, 'camera_motion', v)}
@@ -129,6 +135,7 @@ export default function ShotEditor({
           <div className={styles.fieldGroup}>
             <label className={styles.fieldLabel}>BGM</label>
             <Select
+              labelRender={({ label, value }) => typeof label === 'string' ? translate(label) : label ?? translate(String(value))}
               style={{ width: '100%' }}
               value={scene.bgm || 'Modern Beat'}
               onChange={(v) => onChange(scene.index, 'bgm', v)}
@@ -139,7 +146,7 @@ export default function ShotEditor({
 
         {/* Voiceover */}
         <div className={styles.fieldGroup}>
-          <label className={styles.fieldLabel}>配音文案</label>
+          <label className={styles.fieldLabel}>{translate("配音文案")}</label>
           <Input.TextArea
             rows={2}
             value={scene.voiceover}

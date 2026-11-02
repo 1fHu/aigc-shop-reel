@@ -1,3 +1,6 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
+import { demoText } from '@/i18n/demoContent';
+import { t as translate, useLanguage } from '@/i18n';
 import { useEffect, useState } from 'react';
 import { Drawer, Skeleton, Tag, Button } from 'antd';
 import {
@@ -26,15 +29,9 @@ interface Props {
   onApplyFactors?: (cardId: string, factors: Partial<ViralRecommendedFactors>) => void;
 }
 
-const FACTOR_LABELS: Record<keyof ViralRecommendedFactors, string> = {
-  visual_style: '视觉风格',
-  opener:       '开场手法',
-  narration:    '旁白风格',
-  pacing:       '节奏密度',
-  cta:          'CTA 形式',
-};
 
-const FACTOR_KEYS = Object.keys(FACTOR_LABELS) as Array<keyof ViralRecommendedFactors>;
+
+
 
 /**
  * 爆款视频拆解报告抽屉
@@ -46,6 +43,16 @@ const FACTOR_KEYS = Object.keys(FACTOR_LABELS) as Array<keyof ViralRecommendedFa
  * 4. 底部 "应用因子并去剧本" CTA
  */
 export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
+  useLanguage();
+  const FACTOR_LABELS: Record<keyof ViralRecommendedFactors, string> = {
+    visual_style: translate("视觉风格"),
+    opener:       translate("开场手法"),
+    narration:    translate("旁白风格"),
+    pacing:       translate("节奏密度"),
+    cta:          translate("CTA 形式"),
+  };
+  const FACTOR_KEYS = Object.keys(FACTOR_LABELS) as Array<keyof ViralRecommendedFactors>;
+
   const [loading, setLoading] = useState(false);
   const [card, setCard] = useState<ViralCard | null>(null);
 
@@ -69,7 +76,7 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
       open={open}
       onClose={onClose}
       width={520}
-      title={card ? card.title : 'AI 拆解报告'}
+      title={<ModalTitle>{card ? demoText(card.id, card.title) : translate("AI 拆解报告")}</ModalTitle>}
       destroyOnClose
       placement="right"
     >
@@ -87,28 +94,28 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
                   style={{ width: '100%', maxHeight: '400px', borderRadius: '8px', backgroundColor: '#000' }}
                 >
                   <source src={card.video_url} type="video/mp4" />
-                  您的浏览器不支持视频播放
+                  {translate("您的浏览器不支持视频播放")}
                 </video>
               ) : (
                 <div className={styles.thumbBox}>
-                  <img src={card.thumbnail_url} alt={card.title} />
+                  <img src={card.thumbnail_url} alt={demoText(card.id, card.title)} />
                 </div>
               )}
               <span className={styles.platformPill}>
-                {VIRAL_PLATFORM_LABELS[card.platform]}
+                {translate(VIRAL_PLATFORM_LABELS[card.platform])}
               </span>
             </div>
             <div className={styles.headerMeta}>
               <div className={styles.metaRow}>
                 <TrophyOutlined style={{ color: '#F59E0B' }} />
-                <span className={styles.metaLabel}>性能评分</span>
+                <span className={styles.metaLabel}>{translate("性能评分")}</span>
                 <span className={styles.metaValue}>
                   {card.performance_score ?? '--'} / 100
                 </span>
               </div>
               {card.source_url && (
                 <div className={styles.sourceUrl}>
-                  来源：<a href={card.source_url} target="_blank" rel="noreferrer">{card.source_url}</a>
+                  {translate("来源：")}<a href={card.source_url} target="_blank" rel="noreferrer">{card.source_url}</a>
                 </div>
               )}
             </div>
@@ -117,15 +124,15 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
           {/* 4 块拆解报告 */}
           <div className={styles.reportSection}>
             <div className={styles.sectionTitle}>
-              <ThunderboltOutlined /> Hook 手法
+              <ThunderboltOutlined /> {translate("Hook 手法")}
             </div>
-            <p className={styles.sectionText}>{report?.hook}</p>
+            <p className={styles.sectionText}>{report?.hook ? translate(report.hook) : ''}</p>
           </div>
 
           {report?.selling_points && report.selling_points.length > 0 && (
             <div className={styles.reportSection}>
               <div className={styles.sectionTitle}>
-                <FireOutlined /> 核心卖点
+                <FireOutlined /> {translate("核心卖点")}
               </div>
               <ul className={styles.bullets}>
                 {report.selling_points.map((p, i) => <li key={i}>{p}</li>)}
@@ -135,21 +142,21 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
 
           <div className={styles.reportSection}>
             <div className={styles.sectionTitle}>
-              <ClockCircleOutlined /> 节奏 · {report?.shot_count} 个分镜
+              <ClockCircleOutlined /> {translate("节奏 ·")} {report?.shot_count} {translate("个分镜")}
             </div>
-            <p className={styles.sectionText}>{report?.rhythm}</p>
+            <p className={styles.sectionText}>{report?.rhythm ? translate(report.rhythm) : ''}</p>
           </div>
 
           <div className={styles.reportSection}>
             <div className={styles.sectionTitle}>
-              <BgColorsOutlined /> 视觉风格
+              <BgColorsOutlined /> {translate("视觉风格")}
             </div>
             {report?.visual_palette && (
-              <p className={styles.sectionText}>调色板：{report.visual_palette}</p>
+              <p className={styles.sectionText}>{translate("调色板：")}{report.visual_palette}</p>
             )}
             <div className={styles.tagRow}>
               {report?.style_tags.map((t) => (
-                <Tag key={t} color="purple" style={{ borderRadius: 999 }}>{t}</Tag>
+                <Tag key={t} color="purple" style={{ borderRadius: 999 }}>{translate(t)}</Tag>
               ))}
             </div>
           </div>
@@ -157,7 +164,7 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
           {report?.highlights && report.highlights.length > 0 && (
             <div className={styles.highlightBox}>
               <div className={styles.highlightTitle}>
-                <StarFilled style={{ color: '#F59E0B' }} /> AI 提取的亮点
+                <StarFilled style={{ color: '#F59E0B' }} /> {translate("AI 提取的亮点")}
               </div>
               <ul className={styles.highlightList}>
                 {report.highlights.map((h, i) => <li key={i}>{h}</li>)}
@@ -169,16 +176,16 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
           {factors && (
             <div className={styles.factorBox}>
               <div className={styles.factorTitle}>
-                <CheckCircleFilled style={{ color: '#4648D4' }} /> 推荐创作因子
+                <CheckCircleFilled style={{ color: '#4648D4' }} /> {translate("推荐创作因子")}
               </div>
-              <p className={styles.factorHint}>AI 从该视频拆解出的创作因子。</p>
+              <p className={styles.factorHint}>{translate("AI 从该视频拆解出的创作因子。")}</p>
               <div className={styles.factorList}>
                 {FACTOR_KEYS.map((key) => (
                   <div key={key} className={styles.factorRow}>
                     <CheckCircleFilled style={{ color: '#4648D4', marginRight: 8 }} />
                     <span className={styles.factorRowLabel}>{FACTOR_LABELS[key]}</span>
                     <span className={styles.factorRowArrow}>→</span>
-                    <span className={styles.factorRowValue}>{factors[key]}</span>
+                    <span className={styles.factorRowValue}>{translate(factors[key])}</span>
                   </div>
                 ))}
               </div>
@@ -187,7 +194,7 @@ export default function ViralReportDrawer({ open, cardId, onClose }: Props) {
 
           {/* 底部 */}
           <div className={styles.footer}>
-            <Button onClick={onClose} disabled={loading}>关闭</Button>
+            <Button onClick={onClose} disabled={loading}>{translate("关闭")}</Button>
           </div>
         </div>
       )}

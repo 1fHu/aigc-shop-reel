@@ -1,3 +1,5 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
+import { t as translate, useLanguage } from '@/i18n';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal, App } from 'antd';
@@ -42,14 +44,17 @@ interface Entry {
  * 右上角 X（Modal 内置 close）关闭弹框即返回项目列表。
  * 新建项目流程不走此弹框，仍由 NewProjectModal 处理。
  */
-const ENTRIES: Entry[] = [
-  { key: 'materials', title: '素材库',       desc: '上传商品图，AI 解析卖点',   icon: <PictureOutlined /> },
-  { key: 'style',     title: '风格模板',      desc: '挑选视频风格与爆款模板',     icon: <FireOutlined /> },
-  { key: 'script',    title: '分镜编辑',      desc: '编辑分镜脚本与配音文案',     icon: <FileTextOutlined /> },
-  { key: 'video',     title: '视频创作',      desc: '一键生成带货短视频',         icon: <PlayCircleOutlined /> },
-];
+
 
 export default function ProjectEntryModal({ open, project, onClose }: Props) {
+  useLanguage();
+  const ENTRIES: Entry[] = [
+    { key: 'materials', title: translate("素材库"),       desc: translate("上传商品图，AI 解析卖点"),   icon: <PictureOutlined /> },
+    { key: 'style',     title: translate("风格模板"),      desc: translate("挑选视频风格与爆款模板"),     icon: <FireOutlined /> },
+    { key: 'script',    title: translate("分镜编辑"),      desc: translate("编辑分镜脚本与配音文案"),     icon: <FileTextOutlined /> },
+    { key: 'video',     title: translate("视频创作"),      desc: translate("一键生成带货短视频"),         icon: <PlayCircleOutlined /> },
+  ];
+
   const navigate = useNavigate();
   const { message } = App.useApp();
   // pending：分镜/剧本入口需先拉项目详情判断，期间禁用按钮防重复点击
@@ -66,7 +71,7 @@ export default function ProjectEntryModal({ open, project, onClose }: Props) {
           onClose();
           navigate(`/projects/${pid}/video`);
         } else {
-          message.warning('视频还未生成');
+          message.warning(translate("视频还未生成"));
         }
         return;
 
@@ -90,7 +95,7 @@ export default function ProjectEntryModal({ open, project, onClose }: Props) {
             onClose();
             navigate(`/projects/${pid}/script`);
           } else {
-            message.warning('分镜 / 剧本尚未生成');
+            message.warning(translate("分镜 / 剧本尚未生成"));
           }
         } catch {
           /* 拦截器已 toast */
@@ -100,20 +105,21 @@ export default function ProjectEntryModal({ open, project, onClose }: Props) {
         return;
 
       default:
-        message.info(`「${entry.title}」功能开发中`);
+        message.info(translate("「{0}」功能开发中", { "0": entry.title }));
     }
   };
 
   return (
     <Modal
+      closable={{ 'aria-label': translate("关闭") }}
       open={open}
-      title={project ? `项目：${project.name}` : '项目工作台'}
+      title={<ModalTitle>{project ? translate("项目：{0}", { "0": project.name }) : translate("项目工作台")}</ModalTitle>}
       onCancel={onClose}
       footer={null}
       width={520}
       destroyOnClose
     >
-      <p className={styles.hint}>选择要进入的工作模块</p>
+      <p className={styles.hint}>{translate("选择要进入的工作模块")}</p>
       <div className={styles.grid}>
         {ENTRIES.map((entry) => (
           <button

@@ -1,3 +1,4 @@
+import { t as translate, useLanguage } from '@/i18n';
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Input, Upload, Tag, Skeleton, App } from 'antd';
@@ -22,13 +23,16 @@ import styles from './ProductParse.module.css';
 
 type Step = 1 | 2 | 3;
 
-const STEP_LABELS: { idx: Step; label: string }[] = [
-  { idx: 1, label: '输入商品' },
-  { idx: 2, label: 'AI 解析' },
-  { idx: 3, label: '生成剧本' },
-];
+
 
 export default function ProductParse() {
+  useLanguage();
+  const STEP_LABELS: { idx: Step; label: string }[] = [
+    { idx: 1, label: translate("输入商品") },
+    { idx: 2, label: translate("AI 解析") },
+    { idx: 3, label: translate("生成剧本") },
+  ];
+
   const navigate = useNavigate();
   const { id: projectId } = useParams<{ id: string }>();
   const { message } = App.useApp();
@@ -63,19 +67,19 @@ export default function ProductParse() {
             /* 无已存商品或读取失败：保持 Step 1 输入态 */
           }
         } catch {
-          message.error('项目不存在，请先创建项目');
+          message.error(translate("项目不存在，请先创建项目"));
           navigate('/projects', { replace: true });
         }
         return;
       }
 
       try {
-        const project = await projectService.create({ name: '未命名项目' });
+        const project = await projectService.create({ name: translate("未命名项目") });
         if (cancelled) return;
         setEffectiveProjectId(project.id);
         navigate(`/projects/${project.id}/product-parse`, { replace: true });
       } catch {
-        message.error('无法创建项目，请稍后重试');
+        message.error(translate("无法创建项目，请稍后重试"));
       }
     };
 
@@ -87,11 +91,11 @@ export default function ProductParse() {
 
   const handleParseUrl = async () => {
     if (!effectiveProjectId) {
-      message.warning('项目初始化中，请稍候');
+      message.warning(translate("项目初始化中，请稍候"));
       return;
     }
     if (!url.trim()) {
-      message.warning('请先输入商品链接');
+      message.warning(translate("请先输入商品链接"));
       return;
     }
     setStep(2);
@@ -109,7 +113,7 @@ export default function ProductParse() {
 
   const handleParseImage = async (file: RcFile) => {
     if (!effectiveProjectId) {
-      message.warning('项目初始化中，请稍候');
+      message.warning(translate("项目初始化中，请稍候"));
       return false;
     }
     setPreviewUrl(URL.createObjectURL(file));
@@ -119,7 +123,7 @@ export default function ProductParse() {
       setProduct(result);
       setStep(3);
     } catch (err) {
-      message.error('AI 解析失败，请重试');
+      message.error(translate("AI 解析失败，请重试"));
       console.error('parseImage error:', err);
       setStep(1);
     }
@@ -128,12 +132,12 @@ export default function ProductParse() {
 
   const handleNext = async () => {
     if (!effectiveProjectId) {
-      message.warning('项目初始化中，请稍候');
+      message.warning(translate("项目初始化中，请稍候"));
       return;
     }
     try {
       await productService.confirm(effectiveProjectId);
-      message.success('商品信息已确认，进入剧本阶段');
+      message.success(translate("商品信息已确认，进入剧本阶段"));
       const target = projectId ? `/projects/${projectId}/script` : '/script-studio';
       navigate(target);
     } catch {
@@ -174,13 +178,13 @@ export default function ProductParse() {
       {step === 1 && (
         <>
           <div className={styles.card}>
-            <h2 className={styles.cardTitle}>开始创作你的爆款视频</h2>
+            <h2 className={styles.cardTitle}>{translate("开始创作你的爆款视频")}</h2>
 
             <div className={styles.urlRow}>
               <Input
                 size="large"
                 prefix={<LinkOutlined style={{ color: '#9CA3AF' }} />}
-                placeholder="粘贴 TikTok / 淘宝 / Amazon 商品链接"
+                placeholder={translate("粘贴 TikTok / 淘宝 / Amazon 商品链接")}
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 onPressEnter={handleParseUrl}
@@ -191,11 +195,11 @@ export default function ProductParse() {
                 onClick={handleParseUrl}
                 disabled={!url.trim()}
               >
-                开始解析
+                {translate("开始解析")}
               </button>
             </div>
 
-            <div className={styles.orDivider}><span>或</span></div>
+            <div className={styles.orDivider}><span>{translate("或")}</span></div>
 
             <Upload.Dragger
               name="image"
@@ -208,7 +212,7 @@ export default function ProductParse() {
                 <CloudUploadOutlined style={{ fontSize: 32, color: '#4648D4' }} />
               </p>
               <p className="ant-upload-text" style={{ fontSize: 14, fontWeight: 500 }}>
-                拖拽商品主图或点击上传
+                {translate("拖拽商品主图或点击上传")}
               </p>
               <p
                 className="ant-upload-hint"
@@ -219,18 +223,18 @@ export default function ProductParse() {
                   marginTop: 4,
                 }}
               >
-                支持 JPG, PNG, WEBP · 最大 10MB
+                {translate("支持 JPG, PNG, WEBP · 最大 10MB")}
               </p>
             </Upload.Dragger>
 
-            <div className={styles.orDivider}><span>或跳过 AI 直接填写</span></div>
+            <div className={styles.orDivider}><span>{translate("或跳过 AI 直接填写")}</span></div>
 
             <div style={{ textAlign: 'center' }}>
               <button
                 type="button"
                 onClick={() => {
                   if (!hasProject) {
-                    message.warning('项目初始化中，请稍候');
+                    message.warning(translate("项目初始化中，请稍候"));
                     return;
                   }
                   setManualOpen(true);
@@ -245,16 +249,16 @@ export default function ProductParse() {
                   padding: '8px 16px',
                 }}
               >
-                ✏️ 手动填写商品信息 →
+                {translate("✏️ 手动填写商品信息 →")}
               </button>
               <p style={{ fontSize: 11, color: '#9CA3AF', marginTop: 4 }}>
-                已有商品资料？直接录入名称、品类、卖点等字段
+                {translate("已有商品资料？直接录入名称、品类、卖点等字段")}
               </p>
             </div>
           </div>
 
           <p className={styles.emptyHint}>
-            暂无商品解析信息，请在上方输入链接、上传图片或手动填写
+            {translate("暂无商品解析信息，请在上方输入链接、上传图片或手动填写")}
           </p>
         </>
       )}
@@ -262,8 +266,8 @@ export default function ProductParse() {
       {/* ============ Step 2：解析中 ============ */}
       {step === 2 && (
         <div className={styles.card}>
-          <h2 className={styles.cardTitle}>AI 正在解析中...</h2>
-          <p className={styles.cardSubtitle}>通常需要 5-10 秒，请稍候</p>
+          <h2 className={styles.cardTitle}>{translate("AI 正在解析中...")}</h2>
+          <p className={styles.cardSubtitle}>{translate("通常需要 5-10 秒，请稍候")}</p>
 
           <div className={styles.skelHeader}>
             <Skeleton.Node active style={{ width: 128, height: 128, borderRadius: 12 }} />
@@ -300,10 +304,10 @@ export default function ProductParse() {
                 <Tag color="processing" style={{ margin: 0, borderRadius: 999 }}>
                   {categoryLabel(product.category)}
                 </Tag>
-                <Tag color="cyan" style={{ margin: 0, borderRadius: 999 }}>AI 解析</Tag>
+                <Tag color="cyan" style={{ margin: 0, borderRadius: 999 }}>{translate("AI 解析")}</Tag>
               </div>
               <p className={styles.resultDesc}>
-                经过 AI 视觉 + LLM 综合解析得出的产品定位与卖点摘要。
+                {translate("经过 AI 视觉 + LLM 综合解析得出的产品定位与卖点摘要。")}
               </p>
               {product.price_anchor && product.price_anchor !== '待 AI 解析' && product.price_anchor !== '未知' && (
                 <div className={styles.resultPrice}>{product.price_anchor}</div>
@@ -314,7 +318,7 @@ export default function ProductParse() {
           <div className={styles.infoGrid}>
             <div className={styles.infoBox}>
               <div className={styles.infoBoxTitle}>
-                <ThunderboltOutlined /> 核心卖点
+                <ThunderboltOutlined /> {translate("核心卖点")}
               </div>
               <ul className={styles.infoBoxList}>
                 {product.selling_points.map((pt) => <li key={pt}>{pt}</li>)}
@@ -322,13 +326,13 @@ export default function ProductParse() {
             </div>
             <div className={styles.infoBox}>
               <div className={styles.infoBoxTitle}>
-                <TeamOutlined /> 目标人群
+                <TeamOutlined /> {translate("目标人群")}
               </div>
               <p className={styles.infoBoxText}>{product.target_audience}</p>
             </div>
             <div className={styles.infoBox}>
               <div className={styles.infoBoxTitle}>
-                <EnvironmentOutlined /> 使用场景
+                <EnvironmentOutlined /> {translate("使用场景")}
               </div>
               <p className={styles.infoBoxText}>{product.usage_scene}</p>
             </div>
@@ -341,7 +345,7 @@ export default function ProductParse() {
                 className={styles.backBtn}
                 onClick={() => { setStep(1); setProduct(null); setUrl(''); }}
               >
-                ← 重新解析
+                {translate("← 重新解析")}
               </button>
               <button
                 type="button"
@@ -349,18 +353,18 @@ export default function ProductParse() {
                 onClick={() => setManualOpen(true)}
                 style={{ color: '#4648D4' }}
               >
-                ✏️ 手动调整
+                {translate("✏️ 手动调整")}
               </button>
             </div>
             <div style={{ display: 'flex', gap: 12 }}>
               <button type="button" className={styles.nextBtn} onClick={handleNext}>
-                编辑剧本 <ArrowRightOutlined />
+                {translate("编辑剧本")} <ArrowRightOutlined />
               </button>
               <button type="button" className={styles.nextBtn}
                 disabled={directGenerating}
                 onClick={async () => {
                   if (!effectiveProjectId) {
-                    message.warning('项目初始化中，请稍候');
+                    message.warning(translate("项目初始化中，请稍候"));
                     return;
                   }
                   setDirectGenerating(true);
@@ -379,7 +383,7 @@ export default function ProductParse() {
                   }
                 }}
                 style={{ background: 'linear-gradient(135deg, #0EA5E9, #4648D4)' }}>
-                {directGenerating ? <><LoadingOutlined spin /> 正在生成剧本…</> : '🎬 直接生成视频'}
+                {directGenerating ? <><LoadingOutlined spin /> {translate("正在生成剧本…")}</> : translate("🎬 直接生成视频")}
               </button>
             </div>
           </div>

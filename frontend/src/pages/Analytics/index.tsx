@@ -1,3 +1,7 @@
+import { useLanguageStore } from '@/stores/languageStore';
+import { metricLabel } from '@/i18n/displayText';
+import { demoText } from '@/i18n/demoContent';
+import { t as translate, useLanguage } from '@/i18n';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Table, Skeleton, App } from 'antd';
@@ -60,25 +64,20 @@ const METRIC_LABELS: Record<AnalyticsMetric, string> = {
   shares: 'SHARES',
 };
 
-const TIME_RANGE_LABELS: Record<AnalyticsTimeRange, string> = {
-  '7d':  '7 天',
-  '30d': '30 天',
-  '90d': '90 天',
-  'all': '全部',
-};
+
 
 function formatNumber(n: number): string {
   if (n >= 100_000) return `${(n / 1000).toFixed(1)}k`;
-  return n.toLocaleString();
+  return n.toLocaleString(useLanguageStore.getState().language);
 }
 
 function formatCurrency(n: number): string {
   if (n >= 10_000) return `¥${(n / 1000).toFixed(1)}k`;
-  return `¥${n.toLocaleString()}`;
+  return `¥${n.toLocaleString(useLanguageStore.getState().language)}`;
 }
 
 function formatDate(iso: string): string {
-  return new Date(iso).toISOString().slice(0, 10);
+  return new Date(iso).toLocaleDateString(useLanguageStore.getState().language, { timeZone: 'UTC' });
 }
 
 /**
@@ -91,6 +90,14 @@ function formatDate(iso: string): string {
  * 4. 视频效果列表（Antd Table，可排序）
  */
 export default function Analytics() {
+  useLanguage();
+  const TIME_RANGE_LABELS: Record<AnalyticsTimeRange, string> = {
+    '7d':  translate("7 天"),
+    '30d': translate("30 天"),
+    '90d': translate("90 天"),
+    'all': translate("全部"),
+  };
+
   const navigate = useNavigate();
   const { message } = App.useApp();
 
@@ -109,11 +116,11 @@ export default function Analytics() {
   }, [range]);
 
   const handleExport = () => {
-    message.info('报表导出中（mock）');
+    message.info(translate("报表导出中（mock）"));
   };
 
   const handleGoOptimize = () => {
-    message.success('跳转剧本编辑器优化');
+    message.success(translate("跳转剧本编辑器优化"));
     navigate('/script-studio');
   };
 
@@ -126,7 +133,7 @@ export default function Analytics() {
   // Table 列定义
   const columns: ColumnsType<VideoMetric> = [
     {
-      title: '视频',
+      title: translate("视频"),
       key: 'video',
       width: 280,
       render: (_, v) => (
@@ -140,14 +147,14 @@ export default function Analytics() {
       ),
     },
     {
-      title: '观看量',
+      title: translate("观看量"),
       dataIndex: 'views',
       key: 'views',
       sorter: (a, b) => a.views - b.views,
       render: (v: number) => <span className={styles.metricMono}>{formatNumber(v)}</span>,
     },
     {
-      title: '完播率',
+      title: translate("完播率"),
       dataIndex: 'completion_rate',
       key: 'completion_rate',
       sorter: (a, b) => a.completion_rate - b.completion_rate,
@@ -176,9 +183,9 @@ export default function Analytics() {
         <button
           type="button"
           className={styles.detailLink}
-          onClick={() => message.info('视频详情页待实现')}
+          onClick={() => message.info(translate("视频详情页待实现"))}
         >
-          查看详情
+          {translate("查看详情")}
         </button>
       ),
     },
@@ -208,17 +215,17 @@ export default function Analytics() {
       <div className={styles.header}>
         <div>
           <div className={styles.titleRow}>
-            <h1 className={styles.title}>数据分析概览</h1>
-            <span className={styles.titlePill}>ANALYTICS</span>
+            <h1 className={styles.title}>{translate("数据分析概览")}</h1>
+            <span className={styles.titlePill}>{translate("ANALYTICS")}</span>
           </div>
-          <p className={styles.subtitle}>基于 AI 模型的多维视频效果归因分析</p>
+          <p className={styles.subtitle}>{translate("基于 AI 模型的多维视频效果归因分析")}</p>
         </div>
         <div className={styles.headerActions}>
           <button type="button" className={styles.rangeBtn} onClick={handleCycleRange}>
             {TIME_RANGE_LABELS[range]} ▾
           </button>
           <button type="button" className={styles.exportBtn} onClick={handleExport}>
-            <DownloadOutlined /> 导出报表
+            <DownloadOutlined /> {translate("导出报表")}
           </button>
         </div>
       </div>
@@ -230,7 +237,7 @@ export default function Analytics() {
             key={k.key}
             icon={KPI_ICON[k.key]}
             variant={KPI_VARIANT[k.key]}
-            label={k.label}
+            label={metricLabel(k.key, k.label)}
             value={k.value}
             trend={k.trend}
             trendDir={k.trend_dir}
@@ -244,32 +251,32 @@ export default function Analytics() {
         {/* Heatmap */}
         <div className={styles.heatCard}>
           <div className={styles.heatHead}>
-            <span className={styles.heatTitle}>生成因子 × 转化效果 矩阵分析</span>
+            <span className={styles.heatTitle}>{translate("生成因子 × 转化效果 矩阵分析")}</span>
             <div className={styles.heatLegend}>
               <span className={styles.legendItem}>
-                <span className={styles.legendDot} style={{ background: '#F1F5F9' }} /> 弱
+                <span className={styles.legendDot} style={{ background: '#F1F5F9' }} /> {translate("弱")}
               </span>
               <span className={styles.legendItem}>
-                <span className={styles.legendDot} style={{ background: '#818CF8' }} /> 中
+                <span className={styles.legendDot} style={{ background: '#818CF8' }} /> {translate("中")}
               </span>
               <span className={styles.legendItem}>
-                <span className={styles.legendDot} style={{ background: '#4648D4' }} /> 强相关
+                <span className={styles.legendDot} style={{ background: '#4648D4' }} /> {translate("强相关")}
               </span>
             </div>
           </div>
           <table className={styles.heatTable}>
             <thead>
               <tr>
-                <th>生成因子</th>
+                <th>{translate("生成因子")}</th>
                 {metricKeys.map((m) => (
-                  <th key={m}>{METRIC_LABELS[m]}</th>
+                  <th key={m}>{translate(METRIC_LABELS[m])}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
               {data.factor_impact_matrix.map((row) => (
                 <tr key={row.factor}>
-                  <td className={styles.heatFactorCell}>{row.factor_label}</td>
+                  <td className={styles.heatFactorCell}>{metricLabel(row.factor, row.factor_label)}</td>
                   {metricKeys.map((m) => {
                     const v = row.values[m] ?? 0;
                     const level = getHeatLevel(v);
@@ -295,13 +302,13 @@ export default function Analytics() {
             <div className={styles.diagIconBox}>
               <ExperimentOutlined />
             </div>
-            <span className={styles.diagTitle}>AI 诊断报告</span>
+            <span className={styles.diagTitle}>{translate("AI 诊断报告")}</span>
           </div>
 
           <div className={styles.diagIssueBox}>
-            <div className={styles.diagIssueLabel}>核心问题</div>
-            <h4 className={styles.diagIssueTitle}>{data.diagnosis.core_issue.title}</h4>
-            <p className={styles.diagIssueDesc}>{data.diagnosis.core_issue.description}</p>
+            <div className={styles.diagIssueLabel}>{translate("核心问题")}</div>
+            <h4 className={styles.diagIssueTitle}>{demoText(data.diagnosis.video_id, data.diagnosis.core_issue.title)}</h4>
+            <p className={styles.diagIssueDesc}>{demoText(data.diagnosis.video_id, data.diagnosis.core_issue.description)}</p>
           </div>
 
           <div className={styles.diagSuggestionList}>
@@ -309,15 +316,15 @@ export default function Analytics() {
               <div key={i} className={styles.diagSuggestion}>
                 <div className={styles.diagSuggestionNum}>{i + 1}</div>
                 <div className={styles.diagSuggestionBody}>
-                  <h5 className={styles.diagSuggestionTitle}>{s.title}</h5>
-                  <p className={styles.diagSuggestionDesc}>{s.description}</p>
+                  <h5 className={styles.diagSuggestionTitle}>{demoText(data.diagnosis.video_id, s.title)}</h5>
+                  <p className={styles.diagSuggestionDesc}>{demoText(data.diagnosis.video_id, s.description)}</p>
                 </div>
               </div>
             ))}
           </div>
 
           <button type="button" className={styles.diagCta} onClick={handleGoOptimize}>
-            立即优化脚本 <ArrowRightOutlined />
+            {translate("立即优化脚本")} <ArrowRightOutlined />
           </button>
         </div>
       </div>
@@ -325,7 +332,7 @@ export default function Analytics() {
       {/* Video list */}
       <div className={styles.videoCard}>
         <div className={styles.videoCardHead}>
-          <span className={styles.videoCardTitle}>视频效果列表</span>
+          <span className={styles.videoCardTitle}>{translate("视频效果列表")}</span>
         </div>
         <Table
           columns={columns}

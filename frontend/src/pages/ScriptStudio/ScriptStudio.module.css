@@ -13,10 +13,12 @@
 
 /* ========= Top toolbar ========= */
 .toolbar {
-  height: 56px;
+  min-height: 56px;
+  flex-wrap: wrap;
+  gap: 8px;
   background: #ffffff;
   border-bottom: 1px solid #E5E7EB;
-  padding: 0 24px;
+  padding: 12px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -24,6 +26,7 @@
 
 .toolbarLeft {
   display: inline-flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
 }
@@ -70,6 +73,8 @@
 
 .toolbarRight {
   display: inline-flex;
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: 8px;
   color: #6B7280;
@@ -241,10 +246,10 @@
 }
 
 /* Drag handle 鼠标指针 */
-.sceneCardIcon[aria-label="拖拽排序"] {
+.sceneCardIcon[data-drag-handle="true"] {
   cursor: grab;
 }
-.sceneCardIcon[aria-label="拖拽排序"]:active {
+.sceneCardIcon[data-drag-handle="true"]:active {
   cursor: grabbing;
 }
 
@@ -428,11 +433,11 @@
   display: block;
 }
 
-.fieldGroup { margin-bottom: 16px; }
+.fieldGroup { min-width: 0; margin-bottom: 16px; }
 
 .fieldRow {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   gap: 16px;
   margin-bottom: 16px;
 }

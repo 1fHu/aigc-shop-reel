@@ -1,3 +1,6 @@
+import { userDisplayName } from '@/i18n/userDisplayName';
+import { t as translate, useLanguage } from '@/i18n';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { Dropdown, App, type MenuProps } from 'antd';
@@ -48,6 +51,9 @@ interface NavItem {
  *   └──────────────┴────────────────────────────────┘
  */
 export default function AppLayout() {
+  useLanguage();
+
+
   const navigate = useNavigate();
   const location = useLocation();
   const { message } = App.useApp();
@@ -63,40 +69,41 @@ export default function AppLayout() {
   const showGuestBanner = isGuest && !bannerDismissed;
 
   const navItems: NavItem[] = [
-    { key: '/',              label: 'Dashboard',        icon: <AppstoreOutlined /> },
-    { key: '/projects',      label: 'Projects',         icon: <FolderOpenOutlined /> },
-    { key: '/gene-bank',     label: 'Gene Bank',        icon: <FireOutlined /> },
-    { key: '/viral-analyzer', label: 'Video Analyzer',   icon: <VideoCameraOutlined /> },
-    { key: '/analytics',     label: 'Analytics',        icon: <BarChartOutlined /> },
+    { key: '/',              label: translate("Dashboard"),        icon: <AppstoreOutlined /> },
+    { key: '/projects',      label: translate("Projects"),         icon: <FolderOpenOutlined /> },
+    { key: '/gene-bank',     label: translate("Gene Bank"),        icon: <FireOutlined /> },
+    { key: '/viral-analyzer', label: translate("Video Analyzer"),   icon: <VideoCameraOutlined /> },
+    { key: '/analytics',     label: translate("Analytics"),        icon: <BarChartOutlined /> },
   ];
 
   const handleLogout = async () => {
     await logout();
-    message.success('已退出登录');
+    message.success(translate("已退出登录"));
     navigate('/login', { replace: true });
   };
 
-  const avatarLetter = (user?.nickname || 'V').slice(0, 1).toUpperCase();
+  const displayName = userDisplayName(user, translate('游客'));
+  const avatarLetter = displayName.slice(0, 1).toUpperCase() || 'V';
 
   const avatarMenu: MenuProps['items'] = [
     {
       key: 'profile',
       label: (
         <div style={{ minWidth: 180 }}>
-          <div style={{ fontWeight: 500, color: '#111827' }}>{user?.nickname ?? '游客'}</div>
+          <div style={{ fontWeight: 500, color: '#111827' }}>{displayName}</div>
           <div style={{ fontSize: 12, color: '#6B7280', marginTop: 2 }}>
-            {isGuest ? '游客模式 · 配额 ' + (user?.video_quota ?? 0) : user?.email}
+            {isGuest ? translate("游客模式 · 配额 ") + (user?.video_quota ?? 0) : user?.email}
           </div>
         </div>
       ),
       disabled: true,
     },
     { type: 'divider' },
-    { key: 'account',  icon: <UserOutlined />,     label: '个人资料', onClick: () => navigate('/account') },
-    { key: 'settings', icon: <SettingOutlined />,  label: '账户设置', onClick: () => navigate('/account') },
-    { key: 'help',     icon: <QuestionCircleOutlined />, label: '帮助中心', onClick: () => navigate('/help') },
+    { key: 'account',  icon: <UserOutlined />,     label: translate("个人资料"), onClick: () => navigate('/account') },
+    { key: 'settings', icon: <SettingOutlined />,  label: translate("账户设置"), onClick: () => navigate('/account') },
+    { key: 'help',     icon: <QuestionCircleOutlined />, label: translate("帮助中心"), onClick: () => navigate('/help') },
     { type: 'divider' },
-    { key: 'logout', icon: <LogoutOutlined />, label: '退出登录', danger: true, onClick: handleLogout },
+    { key: 'logout', icon: <LogoutOutlined />, label: translate("退出登录"), danger: true, onClick: handleLogout },
   ];
 
   return (
@@ -109,7 +116,7 @@ export default function AppLayout() {
             {!collapsed && (
               <div>
                 <div className={styles.brandText}>VidCraft</div>
-                <div className={styles.brandTagline}>PRO WORKSTATION</div>
+                <div className={styles.brandTagline}>{translate("PRO WORKSTATION")}</div>
               </div>
             )}
           </div>
@@ -117,7 +124,7 @@ export default function AppLayout() {
             type="button"
             className={styles.collapseBtn}
             onClick={() => setCollapsed((v) => !v)}
-            title={collapsed ? '展开侧栏' : '收起侧栏'}
+            title={collapsed ? translate("展开侧栏") : translate("收起侧栏")}
           >
             {collapsed ? <RightOutlined /> : <LeftOutlined />}
           </button>
@@ -143,24 +150,24 @@ export default function AppLayout() {
             type="button"
             className={`${styles.navItem} ${location.pathname === '/help' ? styles.navItemActive : ''}`}
             onClick={() => navigate('/help')}
-            title={collapsed ? '帮助中心' : undefined}
+            title={collapsed ? translate("帮助中心") : undefined}
           >
             <span className={styles.navIcon}><QuestionCircleOutlined /></span>
-            {!collapsed && '帮助中心'}
+            {!collapsed && translate("帮助中心")}
           </button>
           <button
             type="button"
             className={`${styles.navItem} ${location.pathname === '/account' ? styles.navItemActive : ''}`}
             onClick={() => navigate('/account')}
-            title={collapsed ? '账户' : undefined}
+            title={collapsed ? translate("账户") : undefined}
           >
             <span className={styles.navIcon}><UserOutlined /></span>
-            {!collapsed && '账户'}
+            {!collapsed && translate("账户")}
           </button>
         </nav>
 
         <button type="button" className={styles.createBtn} onClick={() => setCreateOpen(true)}>
-          <PlusOutlined /> {!collapsed && 'Create New Video'}
+          <PlusOutlined /> {!collapsed && translate('Create New Video')}
         </button>
 
       </aside>
@@ -172,11 +179,11 @@ export default function AppLayout() {
           <div className={styles.guestBanner}>
             <span className={styles.guestBannerLeft}>
               <InfoCircleOutlined />
-              您正处于游客模式。登录后可解锁更多高级 AI 功能并保存您的创作进度。
+              {translate("您正处于游客模式。登录后可解锁更多高级 AI 功能并保存您的创作进度。")}
             </span>
             <span className={styles.guestBannerRight}>
-              <span className={styles.guestBannerLink} onClick={handleLogout}>立即登录</span>
-              <button type="button" className={styles.guestBannerClose} onClick={() => setBannerDismissed(true)} aria-label="关闭">
+              <span className={styles.guestBannerLink} onClick={handleLogout}>{translate("立即登录")}</span>
+              <button type="button" className={styles.guestBannerClose} onClick={() => setBannerDismissed(true)} aria-label={translate("关闭")}>
                 <CloseOutlined />
               </button>
             </span>
@@ -190,8 +197,9 @@ export default function AppLayout() {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <button className={styles.upgrade} onClick={() => navigate('/subscription')}>Upgrade Pro</button>
-            <button className={styles.iconBtn} aria-label="通知">
+            <LanguageSwitcher />
+            <button className={styles.upgrade} onClick={() => navigate('/subscription')}>{translate("Upgrade Pro")}</button>
+            <button className={styles.iconBtn} aria-label={translate("通知")}>
               <BellOutlined />
               <span className={styles.iconBtnDot} />
             </button>

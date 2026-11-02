@@ -1,3 +1,6 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
+import { demoText } from '@/i18n/demoContent';
+import { t as translate, useLanguage, confirmLocalized } from '@/i18n';
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { App, Skeleton, Modal, Checkbox, Spin, Typography } from 'antd';
@@ -32,6 +35,9 @@ const DEFAULT_FACTOR_STATE: FactorState = {
 };
 
 export default function ScriptStudio() {
+  useLanguage();
+
+
   const navigate = useNavigate();
   const { id: projectId } = useParams<{ id: string }>();
   const { message, modal } = App.useApp();
@@ -95,7 +101,7 @@ export default function ScriptStudio() {
         }));
 
         // 显示提示
-        message.success(viral_id ? `已应用爆款模板「${viral_id}」的创作因子` : '已应用拆解视频的创作因子');
+        message.success(viral_id ? translate("已应用爆款模板「{0}」的创作因子", { "0": viral_id }) : translate("已应用拆解视频的创作因子"));
 
         // 清除 sessionStorage（避免重复应用）；viral_id 已存入 state
         sessionStorage.removeItem('genebank_applied');
@@ -202,7 +208,7 @@ export default function ScriptStudio() {
         if (stillPending.length !== regenPending.length) setRegenPending(stillPending);
         if (stillPending.length === 0) {
           regenVideoIdRef.current = null;
-          message.success('分镜已重新生成，可在编辑器查看；完整视频正在后台合成');
+          message.success(translate("分镜已重新生成，可在编辑器查看；完整视频正在后台合成"));
         }
       } catch { /* 拦截器已 toast，继续轮询 */ }
     };
@@ -240,7 +246,7 @@ export default function ScriptStudio() {
         }
       }
     } catch {
-      message.error('剧本生成失败');
+      message.error(translate("剧本生成失败"));
       setGenerating(false);
     }
   }, [projectId, message, factorState]);
@@ -249,9 +255,9 @@ export default function ScriptStudio() {
     if (!scriptId) return;
     try {
       await scriptService.saveStoryboard(scriptId, { storyboard: scenes });
-      message.success('分镜已保存');
+      message.success(translate("分镜已保存"));
     } catch {
-      message.error('保存失败');
+      message.error(translate("保存失败"));
     }
   }, [scriptId, scenes, message]);
 
@@ -291,9 +297,9 @@ export default function ScriptStudio() {
     try {
       const updated = await scriptService.clearShotMaterial(scriptId, index);
       setScenes((prev) => prev.map((s) => (s.index === index ? { ...s, ...updated, index } : s)));
-      message.success('已删除该幕图片素材');
+      message.success(translate("已删除该幕图片素材"));
     } catch {
-      message.error('删除失败，请重试');
+      message.error(translate("删除失败，请重试"));
     }
   }, [scriptId, message]);
 
@@ -316,10 +322,10 @@ export default function ScriptStudio() {
       const payload = JSON.parse(dataLine.slice(5).trim());
       if (payload?.shot) {
         setScenes((prev) => prev.map((s) => (s.index === index ? { ...s, ...payload.shot, index } : s)));
-        message.success('分镜剧本已重生');
+        message.success(translate("分镜剧本已重生"));
       }
     } catch {
-      message.error('重生失败');
+      message.error(translate("重生失败"));
     } finally {
       setRegenerating(false);
     }
@@ -354,7 +360,7 @@ export default function ScriptStudio() {
       }
     } catch {
       setFactorState((prev) => ({ ...prev, [key]: previousValue }));
-      message.error('因子替换失败');
+      message.error(translate("因子替换失败"));
     } finally {
       setApplyingFactor(false);
     }
@@ -371,7 +377,7 @@ export default function ScriptStudio() {
     try {
       setViralCards(await genebankService.search());
     } catch {
-      message.error('加载爆款模板失败');
+      message.error(translate("加载爆款模板失败"));
     } finally {
       setViralLoading(false);
     }
@@ -384,7 +390,7 @@ export default function ScriptStudio() {
     if (rec) setFactorState(nextFactors);
     referenceVideoIdRef.current = card.id;
     setViralModalOpen(false);
-    message.success(`已应用爆款模板「${card.title}」的创作因子，开始生成剧本`);
+    message.success(translate("已应用爆款模板「{0}」的创作因子，开始生成剧本", { "0": card.title }));
     // 直接用刚应用的因子生成（不能依赖 setFactorState 的异步结果）
     handleGenerate(nextFactors);
   }, [factorState, message, handleGenerate]);
@@ -396,31 +402,31 @@ export default function ScriptStudio() {
   const [keepFrames, setKeepFrames] = useState(false);
 
   const handleGenerateVideo = useCallback(() => {
-    if (!scriptId) { message.warning('请先生成或保存剧本'); return; }
+    if (!scriptId) { message.warning(translate("请先生成或保存剧本")); return; }
     // regen=1：告诉视频页这是「整片重生」意图，进页面直接触发生成，而非回显旧视频
     const target = projectId
       ? `/projects/${projectId}/video?scriptId=${scriptId}&regen=1`
       : `/video-creation?scriptId=${scriptId}&regen=1`;
-    modal.confirm({
-      title: '重新生成视频',
-      content: '将清除该项目的已有视频并重新生成所有分镜，是否继续？',
-      okText: '是，重新生成',
-      cancelText: '否',
+    confirmLocalized(modal, {
+      title: translate("重新生成视频"),
+      content: translate("将清除该项目的已有视频并重新生成所有分镜，是否继续？"),
+      okText: translate("是，重新生成"),
+      cancelText: translate("否"),
       onOk: () => navigate(target),
     });
-  }, [projectId, scriptId, navigate, message]);
+  }, [projectId, scriptId, navigate, message, modal]);
 
   const handleRegenerateShots = useCallback(async () => {
-    if (!projectId) { message.warning('项目ID缺失'); return; }
+    if (!projectId) { message.warning(translate("项目ID缺失")); return; }
     try {
       const latest = await videoService.getLatestByProject(projectId);
       if (!latest || latest.status !== 'completed') {
-        message.warning('请先生成完整视频后再重新生成分镜');
+        message.warning(translate("请先生成完整视频后再重新生成分镜"));
         return;
       }
       setSelectedShotIndices(scenes.map((s) => s.index));
       setShotSelectOpen(true);
-    } catch { message.error('获取视频信息失败'); }
+    } catch { message.error(translate("获取视频信息失败")); }
   }, [projectId, scenes, message]);
 
   const confirmRegenerateShots = useCallback(async () => {
@@ -429,7 +435,7 @@ export default function ScriptStudio() {
     setRegeneratingShots(true);
     try {
       const latest = await videoService.getLatestByProject(projectId);
-      if (!latest?.id) { message.error('未找到视频任务'); setRegeneratingShots(false); return; }
+      if (!latest?.id) { message.error(translate("未找到视频任务")); setRegeneratingShots(false); return; }
       const sorted = [...selectedShotIndices].sort((a, b) => a - b);
       // 批量再生：后端只重生选中的分镜，保留未选中，最终合成。
       // 带上当前面板的字幕/配音设置，让重生分镜按最新字号等烧字幕（否则后端沿用上次生成时的旧设置）。
@@ -444,11 +450,11 @@ export default function ScriptStudio() {
         },
         custom_requirement: customRequirement,
       });
-      message.success(`${sorted.length} 个分镜已提交重新生成，完成后将在编辑器中预览`);
+      message.success(translate("{0} 个分镜已提交重新生成，完成后将在编辑器中预览", { "0": sorted.length }));
       // 留在分镜编辑页：启动轮询，片段完成即就地刷新播放器；不跳到视频页（整片合成在后台继续）
       regenVideoIdRef.current = latest.id;
       setRegenPending(sorted);
-    } catch { message.error('分镜重新生成失败'); }
+    } catch { message.error(translate("分镜重新生成失败")); }
     setRegeneratingShots(false);
   }, [projectId, selectedShotIndices, keepFrames, message, voiceId, subtitleEnabled, subtitleFontSize, subtitleOutline, subtitleColor, subtitleFontFamily, customRequirement]);
 
@@ -456,9 +462,9 @@ export default function ScriptStudio() {
     if (!projectId) return;
     try {
       const latest = await videoService.getLatestByProject(projectId);
-      if (!latest) { message.warning('该项目还没有生成过视频，请先生成'); return; }
+      if (!latest) { message.warning(translate("该项目还没有生成过视频，请先生成")); return; }
       navigate(`/projects/${projectId}/video?scriptId=${scriptId}`);
-    } catch { message.error('获取视频失败'); }
+    } catch { message.error(translate("获取视频失败")); }
   }, [projectId, scriptId, navigate, message]);
 
   const totalDuration = scenes.reduce((sum, s) => sum + (s.duration || 3), 0);
@@ -466,19 +472,20 @@ export default function ScriptStudio() {
   // 爆款仿写选模板 Modal（空态与编辑态共用，避免空态点击「爆款仿写」无弹窗）
   const viralModalEl = (
     <Modal
-      title="爆款仿写 — 选择参考模板"
+      closable={{ 'aria-label': translate("关闭") }}
+      title={<ModalTitle>{translate("爆款仿写 — 选择参考模板")}</ModalTitle>}
       open={viralModalOpen}
       onCancel={() => setViralModalOpen(false)}
       footer={null}
       width={780}
     >
       <p style={{ color: '#6B7280', marginBottom: 12, fontSize: 13 }}>
-        选择一个爆款模板，将其创作因子（风格 / 开场 / 口播 / 节奏 / CTA）应用到当前剧本并立即生成同款。
+        {translate("选择一个爆款模板，将其创作因子（风格 / 开场 / 口播 / 节奏 / CTA）应用到当前剧本并立即生成同款。")}
       </p>
       {viralLoading ? (
         <Skeleton active paragraph={{ rows: 6 }} />
       ) : viralCards.length === 0 ? (
-        <div className={styles.viralEmpty}>暂无爆款模板</div>
+        <div className={styles.viralEmpty}>{translate("暂无爆款模板")}</div>
       ) : (
         <div className={styles.viralGrid}>
           {viralCards.map((card) => {
@@ -488,9 +495,9 @@ export default function ScriptStudio() {
               : [];
             return (
               <div key={card.id} className={styles.viralCard} onClick={() => handleApplyViral(card)}>
-                <img src={card.thumbnail_url} alt={card.title} className={styles.viralThumb} />
+                <img src={card.thumbnail_url} alt={demoText(card.id, card.title)} className={styles.viralThumb} />
                 <div className={styles.viralBody}>
-                  <div className={styles.viralTitle}>{card.title}</div>
+                  <div className={styles.viralTitle}>{demoText(card.id, card.title)}</div>
                   <div className={styles.viralChips}>
                     {chips.map((v) => (
                       <span key={v} className={styles.viralChip}>{v}</span>
@@ -523,8 +530,8 @@ export default function ScriptStudio() {
         <div className={styles.page}>
           <div className={styles.emptyState}>
             <Spin size="large" />
-            <h2 style={{ marginTop: 24 }}>加速生成剧本中…</h2>
-            <p>AI 正在基于商品信息逐镜生成分镜剧本，请稍候</p>
+            <h2 style={{ marginTop: 24 }}>{translate("加速生成剧本中…")}</h2>
+            <p>{translate("AI 正在基于商品信息逐镜生成分镜剧本，请稍候")}</p>
           </div>
         </div>
       </div>
@@ -537,19 +544,19 @@ export default function ScriptStudio() {
       <div className={styles.shell}>
         <div className={styles.page}>
           <div className={styles.emptyState}>
-            <h2>分镜编辑</h2>
-            <p>基于商品信息，AI 自动生成带货视频分镜剧本，也可手动逐镜编辑</p>
+            <h2>{translate("分镜编辑")}</h2>
+            <p>{translate("基于商品信息，AI 自动生成带货视频分镜剧本，也可手动逐镜编辑")}</p>
             <div className={styles.emptyActions}>
               <button
                 className={styles.genBtn}
                 onClick={() => handleGenerate()}
                 disabled={generating}
               >
-                {generating ? <><LoadingOutlined spin /> 正在生成剧本…</> : <><ThunderboltFilled /> 生成剧本</>}
+                {generating ? <><LoadingOutlined spin /> {translate("正在生成剧本…")}</> : <><ThunderboltFilled /> {translate("生成剧本")}</>}
               </button>
               {generationDone && (
                 <Typography.Text type="success" style={{ fontSize: 13 }}>
-                  <CheckCircleOutlined style={{ marginRight: 4 }} />生成完成
+                  <CheckCircleOutlined style={{ marginRight: 4 }} />{translate("生成完成")}
                 </Typography.Text>
               )}
               <button
@@ -557,7 +564,7 @@ export default function ScriptStudio() {
                 onClick={handleOpenViral}
                 style={{ background: '#F3F4F6', color: '#374151' }}
               >
-                <FireOutlined /> 爆款仿写
+                <FireOutlined /> {translate("爆款仿写")}
               </button>
             </div>
           </div>
@@ -575,23 +582,23 @@ export default function ScriptStudio() {
       {/* ====== Toolbar ====== */}
       <div className={styles.toolbar}>
         <div className={styles.toolbarLeft}>
-          <span className={styles.modeTitle}>AI 生成剧本</span>
+          <span className={styles.modeTitle}>{translate("AI 生成剧本")}</span>
           <button className={styles.viralBtn} onClick={handleOpenViral}>
-            <FireOutlined style={{ fontSize: 12, marginRight: 4 }} /> 爆款仿写
+            <FireOutlined style={{ fontSize: 12, marginRight: 4 }} /> {translate("爆款仿写")}
           </button>
           <button className={styles.generateBtn} onClick={() => handleGenerate()} disabled={generating}>
-            {generating ? <><LoadingOutlined spin style={{ fontSize: 12, marginRight: 4 }} /> 正在生成剧本…</> : <><ThunderboltFilled style={{ fontSize: 12, marginRight: 4 }} /> 生成剧本</>}
+            {generating ? <><LoadingOutlined spin style={{ fontSize: 12, marginRight: 4 }} /> {translate("正在生成剧本…")}</> : <><ThunderboltFilled style={{ fontSize: 12, marginRight: 4 }} /> {translate("生成剧本")}</>}
           </button>
           {generationDone && (
             <Typography.Text type="success" style={{ fontSize: 13, marginLeft: 8 }}>
-              <CheckCircleOutlined style={{ marginRight: 4 }} />剧本已生成
+              <CheckCircleOutlined style={{ marginRight: 4 }} />{translate("剧本已生成")}
             </Typography.Text>
           )}
         </div>
         <div className={styles.toolbarRight}>
-          <span className={styles.saveHint}>删减镜头或编辑分镜字段后点击</span>
+          <span className={styles.saveHint}>{translate("删减镜头或编辑分镜字段后点击")}</span>
           <button className={styles.saveBtn} onClick={handleSave} disabled={!scriptId || generating}>
-            <SaveOutlined /> 保存
+            <SaveOutlined /> {translate("保存")}
           </button>
         </div>
       </div>
@@ -609,7 +616,7 @@ export default function ScriptStudio() {
           scene={selectedScene}
           clipUrl={selectedScene ? shotClips[selectedScene.index] : undefined}
           regenerating={regenerating || (!!selectedScene && regenPending.includes(selectedScene.index))}
-          regenLabel={!!selectedScene && regenPending.includes(selectedScene.index) ? '正在重新生成该分镜视频…' : undefined}
+          regenLabel={!!selectedScene && regenPending.includes(selectedScene.index) ? translate("正在重新生成该分镜视频…") : undefined}
           onChange={handleFieldChange}
           onRegenerate={handleRegenerateShot}
           onDeleteMaterial={handleDeleteMaterial}
@@ -642,12 +649,12 @@ export default function ScriptStudio() {
       <div className={styles.bottombar}>
         <div className={styles.bottombarLeft}>
           <div className={styles.bottomStat}>
-            <span className={styles.bottomStatLabel}>总时长</span>
+            <span className={styles.bottomStatLabel}>{translate("总时长")}</span>
             <span className={styles.bottomStatValue}>{totalDuration}s</span>
           </div>
           <span className={styles.bottomSep} />
           <div className={styles.bottomStat}>
-            <span className={styles.bottomStatLabel}>分镜数</span>
+            <span className={styles.bottomStatLabel}>{translate("分镜数")}</span>
             <span className={styles.bottomStatValue}>{scenes.length}</span>
           </div>
         </div>
@@ -658,7 +665,7 @@ export default function ScriptStudio() {
             disabled={!projectId}
             style={{ background: '#F3F4F6', color: '#374151' }}
           >
-            <PlaySquareOutlined /> 查看视频
+            <PlaySquareOutlined /> {translate("查看视频")}
           </button>
           <button
             className={styles.genBtn}
@@ -666,14 +673,14 @@ export default function ScriptStudio() {
             disabled={!scriptId || scenes.length === 0 || regeneratingShots || regenPending.length > 0}
             style={{ background: '#F3F4F6', color: '#374151' }}
           >
-            <ReloadOutlined /> {regenPending.length > 0 ? `重生中…(${regenPending.length})` : '生成分镜'}
+            <ReloadOutlined /> {regenPending.length > 0 ? translate("重生中…({0})", { "0": regenPending.length }) : translate("生成分镜")}
           </button>
           <button
             className={styles.genBtn}
             onClick={handleGenerateVideo}
             disabled={!scriptId || scenes.length === 0 || generating}
           >
-            <RocketOutlined /> 生成视频
+            <RocketOutlined /> {translate("生成视频")}
           </button>
         </div>
       </div>
@@ -683,20 +690,21 @@ export default function ScriptStudio() {
 
       {/* ====== 分镜选择 Modal ====== */}
       <Modal
-        title="选择要重新生成的分镜"
+      closable={{ 'aria-label': translate("关闭") }}
+        title={<ModalTitle>{translate("选择要重新生成的分镜")}</ModalTitle>}
         open={shotSelectOpen}
         onOk={confirmRegenerateShots}
         onCancel={() => setShotSelectOpen(false)}
-        okText="开始生成"
-        cancelText="取消"
+        okText={translate("开始生成")}
+        cancelText={translate("取消")}
         confirmLoading={regeneratingShots}
       >
         <p style={{ color: '#6B7280', marginBottom: 12, fontSize: 13 }}>
-          选中分镜将重新生成，未选中的保留原片，最终自动合成。
+          {translate("选中分镜将重新生成，未选中的保留原片，最终自动合成。")}
         </p>
         <div style={{ marginBottom: 12 }}>
           <Checkbox checked={keepFrames} onChange={(e) => setKeepFrames(e.target.checked)}>
-            保留首尾帧衔接（用各片段原首/尾帧约束新片，开头结尾与原片一致、与前后衔接）
+            {translate("保留首尾帧衔接（用各片段原首/尾帧约束新片，开头结尾与原片一致、与前后衔接）")}
           </Checkbox>
         </div>
         {scenes.map((s) => (
@@ -711,7 +719,7 @@ export default function ScriptStudio() {
                 }
               }}
             >
-              Scene {String(s.index + 1).padStart(2, '0')} — {s.description?.slice(0, 24) || '(空)'}
+              {translate("Scene")}{String(s.index + 1).padStart(2, '0')} — {s.description?.slice(0, 24) || translate("(空)")}
             </Checkbox>
           </div>
         ))}

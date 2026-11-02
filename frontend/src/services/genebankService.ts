@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import api from './api';
 import type {
   ViralCard,
@@ -113,12 +114,12 @@ export const genebankService = {
 
   /** 导入站外公开视频 URL 触发 AI 异步拆解（暂不支持） */
   importUrl(_payload: { url: string; category?: string }): Promise<ViralImportResult> {
-    throw new Error('暂不支持导入外部视频，请使用已有的 8 个参考视频');
+    throw new Error(t('暂不支持导入外部视频，请使用已有的 8 个参考视频'));
   },
 
   /** 一键借鉴：把当前爆款应用为指定剧本的参考结构（暂不支持） */
   reference(_viralId: string, _scriptId: string): Promise<ViralReferenceResult> {
-    throw new Error('请使用新的 reference_video_id 参数调用剧本生成接口');
+    throw new Error(t('请使用新的 reference_video_id 参数调用剧本生成接口'));
   },
 };
 

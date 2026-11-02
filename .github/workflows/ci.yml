@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [master, main, develop, feat/videocreate]
+    branches: [master, main, develop, feat/videocreate, feat/bilingual-ui]
   pull_request:
     branches: [master, main]
   workflow_dispatch:
@@ -28,6 +28,9 @@ jobs:
 
       - name: Lint frontend
         run: cd frontend && npm run lint
+
+      - name: Test bilingual interface contracts
+        run: cd frontend && npm run test:i18n
 
       - name: Lint backend
         run: cd backend && npm run lint

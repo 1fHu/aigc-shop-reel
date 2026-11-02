@@ -1,3 +1,4 @@
+import { t as translate, useLanguage } from '@/i18n';
 import { useEffect, useMemo, useState } from 'react';
 import { Table, Tag, Skeleton } from 'antd';
 import type { ColumnsType } from 'antd/es/table';
@@ -17,23 +18,9 @@ import styles from './Projects.module.css';
 type StatusFilter = 'all' | ProjectStatus;
 type ViewMode = 'grid' | 'list';
 
-const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
-  { value: 'all',         label: '全部' },
-  { value: 'finished',       label: '已完成' },
-  { value: 'video_pending',  label: '视频待生成' },
-  { value: 'script_pending', label: '剧本待生成' },
-  { value: 'material_pending', label: '素材待上传' },
-];
 
-const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string }> = {
-  material_pending: { label: '素材待上传', color: 'default' },
-  script_pending: { label: '剧本待生成', color: 'processing' },
-  video_pending: { label: '视频待生成', color: 'warning' },
-  finished: { label: '已完成', color: 'success' },
-  draft: { label: '草稿', color: 'default' },
-  in_progress: { label: '生成中', color: 'warning' },
-  completed: { label: '已完成', color: 'success' },
-};
+
+
 
 function progressByStatus(status: ProjectStatus): number | undefined {
   if (status === 'script_pending') return 35;
@@ -45,15 +32,33 @@ function progressByStatus(status: ProjectStatus): number | undefined {
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.round(diff / 60000);
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 60) return translate("{0} 分钟前", { "0": min });
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} 小时前`;
+  if (hr < 24) return translate("{0} 小时前", { "0": hr });
   const day = Math.round(hr / 24);
-  if (day === 1) return '昨天';
-  return `${day} 天前`;
+  if (day === 1) return translate("昨天");
+  return translate("{0} 天前", { "0": day });
 }
 
 export default function Projects() {
+  useLanguage();
+  const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+    { value: 'all',         label: translate("全部") },
+    { value: 'finished',       label: translate("已完成") },
+    { value: 'video_pending',  label: translate("视频待生成") },
+    { value: 'script_pending', label: translate("剧本待生成") },
+    { value: 'material_pending', label: translate("素材待上传") },
+  ];
+  const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string }> = {
+    material_pending: { label: translate("素材待上传"), color: 'default' },
+    script_pending: { label: translate("剧本待生成"), color: 'processing' },
+    video_pending: { label: translate("视频待生成"), color: 'warning' },
+    finished: { label: translate("已完成"), color: 'success' },
+    draft: { label: translate("草稿"), color: 'default' },
+    in_progress: { label: translate("生成中"), color: 'warning' },
+    completed: { label: translate("已完成"), color: 'success' },
+  };
+
   const [view, setView] = useState<ViewMode>('grid');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
   const [projects, setProjects] = useState<ProjectListItem[]>([]);
@@ -86,7 +91,7 @@ export default function Projects() {
   // 列表视图的 Table 列定义
   const columns: ColumnsType<ProjectListItem> = [
     {
-      title: '项目名',
+      title: translate("项目名"),
       dataIndex: 'name',
       key: 'name',
       render: (_, p) => (
@@ -101,7 +106,7 @@ export default function Projects() {
       ),
     },
     {
-      title: '状态',
+      title: translate("状态"),
       dataIndex: 'status',
       key: 'status',
       width: 130,
@@ -111,14 +116,14 @@ export default function Projects() {
       },
     },
     {
-      title: '视频数',
+      title: translate("视频数"),
       dataIndex: 'video_count',
       key: 'video_count',
       width: 100,
       render: (v: number) => <span style={{ fontFamily: 'JetBrains Mono, monospace' }}>{v}</span>,
     },
     {
-      title: '更新时间',
+      title: translate("更新时间"),
       dataIndex: 'updated_at',
       key: 'updated_at',
       width: 140,
@@ -139,7 +144,7 @@ export default function Projects() {
             cursor: 'pointer', fontSize: 13, fontWeight: 500,
           }}
         >
-          查看详情
+          {translate("查看详情")}
         </button>
       ),
     },
@@ -150,9 +155,9 @@ export default function Projects() {
       {/* Header */}
       <div className={styles.header}>
         <div>
-          <h1 className={styles.title}>项目管理</h1>
+          <h1 className={styles.title}>{translate("项目管理")}</h1>
           <p className={styles.subtitle}>
-            您共有 <span className={styles.subtitleCount}>{projects.length}</span> 个项目
+            {translate("您共有")} <span className={styles.subtitleCount}>{projects.length}</span> {translate("个项目")}
           </p>
         </div>
 
@@ -162,7 +167,7 @@ export default function Projects() {
               type="button"
               className={view === 'grid' ? styles.viewToggleActive : ''}
               onClick={() => setView('grid')}
-              aria-label="网格视图"
+              aria-label={translate("网格视图")}
             >
               <AppstoreOutlined />
             </button>
@@ -170,13 +175,13 @@ export default function Projects() {
               type="button"
               className={view === 'list' ? styles.viewToggleActive : ''}
               onClick={() => setView('list')}
-              aria-label="列表视图"
+              aria-label={translate("列表视图")}
             >
               <UnorderedListOutlined />
             </button>
           </div>
           <button type="button" className={styles.createBtn} onClick={() => setModalOpen(true)}>
-            <PlusOutlined /> 新建项目
+            <PlusOutlined /> {translate("新建项目")}
           </button>
         </div>
       </div>
@@ -184,7 +189,7 @@ export default function Projects() {
       {/* Filters */}
       <div className={styles.filters}>
         <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>状态</span>
+          <span className={styles.filterLabel}>{translate("状态")}</span>
           {STATUS_FILTERS.map((f) => (
             <button
               key={f.value}
@@ -200,12 +205,12 @@ export default function Projects() {
         <div className={styles.filterDivider} />
 
         <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>时间</span>
-          <button type="button" className={styles.filterPill}>30 天 ▾</button>
+          <span className={styles.filterLabel}>{translate("时间")}</span>
+          <button type="button" className={styles.filterPill}>{translate("30 天 ▾")}</button>
         </div>
         <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>分类</span>
-          <button type="button" className={styles.filterPill}>所有类目 ▾</button>
+          <span className={styles.filterLabel}>{translate("分类")}</span>
+          <button type="button" className={styles.filterPill}>{translate("所有类目 ▾")}</button>
         </div>
       </div>
 
@@ -221,8 +226,8 @@ export default function Projects() {
       {/* Empty state */}
       {!loading && filteredProjects.length === 0 && (
         <div className={styles.empty}>
-          <h3>没有匹配的项目</h3>
-          <p>试试切换筛选条件，或者新建一个项目</p>
+          <h3>{translate("没有匹配的项目")}</h3>
+          <p>{translate("试试切换筛选条件，或者新建一个项目")}</p>
         </div>
       )}
 
@@ -246,8 +251,8 @@ export default function Projects() {
             onClick={() => setModalOpen(true)}
           >
             <div className={styles.placeholderIconCircle}><PlusOutlined /></div>
-            <div className={styles.placeholderTitle}>创建新项目</div>
-            <div className={styles.placeholderSubtitle}>点击开启你的下一个 AIGC 创作</div>
+            <div className={styles.placeholderTitle}>{translate("创建新项目")}</div>
+            <div className={styles.placeholderSubtitle}>{translate("点击开启你的下一个 AIGC 创作")}</div>
           </button>
         </div>
       )}
@@ -271,7 +276,7 @@ export default function Projects() {
       <footer className={styles.footer}>
         <span><strong style={{ fontFamily: 'Geist, sans-serif' }}>VidCraft</strong> © 2026 VidCraft AI Workstation</span>
         <div>
-          <a href="#">服务条款</a><a href="#">隐私政策</a><a href="#">联系我们</a><a href="#">API</a>
+          <a href="#">{translate("服务条款")}</a><a href="#">{translate("隐私政策")}</a><a href="#">{translate("联系我们")}</a><a href="#">API</a>
         </div>
       </footer>
 

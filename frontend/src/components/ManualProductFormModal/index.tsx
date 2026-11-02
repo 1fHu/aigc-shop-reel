@@ -1,3 +1,5 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
+import { t as translate, useLanguage, useFormLanguage } from '@/i18n';
 import { useState } from 'react';
 import { Modal, Form, Input, Select, Button, App, Space } from 'antd';
 import { PlusOutlined, CloseOutlined } from '@ant-design/icons';
@@ -36,8 +38,12 @@ interface FormValues {
 export default function ManualProductFormModal({
   open, projectId, initialValue, onClose, onSaved,
 }: Props) {
+  useLanguage();
+
+
   const { message } = App.useApp();
   const [form] = Form.useForm<FormValues>();
+  useFormLanguage(form);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
@@ -56,13 +62,13 @@ export default function ManualProductFormModal({
 
       // 客户端再校验一次 selling_points（清空空白后可能少于 1）
       if (payload.selling_points.length === 0) {
-        message.warning('请至少填写一条核心卖点');
+        message.warning(translate("请至少填写一条核心卖点"));
         return;
       }
 
       setSubmitting(true);
       const result = await productService.update(projectId, payload);
-      message.success('商品信息已保存');
+      message.success(translate("商品信息已保存"));
       onSaved(result);
       form.resetFields();
       onClose();
@@ -97,16 +103,17 @@ export default function ManualProductFormModal({
 
   return (
     <Modal
+      closable={{ 'aria-label': translate("关闭") }}
       open={open}
-      title={initialValue ? '编辑商品信息' : '手动填写商品信息'}
+      title={<ModalTitle>{initialValue ? translate("编辑商品信息") : translate("手动填写商品信息")}</ModalTitle>}
       onCancel={handleClose}
       width={560}
       destroyOnClose
       footer={
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <Button onClick={handleClose} disabled={submitting}>取消</Button>
+          <Button onClick={handleClose} disabled={submitting}>{translate("取消")}</Button>
           <Button type="primary" loading={submitting} onClick={handleSubmit}>
-            保存并继续
+            {translate("保存并继续")}
           </Button>
         </div>
       }
@@ -120,38 +127,38 @@ export default function ManualProductFormModal({
       >
         <Form.Item
           name="name"
-          label="商品名称"
+          label={translate("商品名称")}
           rules={[
-            { required: true, message: '请输入商品名称' },
-            { max: 200, message: '不超过 200 个字符' },
+            { required: true, message: translate("请输入商品名称") },
+            { max: 200, message: translate("不超过 200 个字符") },
           ]}
         >
-          <Input placeholder="如：XX SPF50+ 防晒霜 50ml" autoFocus />
+          <Input placeholder={translate("如：XX SPF50+ 防晒霜 50ml")} autoFocus />
         </Form.Item>
 
         <Form.Item
           name="category"
-          label="品类"
-          rules={[{ required: true, message: '请选择品类' }]}
+          label={translate("品类")}
+          rules={[{ required: true, message: translate("请选择品类") }]}
         >
           <Select
-            placeholder="选择商品所属品类"
+            placeholder={translate("选择商品所属品类")}
             options={PRODUCT_CATEGORIES.map((c) => ({
               value: c,
-              label: PRODUCT_CATEGORY_LABELS[c],
+              label: translate(PRODUCT_CATEGORY_LABELS[c]),
             }))}
           />
         </Form.Item>
 
-        <Form.Item label="核心卖点（1-5 条）" required>
+        <Form.Item label={translate("核心卖点（1-5 条）")} required>
           <Form.List
             name="selling_points"
             rules={[
               {
                 validator: async (_, items: { value: string }[]) => {
                   const valid = (items || []).filter((it) => it?.value?.trim());
-                  if (valid.length === 0) return Promise.reject(new Error('请至少填写一条核心卖点'));
-                  if (valid.length > 5) return Promise.reject(new Error('最多 5 条核心卖点'));
+                  if (valid.length === 0) return Promise.reject(new Error(translate("请至少填写一条核心卖点")));
+                  if (valid.length > 5) return Promise.reject(new Error(translate("最多 5 条核心卖点")));
                   return Promise.resolve();
                 },
               },
@@ -166,11 +173,11 @@ export default function ManualProductFormModal({
                       name={[field.name, 'value']}
                       style={{ marginBottom: 0, flex: 1 }}
                       rules={[
-                        { max: 100, message: '不超过 100 个字符' },
+                        { max: 100, message: translate("不超过 100 个字符") },
                       ]}
                     >
                       <Input
-                        placeholder={`卖点 ${i + 1}（如：SPF50+ PA++++）`}
+                        placeholder={translate("卖点 {0}（如：SPF50+ PA++++）", { "0": i + 1 })}
                         style={{ width: 380 }}
                       />
                     </Form.Item>
@@ -180,7 +187,7 @@ export default function ManualProductFormModal({
                         size="small"
                         icon={<CloseOutlined />}
                         onClick={() => remove(field.name)}
-                        aria-label="删除"
+                        aria-label={translate("删除")}
                       />
                     )}
                   </Space>
@@ -192,7 +199,7 @@ export default function ManualProductFormModal({
                     icon={<PlusOutlined />}
                     style={{ width: '100%' }}
                   >
-                    添加卖点（{fields.length}/5）
+                    {translate("添加卖点（")}{fields.length}/5）
                   </Button>
                 )}
                 <Form.ErrorList errors={errors} />
@@ -203,26 +210,26 @@ export default function ManualProductFormModal({
 
         <Form.Item
           name="target_audience"
-          label="目标人群"
-          rules={[{ max: 200, message: '不超过 200 个字符' }]}
+          label={translate("目标人群")}
+          rules={[{ max: 200, message: translate("不超过 200 个字符") }]}
         >
-          <Input.TextArea rows={2} placeholder="如：18-30 岁都市女性" maxLength={200} showCount />
+          <Input.TextArea rows={2} placeholder={translate("如：18-30 岁都市女性")} maxLength={200} showCount />
         </Form.Item>
 
         <Form.Item
           name="usage_scene"
-          label="使用场景"
-          rules={[{ max: 200, message: '不超过 200 个字符' }]}
+          label={translate("使用场景")}
+          rules={[{ max: 200, message: translate("不超过 200 个字符") }]}
         >
-          <Input.TextArea rows={2} placeholder="如：户外运动、日常出行" maxLength={200} showCount />
+          <Input.TextArea rows={2} placeholder={translate("如：户外运动、日常出行")} maxLength={200} showCount />
         </Form.Item>
 
         <Form.Item
           name="price_anchor"
-          label="价格锚点"
-          rules={[{ max: 100, message: '不超过 100 个字符' }]}
+          label={translate("价格锚点")}
+          rules={[{ max: 100, message: translate("不超过 100 个字符") }]}
         >
-          <Input placeholder="如：原价 ¥199，现 ¥89" maxLength={100} showCount />
+          <Input placeholder={translate("如：原价 ¥199，现 ¥89")} maxLength={100} showCount />
         </Form.Item>
       </Form>
     </Modal>

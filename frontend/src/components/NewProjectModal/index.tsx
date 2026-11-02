@@ -1,3 +1,5 @@
+import { ModalTitle } from '@/components/LanguageSwitcher';
+import { t as translate, useLanguage, useFormLanguage } from '@/i18n';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Modal, Input, Form, Button, App } from 'antd';
@@ -17,9 +19,13 @@ interface Props {
  * 在 Dashboard / Projects 两处使用
  */
 export default function NewProjectModal({ open, onClose, onCreated }: Props) {
+  useLanguage();
+
+
   const navigate = useNavigate();
   const { message } = App.useApp();
   const [form] = Form.useForm<{ name: string; description?: string }>();
+  useFormLanguage(form);
   const [loading, setLoading] = useState(false);
 
   const handleClose = () => {
@@ -36,7 +42,7 @@ export default function NewProjectModal({ open, onClose, onCreated }: Props) {
         name: values.name.trim(),
         description: values.description?.trim() || undefined,
       });
-      message.success('项目已创建');
+      message.success(translate("项目已创建"));
       onCreated?.(project);
       form.resetFields();
       onClose();
@@ -52,14 +58,15 @@ export default function NewProjectModal({ open, onClose, onCreated }: Props) {
 
   return (
     <Modal
+      closable={{ 'aria-label': translate("关闭") }}
       open={open}
-      title="新建项目"
+      title={<ModalTitle>{translate("新建项目")}</ModalTitle>}
       onCancel={handleClose}
       footer={
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <Button onClick={handleClose} disabled={loading}>取消</Button>
+          <Button onClick={handleClose} disabled={loading}>{translate("取消")}</Button>
           <Button type="primary" loading={loading} onClick={handleSubmit}>
-            创建并开始
+            {translate("创建并开始")}
           </Button>
         </div>
       }
@@ -69,17 +76,17 @@ export default function NewProjectModal({ open, onClose, onCreated }: Props) {
       <Form form={form} layout="vertical" requiredMark={false} style={{ marginTop: 16 }}>
         <Form.Item
           name="name"
-          label="项目名称"
+          label={translate("项目名称")}
           rules={[
-            { required: true, message: '请输入项目名称' },
-            { min: 2, message: '项目名称至少 2 个字符' },
-            { max: 60, message: '不超过 60 个字符' },
+            { required: true, message: translate("请输入项目名称") },
+            { min: 2, message: translate("项目名称至少 2 个字符") },
+            { max: 60, message: translate("不超过 60 个字符") },
           ]}
         >
-          <Input placeholder="如：夏日防晒霜推广" autoFocus />
+          <Input placeholder={translate("如：夏日防晒霜推广")} autoFocus />
         </Form.Item>
-        <Form.Item name="description" label="项目描述（可选）">
-          <Input.TextArea rows={3} placeholder="一句话概括项目目标..." maxLength={200} showCount />
+        <Form.Item name="description" label={translate("项目描述（可选）")}>
+          <Input.TextArea rows={3} placeholder={translate("一句话概括项目目标...")} maxLength={200} showCount />
         </Form.Item>
       </Form>
     </Modal>

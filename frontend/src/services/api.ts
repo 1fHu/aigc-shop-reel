@@ -1,3 +1,4 @@
+import { t } from '../i18n';
 import axios, { AxiosError, type InternalAxiosRequestConfig } from 'axios';
 import { message } from 'antd';
 
@@ -57,7 +58,7 @@ api.interceptors.response.use(
       if (payload.code === 200) {
         return payload.data as never;
       }
-      const errMsg = payload.msg || `Business error: ${payload.code}`;
+      const errMsg = t(payload.msg || `Business error: ${payload.code}`);
       message.error(errMsg);
       return Promise.reject(new Error(errMsg));
     }
@@ -68,7 +69,7 @@ api.interceptors.response.use(
   (error: AxiosError<ApiResponse>) => {
     const status = error.response?.status;
     const traceId = error.response?.data?.traceId;
-    const serverMsg = error.response?.data?.msg;
+    const serverMsg = error.response?.data?.msg ? t(error.response.data.msg) : undefined;
 
     if (status === 401) {
       // 登录/注册/刷新接口的 401 由页面自行处理，拦截器不重复 toast、不跳转
@@ -84,27 +85,27 @@ api.interceptors.response.use(
           window.location.pathname,
         );
         if (!onAuthPage) {
-          message.error(serverMsg || '登录已过期，请重新登录');
+          message.error(serverMsg || t('登录已过期，请重新登录'));
           // 整页跳转：让 auth store 从（已清空的）localStorage 重新初始化为未登录态
           window.location.href = '/login';
         }
       }
     } else if (status === 403) {
-      message.error(serverMsg || '没有权限执行此操作');
+      message.error(serverMsg || t('没有权限执行此操作'));
     } else if (status === 404) {
-      message.error(serverMsg || '资源不存在');
+      message.error(serverMsg || t('资源不存在'));
     } else if (status === 429) {
-      message.warning('请求过于频繁，请稍后再试');
+      message.warning(t('请求过于频繁，请稍后再试'));
     } else if (status === 503) {
-      message.error(`下游 AI 服务暂不可用${traceId ? `（traceId: ${traceId}）` : ''}`);
+      message.error(t('下游 AI 服务暂不可用{0}', { 0: traceId ? ` (traceId: ${traceId})` : '' }));
     } else if (status && status >= 500) {
       message.error(
-        `服务异常${traceId ? `（traceId: ${traceId}）` : ''}，请稍后重试或联系管理员`,
+        t('服务异常{0}，请稍后重试或联系管理员', { 0: traceId ? ` (traceId: ${traceId})` : '' }),
       );
     } else if (error.code === 'ECONNABORTED') {
-      message.error('请求超时');
+      message.error(t('请求超时'));
     } else {
-      message.error(serverMsg || error.message || '网络异常');
+      message.error(serverMsg || error.message || t('网络异常'));
     }
 
     return Promise.reject(error);

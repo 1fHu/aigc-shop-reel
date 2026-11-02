@@ -1,3 +1,4 @@
+import { t as translate, useLanguage } from '@/i18n';
 import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AutoComplete, Input, Spin } from 'antd';
@@ -23,6 +24,9 @@ const DEBOUNCE_MS = 300;
  * - 素材：materialService.globalSearch（跨项目，按 file_name / tags 模糊匹配）
  */
 export default function GlobalSearch() {
+  const language = useLanguage();
+
+
   const navigate = useNavigate();
   const [value, setValue] = useState('');
   const [loading, setLoading] = useState(false);
@@ -72,18 +76,19 @@ export default function GlobalSearch() {
   };
 
   const options = useMemo(() => {
+    void language;
     const groups: { label: React.ReactNode; options: { value: string; label: React.ReactNode }[] }[] = [];
 
     if (projects.length) {
       groups.push({
-        label: <span className={styles.groupTitle}>项目</span>,
+        label: <span className={styles.groupTitle}>{translate("项目")}</span>,
         options: projects.map((p) => ({
           value: `project|${p.id}`,
           label: (
             <div className={styles.option}>
               <FolderOpenOutlined className={styles.optIcon} />
               <span className={styles.optName}>{p.name}</span>
-              <span className={styles.optMeta}>{p.video_count} 视频</span>
+              <span className={styles.optMeta}>{p.video_count} {translate("视频")}</span>
             </div>
           ),
         })),
@@ -92,7 +97,7 @@ export default function GlobalSearch() {
 
     if (materials.length) {
       groups.push({
-        label: <span className={styles.groupTitle}>素材</span>,
+        label: <span className={styles.groupTitle}>{translate("素材")}</span>,
         options: materials.map((m) => ({
           value: `material|${m.project_id}|${m.id}`,
           label: (
@@ -102,7 +107,7 @@ export default function GlobalSearch() {
               ) : (
                 <FileImageOutlined className={styles.optIcon} />
               )}
-              <span className={styles.optName}>{m.file_name || '未命名素材'}</span>
+              <span className={styles.optName}>{m.file_name || translate("未命名素材")}</span>
               <span className={styles.optMeta}>{m.project_name}</span>
             </div>
           ),
@@ -111,11 +116,11 @@ export default function GlobalSearch() {
     }
 
     return groups;
-  }, [projects, materials]);
+  }, [projects, materials, language]);
 
   const notFound =
     value.trim() && !loading && projects.length === 0 && materials.length === 0
-      ? <span className={styles.empty}>未找到相关项目或素材</span>
+      ? <span className={styles.empty}>{translate("未找到相关项目或素材")}</span>
       : null;
 
   return (
@@ -131,7 +136,7 @@ export default function GlobalSearch() {
       <Input
         prefix={<SearchOutlined style={{ color: '#9CA3AF' }} />}
         suffix={loading ? <Spin size="small" /> : <span />}
-        placeholder="搜索我的项目..."
+        placeholder={translate("搜索我的项目...")}
         variant="filled"
         allowClear
       />

@@ -1,3 +1,4 @@
+import { t as translate, useLanguage } from '@/i18n';
 import { useNavigate } from 'react-router-dom';
 import { Button, Tag } from 'antd';
 import {
@@ -18,32 +19,35 @@ interface Plan {
   features: string[];
 }
 
-const PLANS: Plan[] = [
-  {
-    key: 'free',
-    name: 'Free',
-    price: '¥0',
-    period: '/ 月',
-    features: ['基础视频生成额度', '标准模板', '社区支持'],
-  },
-  {
-    key: 'pro',
-    name: 'Pro',
-    price: '¥199',
-    period: '/ 月',
-    highlight: true,
-    features: ['更高生成额度', '全部模板与素材库', '高级剧本工坊', '优先渲染队列'],
-  },
-  {
-    key: 'team',
-    name: 'Team',
-    price: '联系我们',
-    period: '',
-    features: ['多席位协作', '专属客户成功', '私有素材空间', 'API 接入'],
-  },
-];
+
 
 export default function SubscriptionPage() {
+  useLanguage();
+  const PLANS: Plan[] = [
+    {
+      key: 'free',
+      name: translate("Free"),
+      price: '¥0',
+      period: translate("/ 月"),
+      features: [translate("基础视频生成额度"), translate("标准模板"), translate("社区支持")],
+    },
+    {
+      key: 'pro',
+      name: 'Pro',
+      price: '¥199',
+      period: translate("/ 月"),
+      highlight: true,
+      features: [translate("更高生成额度"), translate("全部模板与素材库"), translate("高级剧本工坊"), translate("优先渲染队列")],
+    },
+    {
+      key: 'team',
+      name: translate("Team"),
+      price: translate("联系我们"),
+      period: '',
+      features: [translate("多席位协作"), translate("专属客户成功"), translate("私有素材空间"), translate("API 接入")],
+    },
+  ];
+
   const navigate = useNavigate();
 
   return (
@@ -52,18 +56,18 @@ export default function SubscriptionPage() {
         <div>
           <h1 className={styles.headerTitle}>
             <CrownOutlined className={styles.titleIcon} />
-            订阅与套餐
+            {translate("订阅与套餐")}
           </h1>
-          <p className={styles.headerSubtitle}>选择适合你的方案,解锁更多创作能力</p>
+          <p className={styles.headerSubtitle}>{translate("选择适合你的方案,解锁更多创作能力")}</p>
         </div>
         <Button icon={<ArrowLeftOutlined />} onClick={() => navigate(-1)}>
-          返回
+          {translate("返回")}
         </Button>
       </div>
 
       <div className={styles.notice}>
         <ToolOutlined className={styles.noticeIcon} />
-        <span>订阅功能正在施工中,以下方案与价格仅为占位展示,暂未开放购买。</span>
+        <span>{translate("订阅功能正在施工中,以下方案与价格仅为占位展示,暂未开放购买。")}</span>
       </div>
 
       <div className={styles.plans}>
@@ -72,7 +76,7 @@ export default function SubscriptionPage() {
             key={plan.key}
             className={`${styles.planCard} ${plan.highlight ? styles.planHighlight : ''}`}
           >
-            {plan.highlight && <Tag color="gold" className={styles.popularTag}>推荐</Tag>}
+            {plan.highlight && <Tag color="gold" className={styles.popularTag}>{translate("推荐")}</Tag>}
             <div className={styles.planName}>{plan.name}</div>
             <div className={styles.planPrice}>
               <span className={styles.priceValue}>{plan.price}</span>
@@ -92,7 +96,7 @@ export default function SubscriptionPage() {
               disabled
               className={styles.planButton}
             >
-              即将开放
+              {translate("即将开放")}
             </Button>
           </div>
         ))}

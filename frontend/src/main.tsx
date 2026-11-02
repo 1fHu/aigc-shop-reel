@@ -1,11 +1,8 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { ConfigProvider, App as AntdApp } from 'antd';
-import zhCN from 'antd/locale/zh_CN';
-import 'dayjs/locale/zh-cn';
+import LocaleProvider from './i18n/LocaleProvider';
 
 import App from './App.tsx';
-import { theme } from './theme.ts';
 import './index.css';
 
 /**
@@ -23,11 +20,9 @@ async function bootstrap() {
 
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
-      <ConfigProvider theme={theme} locale={zhCN}>
-        <AntdApp>
-          <App />
-        </AntdApp>
-      </ConfigProvider>
+      <LocaleProvider>
+        <App />
+      </LocaleProvider>
     </StrictMode>,
   );
 }

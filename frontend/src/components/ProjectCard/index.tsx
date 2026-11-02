@@ -1,3 +1,4 @@
+import { t as translate, useLanguage, confirmLocalized } from '@/i18n';
 import { useNavigate } from 'react-router-dom';
 import { Tag, Dropdown, App } from 'antd';
 import { ClockCircleOutlined, EyeOutlined, MoreOutlined, DeleteOutlined } from '@ant-design/icons';
@@ -20,25 +21,17 @@ interface Props {
   onOpen?: () => void;
 }
 
-const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string }> = {
-  material_pending: { label: '素材待上传', color: 'default' },
-  script_pending: { label: '剧本待生成', color: 'processing' },
-  video_pending: { label: '视频待生成', color: 'warning' },
-  finished: { label: '已完成', color: 'success' },
-  draft: { label: '草稿', color: 'default' },
-  in_progress: { label: '生成中', color: 'warning' },
-  completed: { label: '已完成', color: 'success' },
-};
+
 
 function relativeTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const min = Math.round(diff / 60000);
-  if (min < 60) return `${min} 分钟前`;
+  if (min < 60) return translate("{0} 分钟前", { "0": min });
   const hr = Math.round(min / 60);
-  if (hr < 24) return `${hr} 小时前`;
+  if (hr < 24) return translate("{0} 小时前", { "0": hr });
   const day = Math.round(hr / 24);
-  if (day === 1) return '昨天';
-  return `${day} 天前`;
+  if (day === 1) return translate("昨天");
+  return translate("{0} 天前", { "0": day });
 }
 
 export default function ProjectCard({
@@ -50,17 +43,28 @@ export default function ProjectCard({
   onDeleted,
   onOpen,
 }: Props) {
+  useLanguage();
+  const STATUS_CONFIG: Record<ProjectStatus, { label: string; color: string }> = {
+    material_pending: { label: translate("素材待上传"), color: 'default' },
+    script_pending: { label: translate("剧本待生成"), color: 'processing' },
+    video_pending: { label: translate("视频待生成"), color: 'warning' },
+    finished: { label: translate("已完成"), color: 'success' },
+    draft: { label: translate("草稿"), color: 'default' },
+    in_progress: { label: translate("生成中"), color: 'warning' },
+    completed: { label: translate("已完成"), color: 'success' },
+  };
+
   const navigate = useNavigate();
   const { modal } = App.useApp();
   const statusCfg = STATUS_CONFIG[project.status] ?? { label: project.status, color: 'default' };
   const isGenerating = project.status === 'script_pending' || project.status === 'video_pending' || project.status === 'in_progress';
 
   const handleDelete = () => {
-    modal.confirm({
-      title: '确认删除',
-      content: `确定要删除项目「${project.name}」吗？删除后不可恢复。`,
-      okText: '确认删除',
-      cancelText: '取消',
+    confirmLocalized(modal, {
+      title: translate("确认删除"),
+      content: translate("确定要删除项目「{0}」吗？删除后不可恢复。", { "0": project.name }),
+      okText: translate("确认删除"),
+      cancelText: translate("取消"),
       okButtonProps: { danger: true },
       onOk: async () => {
         await projectService.remove(project.id);
@@ -73,7 +77,7 @@ export default function ProjectCard({
     {
       key: 'delete',
       icon: <DeleteOutlined />,
-      label: '删除项目',
+      label: translate("删除项目"),
       danger: true,
       onClick: (e: { domEvent: React.MouseEvent }) => {
         e.domEvent.stopPropagation();
@@ -94,7 +98,7 @@ export default function ProjectCard({
             <button
               className={styles.menuBtn}
               onClick={(e) => e.stopPropagation()}
-              aria-label="更多操作"
+              aria-label={translate("更多操作")}
             >
               <MoreOutlined />
             </button>
@@ -130,7 +134,7 @@ export default function ProjectCard({
           <div className={styles.meta}>
             <span><ClockCircleOutlined /> {relativeTime(project.updated_at)}</span>
             {views && <span><EyeOutlined /> {views}</span>}
-            {isGenerating && !views && <span style={{ color: '#D97706' }}>⏳ 等待完成</span>}
+            {isGenerating && !views && <span style={{ color: '#D97706' }}>{translate("⏳ 等待完成")}</span>}
           </div>
         </div>
     </div>

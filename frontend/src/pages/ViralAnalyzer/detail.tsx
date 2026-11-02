@@ -1,3 +1,4 @@
+import { t as translate, useLanguage } from '@/i18n';
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, Button, Spin, Tag, message, Typography, Divider, Space } from 'antd';
@@ -8,6 +9,9 @@ import './detail.css';
 const { Title, Paragraph, Text } = Typography;
 
 const ViralAnalyzerDetail: React.FC = () => {
+  useLanguage();
+
+
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -20,7 +24,7 @@ const ViralAnalyzerDetail: React.FC = () => {
       const data = await viralAnalyzerService.getDetail(id!);
       setVideo(data);
     } catch {
-      message.error('加载失败');
+      message.error(translate("加载失败"));
     } finally {
       setLoading(false);
     }
@@ -40,10 +44,10 @@ const ViralAnalyzerDetail: React.FC = () => {
     setSyncing(true);
     try {
       await viralAnalyzerService.syncToGenebank(video.id);
-      message.success('已同步到基因库，可在参考视频库中查看');
+      message.success(translate("已同步到基因库，可在参考视频库中查看"));
     } catch (error) {
       const msg = (error as { response?: { data?: { msg?: string } } }).response?.data?.msg;
-      message.error(msg || '同步失败');
+      message.error(msg || translate("同步失败"));
     } finally {
       setSyncing(false);
     }
@@ -52,10 +56,10 @@ const ViralAnalyzerDetail: React.FC = () => {
   // 状态标签
   const renderStatusTag = (status: string) => {
     const statusMap = {
-      pending: { color: 'default', text: '等待分析' },
-      analyzing: { color: 'processing', text: '分析中' },
-      completed: { color: 'success', text: '已完成' },
-      failed: { color: 'error', text: '分析失败' },
+      pending: { color: 'default', text: translate("等待分析") },
+      analyzing: { color: 'processing', text: translate("分析中") },
+      completed: { color: 'success', text: translate("已完成") },
+      failed: { color: 'error', text: translate("分析失败") },
     };
     const config = statusMap[status as keyof typeof statusMap];
     return <Tag color={config.color}>{config.text}</Tag>;
@@ -72,7 +76,7 @@ const ViralAnalyzerDetail: React.FC = () => {
   if (!video) {
     return (
       <div className="error-container">
-        <Text type="secondary">视频不存在</Text>
+        <Text type="secondary">{translate("视频不存在")}</Text>
       </div>
     );
   }
@@ -86,7 +90,7 @@ const ViralAnalyzerDetail: React.FC = () => {
           icon={<ArrowLeftOutlined />}
           onClick={() => navigate('/viral-analyzer')}
         >
-          返回列表
+          {translate("返回列表")}
         </Button>
         <div className="header-info">
           <Title level={3} className="video-title">
@@ -111,18 +115,18 @@ const ViralAnalyzerDetail: React.FC = () => {
                   preload="metadata"
                   crossOrigin="anonymous"
                 >
-                  您的浏览器不支持视频播放
+                  {translate("您的浏览器不支持视频播放")}
                 </video>
               ) : (
                 <div className="video-placeholder">
                   <PlayCircleOutlined className="placeholder-icon" />
-                  <Text type="secondary">视频加载中...</Text>
+                  <Text type="secondary">{translate("视频加载中...")}</Text>
                 </div>
               )}
             </div>
             {video.duration && (
               <div className="video-info">
-                <Text type="secondary">时长：{video.duration} 秒</Text>
+                <Text type="secondary">{translate("时长：")}{video.duration} {translate("秒")}</Text>
               </div>
             )}
           </Card>
@@ -133,26 +137,26 @@ const ViralAnalyzerDetail: React.FC = () => {
           {video.status === 'analyzing' && (
             <Card className="analyzing-card">
               <Spin />
-              <Text style={{ marginLeft: 12 }}>AI 正在分析中，请稍候...</Text>
+              <Text style={{ marginLeft: 12 }}>{translate("AI 正在分析中，请稍候...")}</Text>
             </Card>
           )}
 
           {video.status === 'failed' && (
             <Card className="error-card">
-              <Text type="danger">分析失败：{video.error_message}</Text>
+              <Text type="danger">{translate("分析失败：")}{video.error_message}</Text>
             </Card>
           )}
 
           {video.status === 'completed' && video.analysis && (
             <>
               {/* Hook */}
-              <Card className="analysis-card hook-card" title="HOOK（前 3 秒）">
+              <Card className="analysis-card hook-card" title={translate("HOOK（前 3 秒）")}>
                 <div className="time-range">{video.analysis.hook.time_range}</div>
                 <Paragraph className="content">{video.analysis.hook.content}</Paragraph>
               </Card>
 
               {/* Selling Points */}
-              <Card className="analysis-card selling-points-card" title="SELLING POINTS">
+              <Card className="analysis-card selling-points-card" title={translate("SELLING POINTS")}>
                 <ul className="selling-points-list">
                   {video.analysis.selling_points.map((point, index) => (
                     <li key={index}>{point}</li>
@@ -161,12 +165,12 @@ const ViralAnalyzerDetail: React.FC = () => {
               </Card>
 
               {/* Pacing */}
-              <Card className="analysis-card pacing-card" title="PACING">
+              <Card className="analysis-card pacing-card" title={translate("PACING")}>
                 <Paragraph className="content">{video.analysis.pacing}</Paragraph>
               </Card>
 
               {/* Style */}
-              <Card className="analysis-card style-card" title="STYLE">
+              <Card className="analysis-card style-card" title={translate("STYLE")}>
                 <Paragraph className="content">{video.analysis.style}</Paragraph>
               </Card>
 
@@ -174,27 +178,27 @@ const ViralAnalyzerDetail: React.FC = () => {
 
               {/* 创作因子 */}
               {video.creative_factors && (
-                <Card className="factors-card" title="提取的创作因子">
+                <Card className="factors-card" title={translate("提取的创作因子")}>
                   <div className="factors-grid">
                     <div className="factor-item">
-                      <Text type="secondary">视觉风格</Text>
-                      <Text strong>{video.creative_factors.visual_style}</Text>
+                      <Text type="secondary">{translate("视觉风格")}</Text>
+                      <Text strong>{translate(video.creative_factors.visual_style)}</Text>
                     </div>
                     <div className="factor-item">
-                      <Text type="secondary">开场手法</Text>
-                      <Text strong>{video.creative_factors.opener}</Text>
+                      <Text type="secondary">{translate("开场手法")}</Text>
+                      <Text strong>{translate(video.creative_factors.opener)}</Text>
                     </div>
                     <div className="factor-item">
-                      <Text type="secondary">旁白风格</Text>
-                      <Text strong>{video.creative_factors.narration}</Text>
+                      <Text type="secondary">{translate("旁白风格")}</Text>
+                      <Text strong>{translate(video.creative_factors.narration)}</Text>
                     </div>
                     <div className="factor-item">
-                      <Text type="secondary">节奏</Text>
-                      <Text strong>{video.creative_factors.pacing}</Text>
+                      <Text type="secondary">{translate("节奏")}</Text>
+                      <Text strong>{translate(video.creative_factors.pacing)}</Text>
                     </div>
                     <div className="factor-item">
-                      <Text type="secondary">行动号召</Text>
-                      <Text strong>{video.creative_factors.cta}</Text>
+                      <Text type="secondary">{translate("行动号召")}</Text>
+                      <Text strong>{translate(video.creative_factors.cta)}</Text>
                     </div>
                   </div>
                 </Card>
@@ -211,7 +215,7 @@ const ViralAnalyzerDetail: React.FC = () => {
                   onClick={handleSyncToGenebank}
                   loading={syncing}
                 >
-                  同步到基因库
+                  {translate("同步到基因库")}
                 </Button>
               </Space>
             </>
